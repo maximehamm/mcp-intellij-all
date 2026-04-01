@@ -106,7 +106,8 @@ class McpCompanionToolset : McpToolset {
             ?: return listOf(BuildTab(name = "error", tree = null, console = "Build tool window not found"))
         return toolWindow.contentManager.contents.map { content ->
             val trees = UIUtil.findComponentsOfType(content.component, JTree::class.java)
-            val treeNodes = trees.firstOrNull()?.model?.let { buildBuildNodes(it, it.root) }
+            val firstTree = trees.firstOrNull()
+            val treeNodes = firstTree?.model?.let { buildBuildNodes(it, it.root) }
             val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
             val consoleText = consoles.firstNotNullOfOrNull { it.editor?.document?.text }?.trim()
             BuildTab(
@@ -161,8 +162,51 @@ class McpCompanionToolset : McpToolset {
                 file = try { vFile.javaClass.methods.find { it.name == "getName" }?.invoke(vFile) as? String } catch (_: Exception) { null }
             }
         }
+        // Try standard methods first
+        var detail = listOf("getDescription", "getTooltipText", "getMessage", "getDetails", "getHint")
+            .firstNotNullOfOrNull { name ->
+                try { cls.methods.find { it.name == name }?.invoke(userObject) as? String }
+                catch (_: Exception) { null }
+            }?.trim()?.takeIf { it.isNotEmpty() && it != text }
+
+        // Try navigatables descriptions (for BuildIssue-based nodes like "Incompatible Gradle JVM")
+        if (detail == null) {
+            val navsObj = try { cls.methods.find { it.name == "getNavigatables" }?.invoke(userObject) } catch (_: Exception) { null }
+            val navsList: List<*>? = when (navsObj) {
+                is List<*> -> navsObj
+                is Array<*> -> navsObj.toList()
+                else -> null
+            }
+            detail = navsList?.firstNotNullOfOrNull { nav ->
+                if (nav == null) return@firstNotNullOfOrNull null
+                val nCls = nav.javaClass
+                listOf("getDescription", "getMessage", "getTitle", "getText")
+                    .firstNotNullOfOrNull { mName ->
+                        try { nCls.methods.find { it.name == mName }?.invoke(nav) as? String }
+                        catch (_: Exception) { null }
+                    }?.trim()?.takeIf { it.isNotEmpty() && it != text }
+            }
+        }
+
+        // Try private fields as last resort
+        if (detail == null) {
+            var c: Class<*>? = cls
+            outer@ while (c != null && c != Any::class.java) {
+                for (f in c.declaredFields) {
+                    if (f.name.lowercase() in setOf("description", "message", "detail", "details", "tooltip")) {
+                        try {
+                            f.isAccessible = true
+                            val v = f.get(userObject) as? String
+                            if (!v.isNullOrEmpty() && v != text) { detail = v.trim(); break@outer }
+                        } catch (_: Exception) {}
+                    }
+                }
+                c = c.superclass
+            }
+        }
+
         val children = buildBuildNodes(model, node).ifEmpty { null }
-        return BuildNode(text = text, file = file, line = line, children = children)
+        return BuildNode(text = text, detail = detail, file = file, line = line, children = children)
     }
 
     // ── replace_text_undoable ─────────────────────────────────────────────────
@@ -200,9 +244,11 @@ class McpCompanionToolset : McpToolset {
 
     @McpTool(name = "get_run_output")
     @McpDescription(description = """
-        Returns the console output from the "Run" tool window in IntelliJ.
-        Includes all open run tabs with their name and console text.
-        Useful to check the output of a running or recently run program.
+        Returns the content of the "Run" tool window in IntelliJ.
+        Includes all open run tabs with:
+        - tree: structured list of run nodes (tasks, errors, warnings) with file and line number when available
+        - console: the raw text output
+        Useful to check the output of a running or recently run program, including Gradle task errors.
     """)
     suspend fun get_run_output(): String {
         disabledMessage("get_run_output")?.let { return it }
@@ -213,11 +259,18 @@ class McpCompanionToolset : McpToolset {
 
     private fun extractRunTabs(project: com.intellij.openapi.project.Project): List<RunTab> {
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
-            ?: return listOf(RunTab(name = "error", console = "Run tool window not found"))
+            ?: return listOf(RunTab(name = "error", tree = null, console = "Run tool window not found"))
         return toolWindow.contentManager.contents.map { content ->
+            val trees = UIUtil.findComponentsOfType(content.component, JTree::class.java)
+            val firstTree = trees.firstOrNull()
+            val treeNodes = firstTree?.model?.let { buildBuildNodes(it, it.root) }
             val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
             val consoleText = consoles.firstNotNullOfOrNull { it.readText() }
-            RunTab(name = content.displayName ?: "Run", console = consoleText?.ifEmpty { null })
+            RunTab(
+                name = content.displayName ?: "Run",
+                tree = treeNodes?.ifEmpty { null },
+                console = consoleText?.ifEmpty { null }
+            )
         }
     }
 
@@ -377,10 +430,10 @@ class McpCompanionToolset : McpToolset {
 
 @Serializable data class BuildOutput(val tabs: List<BuildTab>)
 @Serializable data class BuildTab(val name: String, val tree: List<BuildNode>?, val console: String?)
-@Serializable data class BuildNode(val text: String, val file: String? = null, val line: Int? = null, val children: List<BuildNode>? = null)
+@Serializable data class BuildNode(val text: String, val detail: String? = null, val file: String? = null, val line: Int? = null, val children: List<BuildNode>? = null)
 
 @Serializable data class RunOutput(val tabs: List<RunTab>)
-@Serializable data class RunTab(val name: String, val console: String?)
+@Serializable data class RunTab(val name: String, val tree: List<BuildNode>? = null, val console: String?)
 
 @Serializable data class DebugOutput(val tabs: List<DebugTab>)
 @Serializable data class DebugTab(val name: String, val console: String?)
