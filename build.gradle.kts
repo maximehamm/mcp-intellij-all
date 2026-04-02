@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.nimbly"
-version = "1.0-SNAPSHOT"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -31,7 +31,9 @@ intellijPlatform {
             sinceBuild = "243"
         }
         changeNotes = """
-            Version initiale.
+            1.0.0 — Initial release.
+            Adds 6 MCP tools: get_open_editors, get_build_output, get_run_output,
+            get_debug_output, get_debug_variables, replace_text_undoable.
         """.trimIndent()
     }
 }
