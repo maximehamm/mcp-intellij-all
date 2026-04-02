@@ -35,7 +35,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "get_open_editors", "navigate_to", "select_text", "highlight_text", "clear_highlights"
             ),
             "Build & Tests" to listOf(
-                "get_build_output", "get_run_output", "get_test_results"
+                "get_build_output", "get_run_output", "get_services_output", "get_test_results"
             ),
             "Debug" to listOf(
                 "debug_run_configuration", "get_debug_output", "get_debug_variables",

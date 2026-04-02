@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "1.10.3"
+version = "1.11.0"
 
 repositories {
     mavenCentral()
@@ -43,6 +43,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.11.0</b> — <code>get_services_output</code> rewrite: sessions grouped by node name (console_1, script.sql…), SQL output log, result grids with real column names, selected session/tab indicated.</li>
                 <li><b>1.10.3</b> — Marketplace overview: use h4 headers for tool groups for better spacing.</li>
                 <li><b>1.10.2</b> — Marketplace overview: improve spacing between tool groups.</li>
                 <li><b>1.10.1</b> — Marketplace overview restructured to match Settings page groups. Fix @ApiStatus.Internal violation on CoreProgressManager.</li>

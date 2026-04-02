@@ -5,6 +5,22 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.util.ui.UIUtil
 
 /**
+ * Reads text from any JComponent that embeds an EditorComponentImpl (e.g. database Output tab).
+ * Uses the same EditorComponentImpl → myEditor reflection strategy as ConsoleViewImpl.readText().
+ */
+fun readEditorText(component: javax.swing.JComponent): String? = try {
+    val compCls = Class.forName("com.intellij.openapi.editor.impl.EditorComponentImpl")
+    UIUtil.findComponentsOfType(component, compCls as Class<javax.swing.JComponent>)
+        .firstNotNullOfOrNull { comp ->
+            val f = generateSequence(comp.javaClass as Class<*>?) { it.superclass }
+                .flatMap { it.declaredFields.asSequence() }
+                .find { it.name == "myEditor" || it.name == "editor" }
+            f?.let { it.isAccessible = true; it.get(comp) as? Editor }
+        }
+        ?.document?.text?.trim()?.ifEmpty { null }
+} catch (_: Exception) { null }
+
+/**
  * Reads text from a ConsoleViewImpl even when its editor has not been initialized
  * (i.e. the console tab was never focused). Falls back to reflection on myEditor.
  */

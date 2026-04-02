@@ -42,6 +42,7 @@
         <ul>
             <li><b>get_build_output</b> — Build tool window: structured error/warning tree with file names and line numbers, plus raw console text.</li>
             <li><b>get_run_output</b> — Console output from the Run tool window (all open tabs).</li>
+            <li><b>get_services_output</b> — All sessions from the Services tool window, grouped by node name: SQL output log, result grids with column names, and which session/tab is currently active.</li>
             <li><b>get_test_results</b> — Last test run results: passed/failed/ignored status, duration, and failure messages with stack traces.</li>
         </ul>
 
