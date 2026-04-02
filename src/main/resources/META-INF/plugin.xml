@@ -19,6 +19,10 @@
             Source code and documentation: <a href="https://github.com/maximehamm/mcp-intellij-all">github.com/maximehamm/mcp-intellij-all</a>
         </p>
 
+        <h3>Settings</h3>
+        <p>Each tool can be individually enabled or disabled in <b>Settings → Tools → MCP Server Companion</b>.</p>
+        <p><img src="https://raw.githubusercontent.com/maximehamm/mcp-intellij-all/main/docs/settings-screenshot.png" alt="MCP Server Companion Settings" width="600"/></p>
+
         <h3>Example questions you can ask your AI</h3>
 
         <b>Editor</b>
