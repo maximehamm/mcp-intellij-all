@@ -20,6 +20,12 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_test_results` | Last test run results: passed/failed/ignored status, duration, and failure messages |
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
 
+## Settings
+
+Each tool can be individually enabled or disabled in **Settings → Tools → MCP Server Companion**.
+
+![MCP Server Companion Settings](docs/settings-screenshot.png)
+
 ## Example prompts
 
 **Editor**
