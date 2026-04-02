@@ -10,17 +10,6 @@
 - **`evaluate_expression`** — Évaluer une expression dans le contexte de debug courant
   (ex: `myObj.getName()`, `list.size()`). Via `XDebugSession.evaluate()`.
 
-- **`get_breakpoints`** — Lister les breakpoints actifs (fichier, ligne, condition éventuelle).
-
-- **`set_breakpoint`** — Poser un breakpoint sur une ligne donnée d'un fichier.
-
-- **`remove_breakpoint`** — Supprimer un breakpoint existant.
-
-### Tests (priorité haute)
-
-- **`get_test_results`** — Résultats du dernier run de tests : passed/failed, messages d'erreur,
-  durée. Via `AbstractTestProxy` / `SMTestProxy`.
-
 ### VCS (priorité moyenne)
 
 - **`get_git_diff`** — Diff des fichiers modifiés non committés. Via `ChangeListManager`.
@@ -31,3 +20,11 @@
 
 - **`get_notifications`** — Lire les notifications/ballons affichés par l'IDE
   (inspections, erreurs de config, etc.).
+
+## Améliorations du plugin
+
+### Settings (priorité moyenne)
+
+- **Page de configuration** — Ajouter une page dans `Settings > Tools > MCP Server Companion`
+  listant tous les outils exposés avec une case à cocher par outil pour les activer/désactiver.
+  Les outils décochés ne sont plus enregistrés dans le `McpToolset`.

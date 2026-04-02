@@ -1,6 +1,8 @@
 package io.nimbly.mcpcompanion
 
 import com.intellij.execution.impl.ConsoleViewImpl
+import com.intellij.execution.testframework.sm.runner.SMTestProxy
+import com.intellij.execution.testframework.sm.runner.ui.SMTestRunnerResultsForm
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.project
 import com.intellij.mcpserver.annotations.McpDescription
@@ -232,6 +234,57 @@ class McpCompanionToolset : McpToolset {
         }
     }
 
+    // ── get_test_results ──────────────────────────────────────────────────────
+
+    @McpTool(name = "get_test_results")
+    @McpDescription(description = """
+        Returns the results of the last test run from the IntelliJ test runner.
+        Includes all test suites and individual tests with:
+        - status: PASSED, FAILED, IGNORED, or RUNNING
+        - duration: execution time in milliseconds (if available)
+        - errorMessage: failure message and stack trace if the test failed
+        Useful to check which tests passed or failed and why.
+    """)
+    suspend fun get_test_results(): String {
+        val project = coroutineContext.project
+        val output = invokeAndWaitIfNeeded { extractTestResults(project) }
+        return Json.encodeToString(output)
+    }
+
+    private fun extractTestResults(project: com.intellij.openapi.project.Project): TestRunOutput {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
+            ?: return TestRunOutput(runs = emptyList(), error = "Run tool window not found")
+        val runs = toolWindow.contentManager.contents.mapNotNull { content ->
+            val form = UIUtil.findComponentOfType(content.component, SMTestRunnerResultsForm::class.java)
+                ?: return@mapNotNull null
+            val root = form.testsRootNode
+            TestRun(
+                name = content.displayName ?: "Test",
+                tests = root.children.map { buildTestNode(it) }
+            )
+        }
+        if (runs.isEmpty()) return TestRunOutput(runs = emptyList(), error = "No test results found")
+        return TestRunOutput(runs = runs)
+    }
+
+    private fun buildTestNode(proxy: SMTestProxy): TestNode {
+        val status = when {
+            proxy.isPassed  -> "PASSED"
+            proxy.isDefect  -> "FAILED"
+            proxy.isIgnored -> "IGNORED"
+            else            -> "RUNNING"
+        }
+        val durationMs = proxy.duration?.takeIf { it >= 0 }
+        val children = proxy.children.takeIf { it.isNotEmpty() }?.map { buildTestNode(it) }
+        return TestNode(
+            name = proxy.name,
+            status = status,
+            duration = durationMs,
+            errorMessage = proxy.errorMessage?.takeIf { it.isNotEmpty() },
+            children = children
+        )
+    }
+
     // ── get_debug_variables ───────────────────────────────────────────────────
 
     @McpTool(name = "get_debug_variables")
@@ -321,3 +374,7 @@ class McpCompanionToolset : McpToolset {
 
 @Serializable data class DebugVariablesOutput(val session: String, val variables: List<DebugVariable>)
 @Serializable data class DebugVariable(val name: String, val type: String? = null, val value: String? = null)
+
+@Serializable data class TestRunOutput(val runs: List<TestRun>, val error: String? = null)
+@Serializable data class TestRun(val name: String, val tests: List<TestNode>)
+@Serializable data class TestNode(val name: String, val status: String, val duration: Long? = null, val errorMessage: String? = null, val children: List<TestNode>? = null)

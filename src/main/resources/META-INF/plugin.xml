@@ -45,6 +45,12 @@
             <li><i>"Set a breakpoint at line 13, launch debug, and stop when i=3."</i></li>
         </ul>
 
+        <b>Tests</b>
+        <ul>
+            <li><i>"Run the tests and tell me which ones failed and why."</i></li>
+            <li><i>"Fix the failing tests."</i></li>
+        </ul>
+
         <h3>Available tools</h3>
         <ul>
             <li><b>get_open_editors</b> — Returns all open files, the focused file with caret position, and current text selection if any.</li>
@@ -68,6 +74,10 @@
             <li>
                 <b>get_debug_variables</b> — Returns the local variables and their values
                 from the current debugger stack frame (available when paused at a breakpoint).
+            </li>
+            <li>
+                <b>get_test_results</b> — Returns the results of the last test run:
+                passed/failed/ignored status, duration, and failure messages with stack traces.
             </li>
         </ul>
     ]]></description>

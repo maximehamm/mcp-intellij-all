@@ -17,6 +17,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_run_output` | Console output from the Run tool window |
 | `get_debug_output` | Console output from the Debug tool window |
 | `get_debug_variables` | Local variables and values from the current debugger stack frame |
+| `get_test_results` | Last test run results: passed/failed/ignored status, duration, and failure messages |
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
 
 ## Example prompts
@@ -34,6 +35,10 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 - *"Run the program and show me the output."*
 - *"What are the current variable values at this breakpoint?"*
 - *"Set a breakpoint at line 13, launch debug, and stop when i=3."*
+
+**Tests**
+- *"Run the tests and tell me which ones failed and why."*
+- *"Fix the failing tests."*
 
 ## Setup
 
