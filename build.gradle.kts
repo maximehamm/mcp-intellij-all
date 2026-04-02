@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.nimbly"
-version = "1.4.0"
+version = "1.5.0"
 
 repositories {
     mavenCentral()
@@ -32,6 +32,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.5.0</b> — New navigation and highlighting tools: navigate_to, select_text, highlight_text (theme-aware, Escape to clear), clear_highlights.</li>
                 <li><b>1.4.0</b> — New breakpoint tools: get_breakpoints (with conditions), add_conditional_breakpoint, set_breakpoint_condition, mute_breakpoints, debug_run_configuration.</li>
                 <li><b>1.3.1</b> — Fix settings page refresh: warning and grayed tools now update correctly after Apply.</li>
                 <li><b>1.3.0</b> — Settings page: warning message + grayed tools when MCP Server is disabled. Auto-enable MCP Server on first launch with notification.</li>

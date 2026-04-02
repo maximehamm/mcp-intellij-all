@@ -2,13 +2,29 @@ package io.nimbly.mcpcompanion
 
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.event.EditorFactoryEvent
+import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
 
 class McpCompanionStartupActivity : ProjectActivity {
 
     override suspend fun execute(project: Project) {
+
+        // Register Escape key listener on all current and future editors
+        ApplicationManager.getApplication().invokeLater {
+            EditorFactory.getInstance().allEditors.forEach { addEscapeListener(it) }
+            EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
+                override fun editorCreated(event: EditorFactoryEvent) = addEscapeListener(event.editor)
+            }, project)
+        }
+
         val ourSettings = McpCompanionSettings.getInstance()
         if (ourSettings.state.firstLaunchDone) return
         ourSettings.state.firstLaunchDone = true
@@ -38,5 +54,20 @@ class McpCompanionStartupActivity : ProjectActivity {
         } catch (_: Exception) {
             // MCP Server plugin not installed — nothing to do
         }
+    }
+
+    private fun addEscapeListener(editor: Editor) {
+        editor.contentComponent.addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent) {
+                if (e.keyCode == KeyEvent.VK_ESCAPE) {
+                    val toRemove = editor.markupModel.allHighlighters
+                        .filter { it.getUserData(MCP_HIGHLIGHT_KEY) == true }
+                    if (toRemove.isNotEmpty()) {
+                        toRemove.forEach { editor.markupModel.removeHighlighter(it) }
+                        e.consume()
+                    }
+                }
+            }
+        })
     }
 }
