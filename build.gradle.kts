@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "1.8.1"
+version = "1.9.0"
 
 repositories {
     mavenCentral()
@@ -25,11 +25,15 @@ repositories {
 dependencies {
     intellijPlatform {
         local("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app")
-        testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
         bundledPlugin("com.intellij.mcpServer")
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.0")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
     compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
+    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.core.impl.jar"))
+    testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.ide.impl.jar"))
 }
 
 intellijPlatform {
@@ -39,6 +43,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.9.0</b> — New tools: <code>get_running_processes</code> (lists active/paused background processes) and <code>manage_process</code> (pause, resume, cancel). Added reflection API tests. Fixed binary compatibility with IntelliJ 2025.3.x (<code>McpToolset.isEnabled()</code>).</li>
                 <li><b>1.8.0</b> — <code>get_project_structure</code>: now includes SDK homePath and all available SDKs registered in IntelliJ.</li>
                 <li><b>1.7.0</b> — New tool: <code>get_project_structure</code> — returns SDK, modules, source roots (source/test/resource/testResource), excluded folders, and module dependencies.</li>
                 <li><b>1.6.0</b> — Claude Code setup panel: Add to CLAUDE.md button (undoable), permissions snippet with Copy button. New get_mcp_companion_overview tool. Fix endCol inclusive in highlight_text and select_text.</li>
@@ -69,6 +74,10 @@ intellijPlatform {
 }
 
 tasks {
+    test {
+        useJUnitPlatform()
+        jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/nio-fs.jar")
+    }
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
