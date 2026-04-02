@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.nimbly"
-version = "1.2.0"
+version = "1.2.1"
 
 repositories {
     mavenCentral()
@@ -32,6 +32,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.2.1</b> — get_debug_output now works when session is finished or paused at breakpoint; severity field (ERROR/WARNING/SUCCESS) added to build/run tree nodes; all consoles per tab are now read.</li>
                 <li><b>1.2.0</b> — New Settings page (Tools → MCP Server Companion) to enable/disable each tool individually.</li>
                 <li><b>1.1.0</b> — New tool: <code>get_test_results</code> — returns last test run results (passed/failed/ignored status, duration, failure messages).</li>
                 <li><b>1.0.1</b> — Migration to IntelliJ 2025.3+ MCP API (McpToolset).</li>

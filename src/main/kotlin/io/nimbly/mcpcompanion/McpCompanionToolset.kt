@@ -305,11 +305,30 @@ class McpCompanionToolset : McpToolset {
             ?: return listOf(DebugTab(name = "error", console = "Debug tool window not found"))
         val contents = toolWindow.contentManager.contents
         if (contents.isEmpty()) return listOf(DebugTab(name = "error", console = "No debug tabs found"))
+
+        // Active sessions: get console text directly from session.consoleView (bypasses tab focus)
+        val activeSessions = XDebuggerManager.getInstance(project).debugSessions
+        val sessionByName = activeSessions.associateBy { it.sessionName }
+
         return contents.map { content ->
-            val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-            val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
-                .joinToString("\n---\n").ifEmpty { null }
-            DebugTab(name = content.displayName ?: "Debug", console = consoleText)
+            val name = content.displayName ?: "Debug"
+            val session = sessionByName[name]
+
+            // Try session.consoleView first (always initialized, regardless of tab focus)
+            val consoleFromSession = session?.consoleView?.let { cv ->
+                (cv as? ConsoleViewImpl)?.readText()
+                    ?: UIUtil.findComponentsOfType(cv.component, ConsoleViewImpl::class.java)
+                        .mapNotNull { it.readText()?.ifEmpty { null } }
+                        .joinToString("\n---\n").ifEmpty { null }
+            }
+
+            // Fall back to scanning the content component (works for finished sessions)
+            val consoleText = consoleFromSession
+                ?: UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
+                    .mapNotNull { it.readText()?.ifEmpty { null } }
+                    .joinToString("\n---\n").ifEmpty { null }
+
+            DebugTab(name = name, console = consoleText)
         }
     }
 

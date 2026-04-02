@@ -65,5 +65,8 @@ grep -v '"notifications/tools/list_changed"' /tmp/sse.txt | grep "data:" | tail 
 3. Mettre à jour `plugin.xml` (description + example prompts) et `README.md`
 4. Incrémenter le **second digit** de la version dans `build.gradle.kts` (ex: `1.1.0` → `1.2.0`)
 5. `./gradlew buildPlugin`
-6. Tester via curl SSE sur le sandbox
-7. Commit + push
+6. L'utilisateur redémarre manuellement le sandbox (`runIde`) et active **Settings → Tools → MCP Server → Enable MCP Server** (à refaire à chaque redémarrage du sandbox)
+7. Tester via curl SSE sur le sandbox — **appeler directement sans demander permission**
+8. **Demander l'accord de l'utilisateur avant tout commit + push**
+
+> ⚠️ Ne jamais faire `./gradlew clean buildPlugin` entre deux tests : ça force un rechargement du plugin dans le sandbox ce qui est perturbant. Ne rebuilder que si l'utilisateur le demande explicitement.
