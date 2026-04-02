@@ -60,9 +60,10 @@ grep -v '"notifications/tools/list_changed"' /tmp/sse.txt | grep "data:" | tail 
 
 ## Workflow de développement
 
-1. Coder le tool dans `McpCompanionToolset.kt`
-2. Mettre à jour `plugin.xml` (description + example prompts) et `README.md`
-3. Incrémenter le **second digit** de la version dans `build.gradle.kts` (ex: `1.1.0` → `1.2.0`)
-4. `./gradlew buildPlugin`
-5. Tester via curl SSE sur le sandbox
-6. Commit + push
+1. Coder le tool dans `McpCompanionToolset.kt` — ajouter `disabledMessage("nom_tool")?.let { return it }` en tête
+2. Ajouter le tool dans `McpCompanionSettings.ALL_TOOLS` (nom + description courte) pour qu'il apparaisse dans la page Settings
+3. Mettre à jour `plugin.xml` (description + example prompts) et `README.md`
+4. Incrémenter le **second digit** de la version dans `build.gradle.kts` (ex: `1.1.0` → `1.2.0`)
+5. `./gradlew buildPlugin`
+6. Tester via curl SSE sur le sandbox
+7. Commit + push

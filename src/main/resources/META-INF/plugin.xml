@@ -85,6 +85,15 @@
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.mcpServer</depends>
 
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="io.nimbly.mcpcompanion.McpCompanionSettings"/>
+        <applicationConfigurable
+            parentId="tools"
+            instance="io.nimbly.mcpcompanion.McpCompanionConfigurable"
+            id="io.nimbly.mcpcompanion.configurable"
+            displayName="MCP Server Companion"/>
+    </extensions>
+
     <extensions defaultExtensionNs="com.intellij.mcpServer">
         <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionToolset"/>
     </extensions>

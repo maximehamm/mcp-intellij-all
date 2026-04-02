@@ -39,6 +39,12 @@ import kotlin.coroutines.coroutineContext
 
 class McpCompanionToolset : McpToolset {
 
+    private fun disabledMessage(toolName: String): String? {
+        if (!McpCompanionSettings.getInstance().isEnabled(toolName))
+            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
+        return null
+    }
+
     // ── get_open_editors ──────────────────────────────────────────────────────
 
     @McpTool(name = "get_open_editors")
@@ -50,6 +56,7 @@ class McpCompanionToolset : McpToolset {
         - selection: if a selection exists, its text and start/end line numbers (1-based)
     """)
     suspend fun get_open_editors(): String {
+        disabledMessage("get_open_editors")?.let { return it }
         val project = coroutineContext.project
         val state = runReadAction { buildEditorState(project) }
         return Json.encodeToString(state)
@@ -88,6 +95,7 @@ class McpCompanionToolset : McpToolset {
         Useful to read compilation errors, warnings, and build results.
     """)
     suspend fun get_build_output(): String {
+        disabledMessage("get_build_output")?.let { return it }
         val project = coroutineContext.project
         val tabs = invokeAndWaitIfNeeded { extractBuildTabs(project) }
         return Json.encodeToString(BuildOutput(tabs))
@@ -170,6 +178,7 @@ class McpCompanionToolset : McpToolset {
         - newText: replacement text
     """)
     suspend fun replace_text_undoable(pathInProject: String, oldText: String, newText: String): String {
+        disabledMessage("replace_text_undoable")?.let { return it }
         val project = coroutineContext.project
         val projectPath = project.basePath ?: return "error: no project base path"
         val virtualFile = LocalFileSystem.getInstance().findFileByPath("$projectPath/$pathInProject")
@@ -196,6 +205,7 @@ class McpCompanionToolset : McpToolset {
         Useful to check the output of a running or recently run program.
     """)
     suspend fun get_run_output(): String {
+        disabledMessage("get_run_output")?.let { return it }
         val project = coroutineContext.project
         val tabs = invokeAndWaitIfNeeded { extractRunTabs(project) }
         return Json.encodeToString(RunOutput(tabs))
@@ -220,6 +230,7 @@ class McpCompanionToolset : McpToolset {
         Useful to check the output of a program running under the debugger.
     """)
     suspend fun get_debug_output(): String {
+        disabledMessage("get_debug_output")?.let { return it }
         val project = coroutineContext.project
         val tabs = invokeAndWaitIfNeeded { extractDebugTabs(project) }
         return Json.encodeToString(DebugOutput(tabs))
@@ -246,6 +257,7 @@ class McpCompanionToolset : McpToolset {
         Useful to check which tests passed or failed and why.
     """)
     suspend fun get_test_results(): String {
+        disabledMessage("get_test_results")?.let { return it }
         val project = coroutineContext.project
         val output = invokeAndWaitIfNeeded { extractTestResults(project) }
         return Json.encodeToString(output)
@@ -294,6 +306,7 @@ class McpCompanionToolset : McpToolset {
         Useful to inspect variable state during debugging.
     """)
     suspend fun get_debug_variables(): String {
+        disabledMessage("get_debug_variables")?.let { return it }
         val project = coroutineContext.project
         val sessions = XDebuggerManager.getInstance(project).debugSessions
         if (sessions.isEmpty()) return "No active debug session"
