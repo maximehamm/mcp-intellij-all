@@ -2,10 +2,22 @@
 <idea-plugin>
     <id>io.nimbly.mcp-companion</id>
     <name>MCP Server Companion</name>
-    <vendor url="https://www.nimbly.io">Maxime HAMM</vendor>
+    <vendor email="Maxime.HAMM@nimbly-consulting.com" url="https://github.com/maximehamm/mcp-intellij-all">Maxime HAMM</vendor>
 
     <description><![CDATA[
-        <p>Extends the built-in IntelliJ MCP Server with additional tools for AI clients (Claude, Cursor, etc.).</p>
+        <p>
+            <b>MCP Server Companion</b> extends the built-in
+            <a href="https://plugins.jetbrains.com/plugin/26071-mcp-server">JetBrains MCP Server</a>
+            with additional tools for AI clients such as Claude Desktop and Cursor.
+        </p>
+        <p>
+            MCP (Model Context Protocol) is an open standard that lets AI assistants interact directly
+            with your IDE. This plugin adds tools that give your AI deeper access to your IntelliJ
+            workspace — editor state, build results, run/debug output, and live variable inspection.
+        </p>
+        <p>
+            Source code and documentation: <a href="https://github.com/maximehamm/mcp-intellij-all">github.com/maximehamm/mcp-intellij-all</a>
+        </p>
 
         <h3>Example questions you can ask your AI</h3>
 
