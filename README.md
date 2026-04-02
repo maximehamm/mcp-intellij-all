@@ -29,6 +29,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `set_breakpoint_condition` | Sets or removes a condition on an existing breakpoint |
 | `mute_breakpoints` | Mutes or unmutes all breakpoints in the active debug session |
 | `get_project_structure` | Returns SDK, modules, source roots, excluded folders, and module dependencies |
+| `get_intellij_diagnostic` | One-call diagnostic: indexing status, notifications, running processes, and idea.log WARN/ERROR tail |
 | `get_running_processes` | Lists active and paused background processes in IntelliJ |
 | `manage_process` | Pauses, resumes, or cancels a background process by title |
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |

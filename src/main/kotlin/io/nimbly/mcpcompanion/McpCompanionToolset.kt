@@ -26,9 +26,13 @@ import com.intellij.openapi.module.ModuleType
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.notification.Notification
+import com.intellij.notification.NotificationsManager
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.impl.CoreProgressManager
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindowManager
@@ -802,6 +806,12 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
     """)
     suspend fun get_running_processes(): String {
         disabledMessage("get_running_processes")?.let { return it }
+        val processes = collectRunningProcesses()
+        return if (processes.isEmpty()) "No background processes running"
+        else Json.encodeToString(processes)
+    }
+
+    private fun collectRunningProcesses(): List<RunningProcess> {
         val seen = mutableSetOf<String>()
         val processes = mutableListOf<RunningProcess>()
 
@@ -825,8 +835,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
             processes += RunningProcess(title = title, progress = progress, paused = true)
         }
 
-        return if (processes.isEmpty()) "No background processes running"
-        else Json.encodeToString(processes)
+        return processes
     }
 
     // ── manage_process ────────────────────────────────────────────────────────
@@ -934,6 +943,71 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         if (basePath.isNotEmpty() && path.startsWith(basePath))
             path.removePrefix(basePath).trimStart('/')
         else path
+
+    // ── get_intellij_diagnostic ───────────────────────────────────────────────
+
+    @McpTool(name = "get_intellij_diagnostic")
+    @McpDescription(description = """
+        Returns IntelliJ diagnostic information in one call. Use this as a first step when
+        something is not working as expected in IntelliJ.
+        Returns:
+        - indexing: whether the IDE is currently indexing files (DumbService)
+        - notifications: active notifications visible in the Event Log (errors, warnings)
+        - processes: background processes currently running or paused (same as get_running_processes)
+        - logEntries: tail of idea.log filtered to WARN and ERROR lines
+        logLines: maximum number of WARN/ERROR log lines to return (default: 50).
+    """)
+    suspend fun get_intellij_diagnostic(logLines: Int = 50): String {
+        disabledMessage("get_intellij_diagnostic")?.let { return it }
+        val project = coroutineContext.project
+
+        val indexing = invokeAndWaitIfNeeded {
+            IndexingStatus(active = DumbService.getInstance(project).isDumb)
+        }
+
+        val notifications = invokeAndWaitIfNeeded {
+            NotificationsManager.getNotificationsManager()
+                .getNotificationsOfType(Notification::class.java, project)
+                .map { n ->
+                    DiagnosticNotification(
+                        type = n.type.name,
+                        title = n.title,
+                        content = n.content.takeIf { it.isNotBlank() },
+                        groupId = n.groupId.takeIf { it.isNotBlank() }
+                    )
+                }.toList()
+        }
+
+        val processes = collectRunningProcesses()
+
+        val logEntries = readIdeaLogTail(logLines)
+
+        return Json.encodeToString(IntellijDiagnostic(
+            indexing = indexing,
+            notifications = notifications,
+            processes = processes,
+            logEntries = logEntries
+        ))
+    }
+
+    private fun readIdeaLogTail(maxLines: Int): List<String> {
+        val logFile = java.io.File(PathManager.getLogPath(), "idea.log")
+        if (!logFile.exists()) return emptyList()
+        return try {
+            val bufSize = 131072L // 128 KB
+            val raf = java.io.RandomAccessFile(logFile, "r")
+            val fileLen = raf.length()
+            val startPos = maxOf(0L, fileLen - bufSize)
+            raf.seek(startPos)
+            val bytes = ByteArray((fileLen - startPos).toInt())
+            raf.read(bytes)
+            raf.close()
+            String(bytes, Charsets.UTF_8)
+                .lines()
+                .filter { "ERROR" in it || "WARN" in it }
+                .takeLast(maxLines)
+        } catch (_: Exception) { emptyList() }
+    }
 
     // ── navigate_to ───────────────────────────────────────────────────────────
 
@@ -1106,3 +1180,7 @@ val MCP_HIGHLIGHT_KEY = Key<Boolean>("mcp.companion.highlight")
 @Serializable data class SdkInfo(val name: String, val type: String, val version: String?, val homePath: String? = null)
 @Serializable data class ModuleInfo(val name: String, val type: String? = null, val sourceRoots: List<SourceRootInfo>, val excludedFolders: List<String>? = null, val dependencies: List<String>? = null)
 @Serializable data class SourceRootInfo(val path: String, val type: String)
+
+@Serializable data class IntellijDiagnostic(val indexing: IndexingStatus, val notifications: List<DiagnosticNotification>, val processes: List<RunningProcess>, val logEntries: List<String>)
+@Serializable data class IndexingStatus(val active: Boolean)
+@Serializable data class DiagnosticNotification(val type: String, val title: String, val content: String? = null, val groupId: String? = null)

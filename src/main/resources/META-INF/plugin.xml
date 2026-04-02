@@ -131,6 +131,11 @@
                 <b>clear_highlights</b> — Removes all highlights added by highlight_text.
             </li>
             <li>
+                <b>get_intellij_diagnostic</b> — Returns IntelliJ diagnostic info in one call:
+                indexing status, active notifications, running/paused processes, and tail of idea.log
+                filtered to WARN/ERROR. Use this first when something is not working as expected.
+            </li>
+            <li>
                 <b>get_running_processes</b> — Lists all active and paused background processes
                 currently running in IntelliJ (e.g. indexing, builds, Gradle syncs).
             </li>
