@@ -76,11 +76,6 @@
     <depends>com.intellij.mcpServer</depends>
 
     <extensions defaultExtensionNs="com.intellij.mcpServer">
-        <mcpTool implementation="io.nimbly.mcpcompanion.tools.GetOpenEditorsTool"/>
-        <mcpTool implementation="io.nimbly.mcpcompanion.tools.GetBuildOutputTool"/>
-        <mcpTool implementation="io.nimbly.mcpcompanion.tools.ReplaceTextUndoableTool"/>
-        <mcpTool implementation="io.nimbly.mcpcompanion.tools.GetRunOutputTool"/>
-        <mcpTool implementation="io.nimbly.mcpcompanion.tools.GetDebugOutputTool"/>
-        <mcpTool implementation="io.nimbly.mcpcompanion.tools.GetDebugVariablesTool"/>
+        <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionToolset"/>
     </extensions>
 </idea-plugin>

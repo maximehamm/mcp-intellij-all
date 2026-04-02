@@ -1,12 +1,12 @@
 plugins {
     id("java")
-    kotlin("jvm") version "1.9.24"
+    kotlin("jvm") version "2.2.0"
     id("org.jetbrains.intellij.platform") version "2.5.0"
-    kotlin("plugin.serialization") version "1.9.24"
+    kotlin("plugin.serialization") version "2.2.0"
 }
 
 group = "io.nimbly"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -17,20 +17,21 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        create("IC", "2024.3")
+        local("/Users/maxime/Applications/IntelliJ IDEA 2025.3.3.app")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
-        plugin("com.intellij.mcpServer", "1.0.30")
+        bundledPlugin("com.intellij.mcpServer")
     }
-    // compileOnly pour éviter les conflits de classloader avec le plugin MCP
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2025.3.3.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
 }
 
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "243"
+            sinceBuild = "253"
         }
         changeNotes = """
+            1.0.1 — Migration to IntelliJ 2025.3+ MCP API (McpToolset).
             1.0.0 — Initial release.
             Adds 6 MCP tools: get_open_editors, get_build_output, get_run_output,
             get_debug_output, get_debug_variables, replace_text_undoable.
@@ -42,6 +43,12 @@ tasks {
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
+    }
+    buildSearchableOptions {
+        enabled = false
+    }
+    runIde {
+        jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2025.3.3.app/Contents/lib/nio-fs.jar")
     }
 }
 
