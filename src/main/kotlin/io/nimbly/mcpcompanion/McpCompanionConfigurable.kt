@@ -1,6 +1,7 @@
 package io.nimbly.mcpcompanion
 
 import com.intellij.openapi.options.BoundConfigurable
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
@@ -17,10 +18,11 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
         return panel {
             if (!isMcpServerEnabled()) {
                 row {
-                    label("⚠\uFE0F MCP Server is disabled. Please enable it in Settings → Tools → MCP Server → Enable MCP Server.")
-                        .applyToComponent {
-                            foreground = com.intellij.ui.JBColor.RED
-                        }
+                    label("⚠\uFE0F MCP Server is disabled.")
+                        .applyToComponent { foreground = com.intellij.ui.JBColor.RED }
+                    link("Enable it here") {
+                        ShowSettingsUtil.getInstance().showSettingsDialog(null, "MCP Server")
+                    }
                 }
             }
             group("Exposed Tools") {
