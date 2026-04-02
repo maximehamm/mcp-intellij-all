@@ -1,8 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("java")
     kotlin("jvm") version "2.2.0"
     id("org.jetbrains.intellij.platform") version "2.5.0"
     kotlin("plugin.serialization") version "2.2.0"
+}
+
+val secrets = Properties().apply {
+    val f = rootProject.file("secrets.properties")
+    if (f.exists()) load(f.inputStream())
 }
 
 group = "io.nimbly"
@@ -44,6 +51,12 @@ intellijPlatform {
                 <li><b>1.0.0</b> — Initial release. Adds 6 MCP tools: get_open_editors, get_build_output, get_run_output, get_debug_output, get_debug_variables, replace_text_undoable.</li>
             </ul>
         """.trimIndent()
+    }
+}
+
+intellijPlatform {
+    publishing {
+        token = secrets.getProperty("marketplace.token", "")
     }
 }
 

@@ -10,5 +10,8 @@ build/
 # Claude Code
 .claude/
 
+# Secrets
+secrets.properties
+
 # OS
 .DS_Store
