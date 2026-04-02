@@ -31,9 +31,11 @@ intellijPlatform {
             sinceBuild = "253"
         }
         changeNotes = """
-            1.1.0 — Add get_test_results: returns last test run results (passed/failed/ignored status, duration, failure messages).
-            1.0.1 — Migration to IntelliJ 2025.3+ MCP API (McpToolset).
-            1.0.0 — Initial release. Adds 6 MCP tools: get_open_editors, get_build_output, get_run_output, get_debug_output, get_debug_variables, replace_text_undoable.
+            <ul>
+                <li><b>1.1.0</b> — New tool: <code>get_test_results</code> — returns last test run results (passed/failed/ignored status, duration, failure messages).</li>
+                <li><b>1.0.1</b> — Migration to IntelliJ 2025.3+ MCP API (McpToolset).</li>
+                <li><b>1.0.0</b> — Initial release. Adds 6 MCP tools: get_open_editors, get_build_output, get_run_output, get_debug_output, get_debug_variables, replace_text_undoable.</li>
+            </ul>
         """.trimIndent()
     }
 }
