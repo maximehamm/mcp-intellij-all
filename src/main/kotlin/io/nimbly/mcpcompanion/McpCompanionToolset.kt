@@ -289,7 +289,8 @@ class McpCompanionToolset : McpToolset {
     @McpTool(name = "get_debug_output")
     @McpDescription(description = """
         Returns the console output from the "Debug" tool window in IntelliJ.
-        Includes all open debug sessions with their name and console text.
+        Includes all open debug tabs with their name and console text.
+        Works whether the debug session is active or already finished.
         Useful to check the output of a program running under the debugger.
     """)
     suspend fun get_debug_output(): String {
@@ -300,11 +301,15 @@ class McpCompanionToolset : McpToolset {
     }
 
     private fun extractDebugTabs(project: com.intellij.openapi.project.Project): List<DebugTab> {
-        val sessions = XDebuggerManager.getInstance(project).debugSessions
-        if (sessions.isEmpty()) return listOf(DebugTab(name = "error", console = "No active debug session"))
-        return sessions.map { session ->
-            val text = (session.consoleView as? ConsoleViewImpl)?.readText()
-            DebugTab(name = session.sessionName, console = text)
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Debug")
+            ?: return listOf(DebugTab(name = "error", console = "Debug tool window not found"))
+        val contents = toolWindow.contentManager.contents
+        if (contents.isEmpty()) return listOf(DebugTab(name = "error", console = "No debug tabs found"))
+        return contents.map { content ->
+            val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
+            val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
+                .joinToString("\n---\n").ifEmpty { null }
+            DebugTab(name = content.displayName ?: "Debug", console = consoleText)
         }
     }
 
