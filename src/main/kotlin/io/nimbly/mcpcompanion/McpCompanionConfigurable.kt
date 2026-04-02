@@ -36,8 +36,10 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
 
         return panel {
             row {
-                label("<html><b>Example:</b> <i>\"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj.\"</i></html>")
                 warningLabel = label("").applyToComponent { updateWarning() }.component
+            }.bottomGap(BottomGap.NONE)
+            row {
+                label("<html><b>Example:</b> <i>\"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj.\"</i></html>")
             }.bottomGap(BottomGap.NONE)
 
             group("Claude Code Setup") {
@@ -184,7 +186,7 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
     private fun updateWarning() {
         val mcpEnabled = isMcpServerEnabled()
         warningLabel?.text = if (!mcpEnabled)
-            "<html><b>MCP is disabled, please enable it to enable MCP Server Companion.</b><br>" +
+            "<html><b>⚠ MCP is disabled, please enable it to enable MCP Server Companion.</b><br>" +
             "<small>Settings → Tools → MCP Server → Enable MCP Server</small></html>"
         else ""
     }
