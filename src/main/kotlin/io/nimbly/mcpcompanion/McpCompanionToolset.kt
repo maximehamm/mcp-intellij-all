@@ -109,11 +109,12 @@ class McpCompanionToolset : McpToolset {
             val firstTree = trees.firstOrNull()
             val treeNodes = firstTree?.model?.let { buildBuildNodes(it, it.root) }
             val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-            val consoleText = consoles.firstNotNullOfOrNull { it.editor?.document?.text }?.trim()
+            val consoleText = consoles.mapNotNull { it.editor?.document?.text?.trim()?.ifEmpty { null } }
+                .joinToString("\n---\n").ifEmpty { null }
             BuildTab(
                 name = content.displayName ?: "Build",
                 tree = treeNodes?.ifEmpty { null },
-                console = consoleText?.ifEmpty { null },
+                console = consoleText,
             )
         }
     }
@@ -205,8 +206,16 @@ class McpCompanionToolset : McpToolset {
             }
         }
 
+        // Severity from BuildTreeNode flags
+        val severity = when {
+            (try { cls.methods.find { it.name == "getHasProblems" }?.invoke(userObject) as? Boolean } catch (_: Exception) { null }) == true -> "ERROR"
+            (try { cls.methods.find { it.name == "getVisibleAsWarning" }?.invoke(userObject) as? Boolean } catch (_: Exception) { null }) == true -> "WARNING"
+            (try { cls.methods.find { it.name == "getVisibleAsSuccessful" }?.invoke(userObject) as? Boolean } catch (_: Exception) { null }) == true -> "SUCCESS"
+            else -> null
+        }
+
         val children = buildBuildNodes(model, node).ifEmpty { null }
-        return BuildNode(text = text, detail = detail, file = file, line = line, children = children)
+        return BuildNode(text = text, severity = severity, detail = detail, file = file, line = line, children = children)
     }
 
     // ── replace_text_undoable ─────────────────────────────────────────────────
@@ -265,11 +274,12 @@ class McpCompanionToolset : McpToolset {
             val firstTree = trees.firstOrNull()
             val treeNodes = firstTree?.model?.let { buildBuildNodes(it, it.root) }
             val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-            val consoleText = consoles.firstNotNullOfOrNull { it.readText() }
+            val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
+                .joinToString("\n---\n").ifEmpty { null }
             RunTab(
                 name = content.displayName ?: "Run",
                 tree = treeNodes?.ifEmpty { null },
-                console = consoleText?.ifEmpty { null }
+                console = consoleText
             )
         }
     }
@@ -430,7 +440,7 @@ class McpCompanionToolset : McpToolset {
 
 @Serializable data class BuildOutput(val tabs: List<BuildTab>)
 @Serializable data class BuildTab(val name: String, val tree: List<BuildNode>?, val console: String?)
-@Serializable data class BuildNode(val text: String, val detail: String? = null, val file: String? = null, val line: Int? = null, val children: List<BuildNode>? = null)
+@Serializable data class BuildNode(val text: String, val severity: String? = null, val detail: String? = null, val file: String? = null, val line: Int? = null, val children: List<BuildNode>? = null)
 
 @Serializable data class RunOutput(val tabs: List<RunTab>)
 @Serializable data class RunTab(val name: String, val tree: List<BuildNode>? = null, val console: String?)
