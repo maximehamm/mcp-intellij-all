@@ -105,7 +105,8 @@ class McpCompanionToolset : McpToolset {
 
 ### Build & run
 - get_build_output       → read compiler errors before answering a build question
-- get_run_output         → read console output after a run
+- get_console_output     → read console output from Run AND Debug windows — use this whenever the user ran or debugged something
+                           "activeWindow" tells you which window is currently visible; "active: true" marks the focused tab
 - get_test_results       → read test results (pass/fail/duration/message)
 
 ### Debug
@@ -115,7 +116,6 @@ class McpCompanionToolset : McpToolset {
 - set_breakpoint_condition   → change the condition of an existing breakpoint
 - mute_breakpoints           → enable/disable all breakpoints at once
 - get_debug_variables        → read local variables from the current stack frame
-- get_debug_output           → read the debug console
 
 ### Editing & file operations
 - replace_text_undoable      → replace text in a file already open in the editor (Cmd+Z undoable)
@@ -589,86 +589,69 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         }
     }
 
-    // ── get_run_output ────────────────────────────────────────────────────────
+    // ── get_console_output ───────────────────────────────────────────────────
 
-    @McpTool(name = "get_run_output")
+    @McpTool(name = "get_console_output")
     @McpDescription(description = """
-        Returns the content of the "Run" tool window in IntelliJ.
-        Includes all open run tabs with:
-        - tree: structured list of run nodes (tasks, errors, warnings) with file and line number when available
-        - console: the raw text output
-        Useful to check the output of a running or recently run program, including Gradle task errors.
+        Returns console output from both the "Run" and "Debug" tool windows.
+        Includes all open tabs from each window with their console text.
+        - activeWindow: "run" or "debug" — whichever window is currently visible/focused
+        - active: true on the tab that is currently selected within its window
+        - Run tabs also include a structured error/warning tree when available
+        Use this whenever the user ran or debugged something and you need to see the output.
     """)
-    suspend fun get_run_output(): String {
-        disabledMessage("get_run_output")?.let { return it }
+    suspend fun get_console_output(): String {
+        disabledMessage("get_console_output")?.let { return it }
         val project = coroutineContext.project
-        val tabs = invokeAndWaitIfNeeded { extractRunTabs(project) }
-        return Json.encodeToString(RunOutput(tabs))
-    }
+        return invokeAndWaitIfNeeded {
+            val runWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
+            val debugWindow = ToolWindowManager.getInstance(project).getToolWindow("Debug")
 
-    private fun extractRunTabs(project: com.intellij.openapi.project.Project): List<RunTab> {
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
-            ?: return listOf(RunTab(name = "error", tree = null, console = "Run tool window not found"))
-        return toolWindow.contentManager.contents.map { content ->
-            val trees = UIUtil.findComponentsOfType(content.component, JTree::class.java)
-            val firstTree = trees.firstOrNull()
-            val treeNodes = firstTree?.model?.let { buildBuildNodes(it, it.root) }
-            val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-            val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
-                .joinToString("\n---\n").ifEmpty { null }
-            RunTab(
-                name = content.displayName ?: "Run",
-                tree = treeNodes?.ifEmpty { null },
-                console = consoleText
-            )
-        }
-    }
-
-    // ── get_debug_output ──────────────────────────────────────────────────────
-
-    @McpTool(name = "get_debug_output")
-    @McpDescription(description = """
-        Returns the console output from the "Debug" tool window in IntelliJ.
-        Includes all open debug tabs with their name and console text.
-        Works whether the debug session is active or already finished.
-        Useful to check the output of a program running under the debugger.
-    """)
-    suspend fun get_debug_output(): String {
-        disabledMessage("get_debug_output")?.let { return it }
-        val project = coroutineContext.project
-        val tabs = invokeAndWaitIfNeeded { extractDebugTabs(project) }
-        return Json.encodeToString(DebugOutput(tabs))
-    }
-
-    private fun extractDebugTabs(project: com.intellij.openapi.project.Project): List<DebugTab> {
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Debug")
-            ?: return listOf(DebugTab(name = "error", console = "Debug tool window not found"))
-        val contents = toolWindow.contentManager.contents
-        if (contents.isEmpty()) return listOf(DebugTab(name = "error", console = "No debug tabs found"))
-
-        // Active sessions: get console text directly from session.consoleView (bypasses tab focus)
-        val activeSessions = XDebuggerManager.getInstance(project).debugSessions
-        val sessionByName = activeSessions.associateBy { it.sessionName }
-
-        return contents.map { content ->
-            val name = content.displayName ?: "Debug"
-            val session = sessionByName[name]
-
-            // Try session.consoleView first (always initialized, regardless of tab focus)
-            val consoleFromSession = session?.consoleView?.let { cv ->
-                (cv as? ConsoleViewImpl)?.readText()
-                    ?: UIUtil.findComponentsOfType(cv.component, ConsoleViewImpl::class.java)
-                        .mapNotNull { it.readText()?.ifEmpty { null } }
-                        .joinToString("\n---\n").ifEmpty { null }
+            val runVisible = runWindow?.isVisible == true
+            val debugVisible = debugWindow?.isVisible == true
+            val activeWindow: String? = when {
+                debugVisible && !runVisible -> "debug"
+                runVisible && !debugVisible -> "run"
+                debugVisible && runVisible ->
+                    if (XDebuggerManager.getInstance(project).debugSessions.isNotEmpty()) "debug" else "run"
+                else -> null
             }
 
-            // Fall back to scanning the content component (works for finished sessions)
-            val consoleText = consoleFromSession
-                ?: UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-                    .mapNotNull { it.readText()?.ifEmpty { null } }
+            val selectedRunContent = runWindow?.contentManager?.selectedContent
+            val runTabs = runWindow?.contentManager?.contents?.map { content ->
+                val trees = UIUtil.findComponentsOfType(content.component, JTree::class.java)
+                val treeNodes = trees.firstOrNull()?.model?.let { buildBuildNodes(it, it.root) }
+                val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
+                val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
                     .joinToString("\n---\n").ifEmpty { null }
+                ConsoleTab(
+                    name = content.displayName ?: "Run",
+                    active = content === selectedRunContent,
+                    tree = treeNodes?.ifEmpty { null },
+                    console = consoleText
+                )
+            } ?: emptyList()
 
-            DebugTab(name = name, console = consoleText)
+            val activeSessions = XDebuggerManager.getInstance(project).debugSessions
+            val sessionByName = activeSessions.associateBy { it.sessionName }
+            val selectedDebugContent = debugWindow?.contentManager?.selectedContent
+            val debugTabs = debugWindow?.contentManager?.contents?.map { content ->
+                val name = content.displayName ?: "Debug"
+                val session = sessionByName[name]
+                val consoleFromSession = session?.consoleView?.let { cv ->
+                    (cv as? ConsoleViewImpl)?.readText()
+                        ?: UIUtil.findComponentsOfType(cv.component, ConsoleViewImpl::class.java)
+                            .mapNotNull { it.readText()?.ifEmpty { null } }
+                            .joinToString("\n---\n").ifEmpty { null }
+                }
+                val consoleText = consoleFromSession
+                    ?: UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
+                        .mapNotNull { it.readText()?.ifEmpty { null } }
+                        .joinToString("\n---\n").ifEmpty { null }
+                ConsoleTab(name = name, active = content === selectedDebugContent, console = consoleText)
+            } ?: emptyList()
+
+            Json.encodeToString(ConsoleOutput(activeWindow = activeWindow, run = runTabs, debug = debugTabs))
         }
     }
 
@@ -897,7 +880,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
     @McpDescription(description = """
         Launches a run configuration in debug mode and returns immediately.
         Does NOT wait for completion — use get_debug_variables to check if stopped at a breakpoint,
-        or get_debug_output to read console output.
+        or get_console_output to read console output.
         configurationName: exact name of the run configuration (use get_run_configurations to list them).
     """)
     suspend fun debug_run_configuration(configurationName: String): String {
@@ -1411,11 +1394,8 @@ val MCP_HIGHLIGHT_KEY = Key<Boolean>("mcp.companion.highlight")
 @Serializable data class ServiceSession(val name: String, val selected: Boolean = false, val output: String? = null, val outputSelected: Boolean = false, val results: List<ServiceResult> = emptyList())
 @Serializable data class ServiceResult(val name: String, val selected: Boolean = false, val data: String? = null)
 
-@Serializable data class RunOutput(val tabs: List<RunTab>)
-@Serializable data class RunTab(val name: String, val tree: List<BuildNode>? = null, val console: String?)
-
-@Serializable data class DebugOutput(val tabs: List<DebugTab>)
-@Serializable data class DebugTab(val name: String, val console: String?)
+@Serializable data class ConsoleOutput(val activeWindow: String? = null, val run: List<ConsoleTab> = emptyList(), val debug: List<ConsoleTab> = emptyList())
+@Serializable data class ConsoleTab(val name: String, val active: Boolean = false, val tree: List<BuildNode>? = null, val console: String? = null)
 
 @Serializable data class DebugVariablesOutput(val session: String, val variables: List<DebugVariable>)
 @Serializable data class DebugVariable(val name: String, val type: String? = null, val value: String? = null)
