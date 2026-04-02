@@ -26,123 +26,58 @@
 
         <h3>Settings</h3>
         <p>Each tool can be individually enabled or disabled in <b>Settings → Tools → MCP Server Companion</b>.</p>
-        <p><img src="https://raw.githubusercontent.com/maximehamm/mcp-intellij-all/main/docs/settings-screenshot.png" alt="MCP Server Companion Settings" width="600"/></p>
-
-        <h3>Example questions you can ask your AI</h3>
-
-        <p><i>"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj."</i></p>
-        <p><i>"Open Main.java and place the cursor at line 42."</i></p>
-        <p><i>"Show me where variable i is declared and used in Main.java."</i></p>
-
-        <b>Editor</b>
-        <ul>
-            <li><i>"What file am I currently editing, and what line is my cursor on?"</i></li>
-            <li><i>"What is the selected code in my editor?"</i></li>
-            <li><i>"What files do I have open right now?"</i></li>
-            <li><i>"Look at the file I'm editing and suggest improvements for the selected code."</i></li>
-        </ul>
-
-        <b>Build</b>
-        <ul>
-            <li><i>"Check my build output and tell me what errors I have."</i></li>
-            <li><i>"Fix the compilation errors in my project."</i></li>
-            <li><i>"I have a build error — can you identify the cause and fix it? Make it undoable."</i></li>
-            <li><i>"Run a build, check the result, and fix any errors."</i></li>
-        </ul>
-
-        <b>Run &amp; Debug</b>
-        <ul>
-            <li><i>"Run the program and show me the output."</i></li>
-            <li><i>"What is the debug console showing right now?"</i></li>
-            <li><i>"What are the current variable values at this breakpoint?"</i></li>
-            <li><i>"Set a breakpoint at line 13, launch debug, and stop when i=3."</i></li>
-        </ul>
-
-        <b>Tests</b>
-        <ul>
-            <li><i>"Run the tests and tell me which ones failed and why."</i></li>
-            <li><i>"Fix the failing tests."</i></li>
-        </ul>
-
-        <b>Breakpoints &amp; Debug</b>
-        <ul>
-            <li><i>"List all my breakpoints and their conditions."</i></li>
-            <li><i>"Mute all breakpoints so the program runs without stopping."</i></li>
-            <li><i>"Re-enable breakpoints."</i></li>
-            <li><i>"Set a condition on the breakpoint at line 42 of Foo.java: only stop when i == 5."</i></li>
-            <li><i>"Remove the condition from the breakpoint at Foo.java line 42."</i></li>
-            <li><i>"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj."</i></li>
-        </ul>
 
         <h3>Available tools</h3>
+
+        <b>Editor &amp; Navigation</b>
         <ul>
-            <li><b>get_open_editors</b> — Returns all open files, the focused file with caret position, and current text selection if any.</li>
-            <li><b>get_project_structure</b> — Returns the project SDK, modules, source roots (source/test/resource/testResource), excluded folders, and module-to-module dependencies. All paths are relative to the project root.</li>
-            <li>
-                <b>get_build_output</b> — Returns the full content of the Build tool window:
-                a structured tree of tasks/errors/warnings with file names and line numbers,
-                plus the raw console text output.
-            </li>
-            <li>
-                <b>replace_text_undoable</b> — Replaces text in a file using IntelliJ's document API,
-                so the change is registered in the undo stack and can be reverted with Cmd+Z.
-            </li>
-            <li>
-                <b>get_run_output</b> — Returns the console output from the Run tool window,
-                including all open run tabs with their name and text output.
-            </li>
-            <li>
-                <b>get_debug_output</b> — Returns the console output from the Debug tool window,
-                including all open debug tabs with their name and text output.
-            </li>
-            <li>
-                <b>get_debug_variables</b> — Returns the local variables and their values
-                from the current debugger stack frame (available when paused at a breakpoint).
-            </li>
-            <li>
-                <b>get_test_results</b> — Returns the results of the last test run:
-                passed/failed/ignored status, duration, and failure messages with stack traces.
-            </li>
-            <li>
-                <b>get_breakpoints</b> — Lists all line breakpoints with their file, line number, enabled state,
-                and condition expression (if any).
-            </li>
-            <li>
-                <b>mute_breakpoints</b> — Mutes or unmutes all breakpoints in the active debug session
-                (pass <code>muted=true/false</code>). Requires an active debug session.
-            </li>
-            <li>
-                <b>set_breakpoint_condition</b> — Sets or removes a condition on an existing breakpoint.
-                Parameters: <code>filePath</code> (relative), <code>line</code> (1-based), <code>condition</code>
-                (expression string, or empty to remove).
-            </li>
-            <li>
-                <b>navigate_to</b> — Opens a file and places the cursor at a given line and column.
-            </li>
-            <li>
-                <b>select_text</b> — Opens a file and selects a text range (ready to copy with Cmd+C).
-            </li>
-            <li>
-                <b>highlight_text</b> — Highlights multiple zones in a file using the IDE's standard
-                search-result color (theme-aware). Press Escape to clear. Ranges are specified as
-                comma-separated <code>startLine:startCol:endLine:endCol</code> (1-based).
-            </li>
-            <li>
-                <b>clear_highlights</b> — Removes all highlights added by highlight_text.
-            </li>
-            <li>
-                <b>get_intellij_diagnostic</b> — Returns IntelliJ diagnostic info in one call:
-                indexing status, active notifications, running/paused processes, and tail of idea.log
-                filtered to WARN/ERROR. Use this first when something is not working as expected.
-            </li>
-            <li>
-                <b>get_running_processes</b> — Lists all active and paused background processes
-                currently running in IntelliJ (e.g. indexing, builds, Gradle syncs).
-            </li>
-            <li>
-                <b>manage_process</b> — Pauses, resumes, or cancels a background process identified by its title.
-                Actions: <code>pause</code>, <code>resume</code>, <code>cancel</code>.
-            </li>
+            <li><b>get_open_editors</b> — Open files, focused editor with caret position, and current text selection.</li>
+            <li><b>navigate_to</b> — Opens a file and places the cursor at a given line and column.</li>
+            <li><b>select_text</b> — Opens a file and selects a text range (ready to copy with Cmd+C).</li>
+            <li><b>highlight_text</b> — Highlights multiple zones in a file using the IDE's search-result color (theme-aware). Press Escape to clear.</li>
+            <li><b>clear_highlights</b> — Removes all highlights added by <code>highlight_text</code>.</li>
+        </ul>
+
+        <b>Build &amp; Tests</b>
+        <ul>
+            <li><b>get_build_output</b> — Build tool window: structured error/warning tree with file names and line numbers, plus raw console text.</li>
+            <li><b>get_run_output</b> — Console output from the Run tool window (all open tabs).</li>
+            <li><b>get_test_results</b> — Last test run results: passed/failed/ignored status, duration, and failure messages with stack traces.</li>
+        </ul>
+
+        <b>Debug</b>
+        <ul>
+            <li><b>debug_run_configuration</b> — Launches a run configuration in debug mode.</li>
+            <li><b>get_debug_output</b> — Console output from the Debug tool window (all open tabs).</li>
+            <li><b>get_debug_variables</b> — Local variables and their values from the current debugger stack frame (available when paused at a breakpoint).</li>
+            <li><b>get_breakpoints</b> — Lists all line breakpoints with file, line number, enabled state, and condition expression.</li>
+            <li><b>add_conditional_breakpoint</b> — Adds a breakpoint with an optional condition expression.</li>
+            <li><b>set_breakpoint_condition</b> — Sets or removes a condition on an existing breakpoint.</li>
+            <li><b>mute_breakpoints</b> — Mutes or unmutes all breakpoints in the active debug session.</li>
+        </ul>
+
+        <b>Diagnostic &amp; Processes</b>
+        <ul>
+            <li><b>get_intellij_diagnostic</b> — One-call diagnostic: indexing status, active notifications, running/paused processes, and <code>idea.log</code> WARN/ERROR tail. Use this first when something is not working as expected.</li>
+            <li><b>get_running_processes</b> — Lists all active and paused background processes (indexing, Gradle syncs, builds, etc.).</li>
+            <li><b>manage_process</b> — Pauses, resumes, or cancels a background process by title.</li>
+        </ul>
+
+        <b>General</b>
+        <ul>
+            <li><b>get_mcp_companion_overview</b> — Describes all available MCP Companion tools and how to use them.</li>
+            <li><b>get_project_structure</b> — Project SDK, modules, source roots, excluded folders, and module dependencies. All paths relative to project root.</li>
+            <li><b>replace_text_undoable</b> — Replaces text in a file via IntelliJ's document API (supports Cmd+Z undo).</li>
+            <li><b>delete_file</b> — Deletes a file from the project (undoable).</li>
+        </ul>
+
+        <h3>Example prompts</h3>
+        <ul>
+            <li><i>"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj."</i></li>
+            <li><i>"Check my build output and fix the compilation errors. Make changes undoable."</i></li>
+            <li><i>"Run the tests and tell me which ones failed and why."</i></li>
+            <li><i>"Open Main.java and highlight all usages of variable i."</i></li>
+            <li><i>"Something is wrong in IntelliJ — run a diagnostic and tell me what you see."</i></li>
         </ul>
     ]]></description>
 
