@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "1.10.1"
+version = "1.10.2"
 
 repositories {
     mavenCentral()
@@ -43,6 +43,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.10.2</b> — Marketplace overview: improve spacing between tool groups.</li>
                 <li><b>1.10.1</b> — Marketplace overview restructured to match Settings page groups. Fix @ApiStatus.Internal violation on CoreProgressManager.</li>
                 <li><b>1.10.0</b> — New tool: <code>get_intellij_diagnostic</code> — one-call diagnostic combining indexing status, active notifications, running processes, and idea.log WARN/ERROR tail.</li>
                 <li><b>1.9.0</b> — New tools: <code>get_running_processes</code> (lists active/paused background processes) and <code>manage_process</code> (pause, resume, cancel). Added reflection API tests. Fixed binary compatibility with IntelliJ 2025.3.x (<code>McpToolset.isEnabled()</code>).</li>
