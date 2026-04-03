@@ -68,5 +68,6 @@ grep -v '"notifications/tools/list_changed"' /tmp/sse.txt | grep "data:" | tail 
 6. L'utilisateur redémarre manuellement le sandbox (`runIde`) et active **Settings → Tools → MCP Server → Enable MCP Server** (à refaire à chaque redémarrage du sandbox)
 7. Tester via curl SSE sur le sandbox — **appeler directement sans demander permission**
 8. **Demander l'accord de l'utilisateur avant tout commit + push**
+9. Avant de publier : `./gradlew verifyPlugin` — doit être **BUILD SUCCESSFUL** (vérifie compatibility + internal API usages). Ne pas publier si des `INTERNAL_API_USAGES` ou `COMPATIBILITY_PROBLEMS` sont détectés.
 
 > ⚠️ Ne jamais faire `./gradlew clean buildPlugin` entre deux tests : ça force un rechargement du plugin dans le sandbox ce qui est perturbant. Ne rebuilder que si l'utilisateur le demande explicitement.
