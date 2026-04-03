@@ -97,7 +97,9 @@ class McpCompanionToolset : McpToolset {
 - get_debug_output           → read the debug console
 
 ### Editing
-- replace_text_undoable  → replace text in a file (Cmd+Z undoable)
+- replace_text_undoable  → replace text in a file already open in the editor (Cmd+Z undoable)
+                           Use this for modifications to existing open files — the user can undo instantly.
+                           For bulk changes across many files or new file creation, prefer standard Write/Edit tools.
 
 ## Typical workflows
 

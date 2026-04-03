@@ -41,7 +41,7 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
                         .comment("Adds a one-liner to CLAUDE.md in the current project so Claude calls get_mcp_companion_overview on startup")
                 }
                 row {
-                    comment("""To skip permission prompts, add this to <code>~/.claude/settings.json</code> and restart Claude Code:""")
+                    comment("""To skip permission prompts, add <code>"mcp__intellij__*"</code> to the <code>permissions.allow</code> array in <code>~/.claude/settings.json</code> and restart Claude Code:""")
                 }
                 row {
                     val snippet = """  "permissions": { "allow": ["mcp__intellij__*"] }"""
