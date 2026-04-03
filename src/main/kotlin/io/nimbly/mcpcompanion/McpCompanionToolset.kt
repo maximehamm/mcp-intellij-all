@@ -69,6 +69,7 @@ class McpCompanionToolset : McpToolset {
     private fun disabledMessage(toolName: String): String? {
         if (!McpCompanionSettings.getInstance().isEnabled(toolName))
             return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
+        McpCompanionSettings.getInstance().trackCall(toolName)
         return null
     }
 
@@ -118,7 +119,7 @@ class McpCompanionToolset : McpToolset {
 - get_debug_variables        → read local variables from the current stack frame
 
 ### Diagnostic & settings
-- get_intellij_diagnostic    → notifications, errors, background tasks, IDE log — call this when something looks wrong
+- get_intellij_diagnostic    → notifications, errors, background tasks, ERROR/SEVERE from idea.log (last 5 min) — call this when something looks wrong
 - get_ide_settings           → read IntelliJ settings (Gradle, compiler, SDK, encoding…)
                                no param = common settings overview
                                search="gradle" = filter all properties by keyword
@@ -1488,10 +1489,11 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         - indexing: whether the IDE is currently indexing files (DumbService)
         - notifications: active notifications visible in the Event Log (errors, warnings)
         - processes: background processes currently running or paused (same as get_running_processes)
-        - logEntries: tail of idea.log filtered to WARN and ERROR lines
-        logLines: maximum number of WARN/ERROR log lines to return (default: 50).
+        - logEntries: log entries from idea.log in the last N minutes, including stack traces
+        minutesBack: how many minutes back to scan idea.log (default: 5)
+        level: minimum log level to include — "error" (ERROR+SEVERE only), "warn" (adds WARN), "info" (adds INFO). Default: "error"
     """)
-    suspend fun get_intellij_diagnostic(logLines: Int = 50): String {
+    suspend fun get_intellij_diagnostic(minutesBack: Int = 5, level: String = "error"): String {
         disabledMessage("get_intellij_diagnostic")?.let { return it }
         val project = coroutineContext.project
 
@@ -1514,7 +1516,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
 
         val processes = collectRunningProcesses()
 
-        val logEntries = readIdeaLogTail(logLines)
+        val logEntries = readIdeaLogErrors(minutesBack = minutesBack, level = level)
 
         return Json.encodeToString(IntellijDiagnostic(
             indexing = indexing,
@@ -1524,22 +1526,46 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         ))
     }
 
-    private fun readIdeaLogTail(maxLines: Int): List<String> {
+    private fun readIdeaLogErrors(minutesBack: Int, level: String = "error"): List<String> {
         val logFile = java.io.File(PathManager.getLogPath(), "idea.log")
         if (!logFile.exists()) return emptyList()
         return try {
-            val bufSize = 131072L // 128 KB
+            val cutoff = System.currentTimeMillis() - minutesBack * 60_000L
             val raf = java.io.RandomAccessFile(logFile, "r")
             val fileLen = raf.length()
-            val startPos = maxOf(0L, fileLen - bufSize)
+            val startPos = maxOf(0L, fileLen - 524288L) // read last 512 KB
             raf.seek(startPos)
             val bytes = ByteArray((fileLen - startPos).toInt())
             raf.read(bytes)
             raf.close()
-            String(bytes, Charsets.UTF_8)
-                .lines()
-                .filter { "ERROR" in it || "WARN" in it }
-                .takeLast(maxLines)
+
+            val lines = String(bytes, Charsets.UTF_8).lines()
+            val headerRegex = Regex("""^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+""")
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+
+            // Group lines into entries (header + following stack trace lines)
+            data class Entry(val ts: Long, val isError: Boolean, val lines: MutableList<String>)
+            val entries = mutableListOf<Entry>()
+
+            for (line in lines) {
+                val match = headerRegex.find(line)
+                if (match != null) {
+                    val ts = runCatching { sdf.parse(match.groupValues[1])?.time ?: 0L }.getOrDefault(0L)
+                    val isError = when (level.lowercase()) {
+                        "info" -> "ERROR" in line || "SEVERE" in line || "WARN" in line || " INFO" in line
+                        "warn" -> "ERROR" in line || "SEVERE" in line || "WARN" in line
+                        else   -> "ERROR" in line || "SEVERE" in line
+                    }
+                    entries += Entry(ts, isError, mutableListOf(line))
+                } else {
+                    entries.lastOrNull()?.lines?.add(line)
+                }
+            }
+
+            entries
+                .filter { it.isError && it.ts >= cutoff }
+                .flatMap { it.lines }
+                .take(300) // cap at 300 lines to avoid huge responses
         } catch (_: Exception) { emptyList() }
     }
 
