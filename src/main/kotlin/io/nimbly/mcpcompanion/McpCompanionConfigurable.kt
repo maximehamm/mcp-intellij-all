@@ -1,29 +1,29 @@
 package io.nimbly.mcpcompanion
 
 import com.intellij.openapi.options.BoundConfigurable
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
+import java.awt.event.HierarchyEvent
 import javax.swing.JCheckBox
+import javax.swing.JLabel
+import javax.swing.Timer
 
 class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
 
     private val toolCheckboxes = mutableListOf<JCheckBox>()
+    private var warningLabel: JLabel? = null
+    private val refreshTimer = Timer(300) { refreshState() }
 
     override fun createPanel(): DialogPanel {
         val settings = McpCompanionSettings.getInstance()
         toolCheckboxes.clear()
 
         return panel {
-            if (!isMcpServerEnabled()) {
-                row {
-                    label("⚠\uFE0F MCP Server is disabled.")
-                        .applyToComponent { foreground = com.intellij.ui.JBColor.RED }
-                    link("Enable it here") {
-                        ShowSettingsUtil.getInstance().showSettingsDialog(null, "MCP Server")
-                    }
-                }
+            row {
+                warningLabel = label("").applyToComponent {
+                    updateWarning()
+                }.component
             }
             group("Exposed Tools") {
                 McpCompanionSettings.ALL_TOOLS.forEach { (name, description) ->
@@ -41,13 +41,38 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
                     }
                 }
             }
+        }.also { panel ->
+            panel.addHierarchyListener { e ->
+                if (e.changeFlags and HierarchyEvent.SHOWING_CHANGED.toLong() != 0L) {
+                    if (panel.isShowing) { refreshState(); refreshTimer.start() }
+                    else refreshTimer.stop()
+                }
+            }
         }
+    }
+
+    private fun updateWarning() {
+        val mcpEnabled = isMcpServerEnabled()
+        warningLabel?.text = if (!mcpEnabled)
+            "<html><b>MCP is disabled, please enable it to enable MCP Server Companion.</b><br>" +
+            "<small>Settings → Tools → MCP Server → Enable MCP Server</small></html>"
+        else ""
+    }
+
+    private fun refreshState() {
+        updateWarning()
+        val mcpEnabled = isMcpServerEnabled()
+        toolCheckboxes.forEach { it.isEnabled = mcpEnabled }
     }
 
     override fun reset() {
         super.reset()
-        val enabled = isMcpServerEnabled()
-        toolCheckboxes.forEach { it.isEnabled = enabled }
+        refreshState()
+    }
+
+    override fun disposeUIResources() {
+        refreshTimer.stop()
+        super.disposeUIResources()
     }
 
     companion object {
