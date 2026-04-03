@@ -19,11 +19,10 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `highlight_text` | Highlights multiple zones in a file using the IDE's search-result color |
 | `clear_highlights` | Removes all highlights added by `highlight_text` |
 | `get_build_output` | Build tool window: structured error tree with file/line numbers + console text |
-| `get_run_output` | Console output from the Run tool window |
+| `get_console_output` | Console output from both Run and Debug tool windows, with active window and tab indicated |
 | `get_services_output` | Services tool window sessions: SQL output log, result grids, active session/tab indicated |
 | `get_test_results` | Last test run results: passed/failed/ignored status, duration, and failure messages |
 | `debug_run_configuration` | Launches a run configuration in debug mode |
-| `get_debug_output` | Console output from the Debug tool window |
 | `get_debug_variables` | Local variables and values from the current debugger stack frame |
 | `get_breakpoints` | Lists all line breakpoints with file, line, enabled state, and condition |
 | `add_conditional_breakpoint` | Adds a breakpoint with an optional condition expression |
