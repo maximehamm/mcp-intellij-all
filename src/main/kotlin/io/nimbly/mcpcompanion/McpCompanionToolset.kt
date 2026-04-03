@@ -45,6 +45,8 @@ import com.intellij.xdebugger.frame.XValueChildrenList
 import com.intellij.xdebugger.frame.XValueNode
 import com.intellij.xdebugger.frame.XValuePlace
 import com.intellij.xdebugger.frame.presentation.XValuePresentation
+import com.intellij.ui.tabs.JBTabs
+import io.nimbly.mcpcompanion.tools.readEditorText
 import io.nimbly.mcpcompanion.tools.readText
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -346,6 +348,245 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
             })
         }
         return "ok"
+    }
+
+    // ── get_services_output ───────────────────────────────────────────────────
+
+    @McpTool(name = "get_services_output")
+    @McpDescription(description = """
+        Returns the output of all sessions visible in the "Services" tool window, grouped by session node.
+        For each session (e.g. console_1, script.sql):
+        - name: the session node name from the Services tree
+        - output: raw text from the Output tab (SQL executed, logs, etc.)
+        - results: list of result grids, each with a name and tabular data (column headers + rows)
+        Covers database sessions, run configurations, Spring Boot apps, etc.
+    """)
+    suspend fun get_services_output(): String {
+        disabledMessage("get_services_output")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Services")
+                ?: return@invokeAndWaitIfNeeded Json.encodeToString(
+                    ServicesOutput(sessions = listOf(ServiceSession(name = "error", output = "Services tool window not found"))))
+
+            // Tabbed mode: "Open in new tab" creates ContentManager contents (one per session + "All Services")
+            val contents = runCatching { toolWindow.contentManager.contents.toList() }.getOrElse { emptyList() }
+            val sessionContents = contents.filter { it.displayName != "All Services" && !it.displayName.isNullOrBlank() }
+            // Tabbed mode is only active when "All Services" tab exists (created by "Open in new tab")
+            val isTabbedMode = sessionContents.isNotEmpty() && contents.any { it.displayName == "All Services" }
+
+            val rootComponent = if (isTabbedMode)
+                // Use the "All Services" content component for tree search, or fall back to tool window component
+                (contents.firstOrNull { it.displayName == "All Services" }?.component as? javax.swing.JComponent
+                    ?: toolWindow.component)
+            else
+                toolWindow.component
+
+            // Step 1: find ServiceViewTree (JTree in the left panel) and collect leaf node names
+            val tree = UIUtil.findComponentsOfType(rootComponent, javax.swing.JTree::class.java)
+                .firstOrNull { it.javaClass.name.contains("ServiceViewTree") }
+
+            fun nodeDisplayName(node: Any, sourceTree: javax.swing.JTree? = null): String {
+                // Try cell renderer — it knows how to render the node
+                sourceTree?.let { t ->
+                    runCatching {
+                        val comp = t.cellRenderer.getTreeCellRendererComponent(t, node, false, false, true, 0, false)
+                        // Try accessible name (works for SimpleColoredComponent and JLabel)
+                        comp.accessibleContext?.accessibleName?.takeIf { it.isNotBlank() }
+                            ?: run {
+                                // Try SimpleColoredComponent.getCharSequence()
+                                runCatching {
+                                    comp.javaClass.getMethod("getCharSequence", Boolean::class.javaPrimitiveType)
+                                        .invoke(comp, false)?.toString()?.takeIf { it.isNotBlank() }
+                                }.getOrNull()
+                            }
+                            ?: run {
+                                // Walk hierarchy for JLabel
+                                fun labelText(c: java.awt.Component): String? {
+                                    if (c is javax.swing.JLabel) return c.text?.takeIf { it.isNotBlank() }
+                                    if (c is java.awt.Container) c.components.forEach { labelText(it)?.let { txt -> return txt } }
+                                    return null
+                                }
+                                labelText(comp)
+                            }
+                    }.getOrNull()?.let { return it }
+                }
+                // Try getViewDescriptor().getPresentation().getPresentableText()
+                runCatching {
+                    val desc = node.javaClass.getMethod("getViewDescriptor").invoke(node)
+                    val pres = desc?.javaClass?.getMethod("getPresentation")?.invoke(desc)
+                    pres?.javaClass?.getMethod("getPresentableText")?.invoke(pres)?.toString()
+                }.getOrNull()?.let { return it }
+                // Try getPresentation().getPresentableText()
+                runCatching {
+                    val pres = node.javaClass.getMethod("getPresentation").invoke(node)
+                    pres?.javaClass?.getMethod("getPresentableText")?.invoke(pres)?.toString()
+                }.getOrNull()?.let { return it }
+                // Try getName() / getText() / getDisplayName()
+                for (methodName in listOf("getName", "getText", "getDisplayName")) {
+                    runCatching {
+                        node.javaClass.getMethod(methodName).invoke(node)?.toString()
+                    }.getOrNull()?.let { return it }
+                }
+                return node.toString()
+            }
+            // Strip trailing timing suffix added by the renderer (e.g. "script.sql  361 ms" → "script.sql")
+            // Normalize all non-ASCII / Unicode-space chars to regular space before tokenizing
+            fun cleanNodeName(raw: String): String {
+                val normalized = raw.map { if (it.isWhitespace() || it.code > 127) ' ' else it }.joinToString("")
+                val tokens = normalized.trim().split(Regex(" +")).filter { it.isNotEmpty() }.toMutableList()
+                // Strip all trailing "<number> <unit>" pairs (e.g. "1 s 240 ms" → stripped twice)
+                while (tokens.size >= 2 && tokens.last().lowercase() in listOf("ms", "s")) {
+                    tokens.removeAt(tokens.size - 1)
+                    if (tokens.isNotEmpty() && tokens.last().matches(Regex("""\d+(\.\d+)?""")))
+                        tokens.removeAt(tokens.size - 1)
+                }
+                return if (tokens.isEmpty()) raw.trim() else tokens.joinToString(" ")
+            }
+            val leaves = mutableListOf<String>()
+            if (tree != null) {
+                fun collectLeaves(model: TreeModel, node: Any) {
+                    val childCount = model.getChildCount(node)
+                    if (childCount == 0) {
+                        leaves += cleanNodeName(nodeDisplayName(node, tree))
+                    } else {
+                        for (i in 0 until childCount) collectLeaves(model, model.getChild(node, i))
+                    }
+                }
+                val model = tree.model
+                if (model != null && model.root != null) collectLeaves(model, model.root)
+            }
+
+            // Step 2: find ServiceViewComponentWrapper components (right panel per session)
+            @Suppress("UNCHECKED_CAST")
+            val wrappers = UIUtil.findComponentsOfType(rootComponent, javax.swing.JComponent::class.java)
+                .filter { it.javaClass.name.contains("ServiceViewComponentWrapper") }
+
+            // Step 3: extract session content from each wrapper
+            fun extractGridText(table: javax.swing.JTable): String {
+                val model = table.model
+                val cols = (0 until table.columnModel.columnCount).map { colIdx ->
+                    table.columnModel.getColumn(colIdx).headerValue?.toString()
+                        ?: model.getColumnName(colIdx)
+                }
+                val rows = (0 until model.rowCount).map { row ->
+                    cols.indices.map { col -> model.getValueAt(row, col)?.toString() ?: "" }
+                }
+                return buildString {
+                    appendLine(cols.joinToString(" | "))
+                    appendLine("-".repeat(cols.sumOf { it.length + 3 }))
+                    rows.forEach { row -> appendLine(row.joinToString(" | ")) }
+                    append("${rows.size} row(s)")
+                }
+            }
+
+            // Determine selected session name from tree selection
+            val selectedLeafName: String? = tree?.let { t ->
+                t.selectionPath?.lastPathComponent?.let { node -> cleanNodeName(nodeDisplayName(node, t)) }
+            }
+
+            // Use JBTabs (public interface) via Class.forName to avoid @Internal JBTabsImpl reference
+            @Suppress("UNCHECKED_CAST")
+            val jbTabsClass = runCatching {
+                Class.forName("com.intellij.ui.tabs.impl.JBTabsImpl") as Class<javax.swing.JComponent>
+            }.getOrNull()
+
+            fun findJBTabs(component: javax.swing.JComponent): List<com.intellij.ui.tabs.JBTabs> =
+                if (jbTabsClass != null)
+                    UIUtil.findComponentsOfType(component, jbTabsClass).filterIsInstance<com.intellij.ui.tabs.JBTabs>()
+                else
+                    UIUtil.findComponentsOfType(component, javax.swing.JComponent::class.java).filterIsInstance<JBTabs>()
+
+            fun processWrapper(name: String, wrapper: javax.swing.JComponent): ServiceSession {
+                val tabs = findJBTabs(wrapper).firstOrNull()
+                var output: String? = null
+                var outputSelected = false
+                val results = mutableListOf<ServiceResult>()
+
+                if (tabs != null) {
+                    val selectedTabInfo = tabs.selectedInfo
+                    for (tabInfo in tabs.tabs) {
+                        val tabTitle = tabInfo.text
+                        val component = tabInfo.component as? javax.swing.JComponent ?: continue
+                        val isTabSelected = selectedTabInfo === tabInfo
+
+                        // Output tab: ConsoleViewImpl or EditorComponentImpl
+                        val console = UIUtil.findComponentOfType(component, ConsoleViewImpl::class.java)
+                        if (console != null) {
+                            output = console.readText()?.ifBlank { null }
+                            outputSelected = isTabSelected
+                            continue
+                        }
+                        val editorText = readEditorText(component)
+                        if (editorText != null) {
+                            output = editorText
+                            outputSelected = isTabSelected
+                            continue
+                        }
+
+                        // Result grid tab: TableResultView (JTable subclass)
+                        val table = UIUtil.findComponentsOfType(component, javax.swing.JTable::class.java)
+                            .firstOrNull { it.javaClass.name.contains("TableResult", ignoreCase = true) }
+                        if (table != null) {
+                            results += ServiceResult(name = tabTitle, selected = isTabSelected, data = extractGridText(table))
+                        }
+                    }
+                } else {
+                    // No JBTabs — try direct console or editor
+                    val console = UIUtil.findComponentOfType(wrapper, ConsoleViewImpl::class.java)
+                    if (console != null) output = console.readText()?.ifBlank { null }
+                    else output = readEditorText(wrapper)
+                }
+                return ServiceSession(name = name, selected = name == selectedLeafName,
+                    output = output, outputSelected = outputSelected, results = results)
+            }
+
+            // Mode detection: tabbed mode has an outer JBTabs containing an "All Services" tab
+            val outerTabsImpl = findJBTabs(rootComponent)
+                .firstOrNull { tabs -> tabs.tabs.any { it.text == "All Services" } }
+
+            val selectedContentName = runCatching { toolWindow.contentManager.selectedContent?.displayName }.getOrNull()
+
+            val sessions: List<ServiceSession> = when {
+                isTabbedMode -> {
+                    // Tabbed mode: ContentManager contents are the sessions
+                    sessionContents.mapNotNull { content ->
+                        val name = cleanNodeName(content.displayName ?: return@mapNotNull null)
+                        val component = content.component as? javax.swing.JComponent ?: return@mapNotNull null
+                        val isSelected = content.displayName == selectedContentName
+                        processWrapper(name, component).copy(selected = isSelected)
+                    }
+                }
+                outerTabsImpl != null -> {
+                    // JBTabs outer mode (fallback)
+                    val selectedTabInfo = outerTabsImpl.selectedInfo
+                    outerTabsImpl.tabs
+                        .filter { it.text != "All Services" }
+                        .mapNotNull { tabInfo ->
+                            val name = cleanNodeName(tabInfo.text)
+                            val component = tabInfo.component as? javax.swing.JComponent ?: return@mapNotNull null
+                            val isSelected = selectedTabInfo === tabInfo
+                            processWrapper(name, component).copy(selected = isSelected)
+                        }
+                }
+                wrappers.isNotEmpty() -> {
+                    // En mode arbre, seul le wrapper de la session active est rendu.
+                    // On utilise selectedLeafName pour le nommer correctement.
+                    if (wrappers.size == 1 && selectedLeafName != null)
+                        listOf(processWrapper(selectedLeafName, wrappers[0]))
+                    else if (leaves.size == wrappers.size && leaves.isNotEmpty())
+                        leaves.zip(wrappers).map { (name, wrapper) -> processWrapper(name, wrapper) }
+                    else
+                        wrappers.mapIndexed { i, wrapper -> processWrapper("session_${i + 1}", wrapper) }
+                }
+                else -> emptyList()
+            }
+
+            if (sessions.isEmpty())
+                Json.encodeToString(ServicesOutput(sessions = listOf(ServiceSession(name = "info", output = "No service sessions found"))))
+            else
+                Json.encodeToString(ServicesOutput(sessions))
+        }
     }
 
     // ── get_run_output ────────────────────────────────────────────────────────
@@ -1165,6 +1406,10 @@ val MCP_HIGHLIGHT_KEY = Key<Boolean>("mcp.companion.highlight")
 @Serializable data class BuildOutput(val tabs: List<BuildTab>)
 @Serializable data class BuildTab(val name: String, val tree: List<BuildNode>?, val console: String?)
 @Serializable data class BuildNode(val text: String, val severity: String? = null, val detail: String? = null, val file: String? = null, val line: Int? = null, val children: List<BuildNode>? = null)
+
+@Serializable data class ServicesOutput(val sessions: List<ServiceSession>)
+@Serializable data class ServiceSession(val name: String, val selected: Boolean = false, val output: String? = null, val outputSelected: Boolean = false, val results: List<ServiceResult> = emptyList())
+@Serializable data class ServiceResult(val name: String, val selected: Boolean = false, val data: String? = null)
 
 @Serializable data class RunOutput(val tabs: List<RunTab>)
 @Serializable data class RunTab(val name: String, val tree: List<BuildNode>? = null, val console: String?)

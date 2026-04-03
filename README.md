@@ -20,6 +20,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `clear_highlights` | Removes all highlights added by `highlight_text` |
 | `get_build_output` | Build tool window: structured error tree with file/line numbers + console text |
 | `get_run_output` | Console output from the Run tool window |
+| `get_services_output` | Services tool window sessions: SQL output log, result grids, active session/tab indicated |
 | `get_test_results` | Last test run results: passed/failed/ignored status, duration, and failure messages |
 | `debug_run_configuration` | Launches a run configuration in debug mode |
 | `get_debug_output` | Console output from the Debug tool window |
