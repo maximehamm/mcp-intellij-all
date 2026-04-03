@@ -25,6 +25,9 @@
 
         <h3>Example questions you can ask your AI</h3>
 
+        <p><i>"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj."</i></p>
+        <p><i>"Open Main.java and place the cursor at line 42."</i></p>
+
         <b>Editor</b>
         <ul>
             <li><i>"What file am I currently editing, and what line is my cursor on?"</i></li>
@@ -55,6 +58,16 @@
             <li><i>"Fix the failing tests."</i></li>
         </ul>
 
+        <b>Breakpoints &amp; Debug</b>
+        <ul>
+            <li><i>"List all my breakpoints and their conditions."</i></li>
+            <li><i>"Mute all breakpoints so the program runs without stopping."</i></li>
+            <li><i>"Re-enable breakpoints."</i></li>
+            <li><i>"Set a condition on the breakpoint at line 42 of Foo.java: only stop when i == 5."</i></li>
+            <li><i>"Remove the condition from the breakpoint at Foo.java line 42."</i></li>
+            <li><i>"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj."</i></li>
+        </ul>
+
         <h3>Available tools</h3>
         <ul>
             <li><b>get_open_editors</b> — Returns all open files, the focused file with caret position, and current text selection if any.</li>
@@ -82,6 +95,19 @@
             <li>
                 <b>get_test_results</b> — Returns the results of the last test run:
                 passed/failed/ignored status, duration, and failure messages with stack traces.
+            </li>
+            <li>
+                <b>get_breakpoints</b> — Lists all line breakpoints with their file, line number, enabled state,
+                and condition expression (if any).
+            </li>
+            <li>
+                <b>mute_breakpoints</b> — Mutes or unmutes all breakpoints in the active debug session
+                (pass <code>muted=true/false</code>). Requires an active debug session.
+            </li>
+            <li>
+                <b>set_breakpoint_condition</b> — Sets or removes a condition on an existing breakpoint.
+                Parameters: <code>filePath</code> (relative), <code>line</code> (1-based), <code>condition</code>
+                (expression string, or empty to remove).
             </li>
         </ul>
     ]]></description>

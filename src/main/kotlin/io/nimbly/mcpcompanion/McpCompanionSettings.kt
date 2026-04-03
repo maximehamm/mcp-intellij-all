@@ -36,7 +36,12 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             "get_debug_output"     to "Returns the console output from the Debug tool window",
             "get_debug_variables"  to "Returns local variables from the current debugger stack frame",
             "get_test_results"     to "Returns last test run results: status, duration, failure messages",
-            "replace_text_undoable" to "Replaces text in a file, undoable with Cmd+Z"
+            "replace_text_undoable" to "Replaces text in a file, undoable with Cmd+Z",
+            "add_conditional_breakpoint" to "Adds a breakpoint with condition in one call, or updates condition if breakpoint exists",
+            "debug_run_configuration"  to "Launches a run configuration in debug mode, waits for breakpoint or completion",
+            "get_breakpoints"          to "Lists all line breakpoints with file, line, enabled state and condition",
+            "mute_breakpoints"         to "Mutes or unmutes all breakpoints in the active debug session",
+            "set_breakpoint_condition" to "Sets or removes a condition on a breakpoint (filePath, line, condition)"
         )
 
         fun getInstance(): McpCompanionSettings =

@@ -1,8 +1,14 @@
 package io.nimbly.mcpcompanion
 
+import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.impl.ConsoleViewImpl
+import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.testframework.sm.runner.SMTestProxy
 import com.intellij.execution.testframework.sm.runner.ui.SMTestRunnerResultsForm
+import com.intellij.openapi.application.EDT
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.project
 import com.intellij.mcpserver.annotations.McpDescription
@@ -424,6 +430,157 @@ class McpCompanionToolset : McpToolset {
         return Json.encodeToString(DebugVariablesOutput(session = session.sessionName, variables = variables))
     }
 
+    // ── add_breakpoint ────────────────────────────────────────────────────────
+
+    @McpTool(name = "add_conditional_breakpoint")
+    @McpDescription(description = """
+        Adds a line breakpoint with a condition in a single call.
+        filePath: path relative to the project root (e.g. "src/main/java/Foo.java").
+        line: 1-based line number.
+        condition: condition expression (e.g. "i == 3"). Leave empty for unconditional.
+        If a breakpoint already exists at that line, its condition is updated instead.
+    """)
+    suspend fun add_conditional_breakpoint(filePath: String, line: Int, condition: String = ""): String {
+        disabledMessage("add_conditional_breakpoint")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+            val normalizedPath = filePath.replace('\\', '/')
+            val file = com.intellij.openapi.vfs.LocalFileSystem.getInstance()
+                .findFileByPath("$basePath/$normalizedPath")
+                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+            val manager = XDebuggerManager.getInstance(project).breakpointManager
+            val existing = manager.allBreakpoints
+                .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
+                .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(normalizedPath) }
+            if (existing == null) {
+                com.intellij.xdebugger.XDebuggerUtil.getInstance().toggleLineBreakpoint(project, file, line - 1, false)
+            }
+            val bp = existing ?: run {
+                // toggleLineBreakpoint may be async — poll briefly
+                var found: com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>? = null
+                repeat(10) {
+                    found = manager.allBreakpoints
+                        .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
+                        .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(normalizedPath) }
+                    if (found == null) Thread.sleep(100)
+                }
+                found ?: return@invokeAndWaitIfNeeded "Failed to create breakpoint at $filePath:$line"
+            }
+            val expr = if (condition.isNotBlank())
+                com.intellij.xdebugger.XDebuggerUtil.getInstance()
+                    .createExpression(condition, null, null, com.intellij.xdebugger.evaluation.EvaluationMode.EXPRESSION)
+            else null
+            bp.conditionExpression = expr
+            val action = if (existing != null) "updated" else "added"
+            if (condition.isNotBlank()) "Breakpoint $action at $filePath:$line with condition: $condition"
+            else "Breakpoint $action at $filePath:$line"
+        }
+    }
+
+    // ── get_breakpoints ───────────────────────────────────────────────────────
+
+    @McpTool(name = "get_breakpoints")
+    @McpDescription(description = """
+        Returns all line breakpoints in the project with their file, line, enabled state, and condition (if any).
+        Use this to inspect existing breakpoints before modifying them with set_breakpoint_condition.
+    """)
+    suspend fun get_breakpoints(): String {
+        disabledMessage("get_breakpoints")?.let { return it }
+        val project = coroutineContext.project
+        val breakpoints = invokeAndWaitIfNeeded {
+            XDebuggerManager.getInstance(project).breakpointManager.allBreakpoints
+                .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
+                .map { bp ->
+                    BreakpointInfo(
+                        file = bp.presentableFilePath,
+                        line = bp.line + 1,
+                        enabled = bp.isEnabled,
+                        condition = bp.conditionExpression?.expression?.takeIf { it.isNotBlank() }
+                    )
+                }
+        }
+        if (breakpoints.isEmpty()) return "No line breakpoints found"
+        return Json.encodeToString(breakpoints)
+    }
+
+    // ── mute_breakpoints ──────────────────────────────────────────────────────
+
+    @McpTool(name = "mute_breakpoints")
+    @McpDescription(description = """
+        Enables or disables all line breakpoints in the project.
+        Pass muted=true to disable all breakpoints (they become inactive but are not deleted).
+        Pass muted=false to re-enable all breakpoints.
+        Does not require an active debug session.
+    """)
+    suspend fun mute_breakpoints(muted: Boolean): String {
+        disabledMessage("mute_breakpoints")?.let { return it }
+        val project = coroutineContext.project
+        val count = invokeAndWaitIfNeeded {
+            val breakpoints = XDebuggerManager.getInstance(project).breakpointManager.allBreakpoints
+                .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
+            breakpoints.forEach { it.isEnabled = !muted }
+            breakpoints.size
+        }
+        return if (muted) "$count breakpoints disabled" else "$count breakpoints enabled"
+    }
+
+    // ── set_breakpoint_condition ───────────────────────────────────────────────
+
+    @McpTool(name = "set_breakpoint_condition")
+    @McpDescription(description = """
+        Sets or removes a condition on a breakpoint at a given file and line.
+        filePath: path relative to the project root (e.g. "src/main/java/Foo.java").
+        line: 1-based line number where the breakpoint is set.
+        condition: the condition expression (e.g. "i == 5"). Pass empty string to remove the condition.
+        The breakpoint must already exist at that line.
+    """)
+    suspend fun set_breakpoint_condition(filePath: String, line: Int, condition: String): String {
+        disabledMessage("set_breakpoint_condition")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val manager = XDebuggerManager.getInstance(project).breakpointManager
+            val bp = manager.allBreakpoints
+                .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
+                .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(filePath.replace('\\', '/')) }
+                ?: return@invokeAndWaitIfNeeded "No breakpoint found at $filePath:$line"
+
+            if (condition.isEmpty()) {
+                bp.conditionExpression = null
+                "Condition removed from breakpoint at $filePath:$line"
+            } else {
+                val expr = com.intellij.xdebugger.XDebuggerUtil.getInstance()
+                    .createExpression(condition, null, null, com.intellij.xdebugger.evaluation.EvaluationMode.EXPRESSION)
+                bp.conditionExpression = expr
+                "Condition set on breakpoint at $filePath:$line: $condition"
+            }
+        }
+    }
+
+    // ── debug_run_configuration ───────────────────────────────────────────────
+
+    @McpTool(name = "debug_run_configuration")
+    @McpDescription(description = """
+        Launches a run configuration in debug mode and returns immediately.
+        Does NOT wait for completion — use get_debug_variables to check if stopped at a breakpoint,
+        or get_debug_output to read console output.
+        configurationName: exact name of the run configuration (use get_run_configurations to list them).
+    """)
+    suspend fun debug_run_configuration(configurationName: String): String {
+        disabledMessage("debug_run_configuration")?.let { return it }
+        val project = coroutineContext.project
+
+        val settings = invokeAndWaitIfNeeded {
+            com.intellij.execution.RunManager.getInstance(project).findConfigurationByName(configurationName)
+        } ?: return "Configuration '$configurationName' not found"
+
+        withContext(Dispatchers.EDT) {
+            ProgramRunnerUtil.executeConfiguration(project, settings, DefaultDebugExecutor.getDebugExecutorInstance())
+        }
+
+        return "Debug session started for '$configurationName'. Use get_debug_variables to inspect variables if stopped at a breakpoint."
+    }
+
     private fun resolveDebugVariable(name: String, xValue: XValue): DebugVariable {
         var type: String? = null
         var value: String? = null
@@ -474,6 +631,8 @@ class McpCompanionToolset : McpToolset {
 
 @Serializable data class DebugVariablesOutput(val session: String, val variables: List<DebugVariable>)
 @Serializable data class DebugVariable(val name: String, val type: String? = null, val value: String? = null)
+
+@Serializable data class BreakpointInfo(val file: String, val line: Int, val enabled: Boolean, val condition: String? = null)
 
 @Serializable data class TestRunOutput(val runs: List<TestRun>, val error: String? = null)
 @Serializable data class TestRun(val name: String, val tests: List<TestNode>)

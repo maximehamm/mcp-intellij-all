@@ -2,6 +2,8 @@ package io.nimbly.mcpcompanion
 
 import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.dsl.builder.BottomGap
+import com.intellij.ui.dsl.builder.TopGap
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
 import java.awt.event.HierarchyEvent
@@ -21,10 +23,9 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
 
         return panel {
             row {
-                warningLabel = label("").applyToComponent {
-                    updateWarning()
-                }.component
-            }
+                label("<html><b>Example:</b> <i>\"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj.\"</i></html>")
+                warningLabel = label("").applyToComponent { updateWarning() }.component
+            }.bottomGap(BottomGap.NONE)
             group("Exposed Tools") {
                 McpCompanionSettings.ALL_TOOLS.forEach { (name, description) ->
                     row {
