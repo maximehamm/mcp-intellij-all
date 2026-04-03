@@ -96,6 +96,8 @@
             instance="io.nimbly.mcpcompanion.McpCompanionConfigurable"
             id="io.nimbly.mcpcompanion.configurable"
             displayName="MCP Server Companion"/>
+        <postStartupActivity implementation="io.nimbly.mcpcompanion.McpCompanionStartupActivity"/>
+        <notificationGroup id="MCP Server Companion" displayType="BALLOON"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij.mcpServer">

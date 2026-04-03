@@ -13,6 +13,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     class State {
         @JvmField
         var enabledTools: MutableMap<String, Boolean> = mutableMapOf()
+        @JvmField
+        var firstLaunchDone: Boolean = false
     }
 
     private var myState = State()
