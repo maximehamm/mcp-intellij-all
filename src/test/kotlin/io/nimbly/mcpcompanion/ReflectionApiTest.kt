@@ -22,6 +22,34 @@ class ReflectionApiTest {
             "CoreProgressManager.getCurrentIndicators() must return a List")
     }
 
+    // @ApiStatus.Internal has @Retention(CLASS) — not visible via normal reflection.
+    // We check the bytecode of core.impl.jar directly to detect if the annotation disappears
+    // (meaning the method became public API and the reflection wrapper can be simplified).
+    // If this test FAILS: CoreProgressManager no longer uses @ApiStatus.Internal →
+    // replace currentIndicators() reflection wrapper with a direct call.
+    @Test
+    fun `CoreProgressManager getCurrentIndicators is @ApiStatus Internal — reflection wrapper required`() {
+        val coreImplJar = System.getProperty("java.class.path")
+            .split(java.io.File.pathSeparator)
+            .firstOrNull { "core.impl" in it }
+        if (coreImplJar == null) {
+            println("INFO: intellij.platform.core.impl.jar not on test classpath — skipping @Internal bytecode check")
+            return
+        }
+        val jar = java.util.jar.JarFile(coreImplJar)
+        val entry = jar.getJarEntry("com/intellij/openapi/progress/impl/CoreProgressManager.class")
+        if (entry == null) { jar.close(); println("WARN: CoreProgressManager.class not found in jar"); return }
+        val classBytes = jar.getInputStream(entry).readBytes()
+        jar.close()
+        // The annotation descriptor appears in the constant pool if used anywhere in the class
+        val internalDescriptor = "Lorg/jetbrains/annotations/ApiStatus\$Internal;"
+        assertTrue(internalDescriptor in String(classBytes, Charsets.ISO_8859_1),
+            "CoreProgressManager no longer contains @ApiStatus.Internal — " +
+            "getCurrentIndicators() may now be public API: " +
+            "consider replacing currentIndicators() reflection wrapper with a direct call " +
+            "and restoring compileOnly(core.impl.jar) in build.gradle.kts")
+    }
+
     // ── TaskInfo ──────────────────────────────────────────────────────────────
 
     @Test

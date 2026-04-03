@@ -32,8 +32,8 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
     compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
-    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.core.impl.jar"))
-    testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.ide.impl.jar"))
+testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.ide.impl.jar"))
+    testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.core.impl.jar"))
 }
 
 intellijPlatform {

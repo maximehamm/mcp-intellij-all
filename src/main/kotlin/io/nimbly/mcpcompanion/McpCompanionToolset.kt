@@ -31,7 +31,6 @@ import com.intellij.notification.NotificationsManager
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.progress.impl.CoreProgressManager
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -816,7 +815,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         val processes = mutableListOf<RunningProcess>()
 
         // Active processes (running threads)
-        for (ind in CoreProgressManager.getCurrentIndicators()) {
+        for (ind in currentIndicators()) {
             if (!ind.isRunning) continue
             val title = ind.taskTitle() ?: ind.text?.takeIf { it.isNotBlank() } ?: continue
             if (!seen.add(title)) continue
@@ -853,7 +852,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
     suspend fun manage_process(title: String, action: String): String {
         disabledMessage("manage_process")?.let { return it }
         // Search active indicators first
-        var match = CoreProgressManager.getCurrentIndicators().firstOrNull { ind ->
+        var match = currentIndicators().firstOrNull { ind ->
             if (!ind.isRunning) return@firstOrNull false
             val label = ind.taskTitle() ?: ind.text ?: ""
             label.contains(title, ignoreCase = true)
@@ -918,6 +917,14 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
                                    args: Array<Any?> = emptyArray()): String = try {
         javaClass.getMethod(method, *paramTypes).invoke(this, *args); success
     } catch (_: Exception) { failure }
+
+    /** Calls CoreProgressManager.getCurrentIndicators() via reflection to avoid @ApiStatus.Internal violation. */
+    @Suppress("UNCHECKED_CAST")
+    private fun currentIndicators(): List<ProgressIndicator> = try {
+        Class.forName("com.intellij.openapi.progress.impl.CoreProgressManager")
+            .getMethod("getCurrentIndicators")
+            .invoke(null) as? List<ProgressIndicator> ?: emptyList()
+    } catch (_: Exception) { emptyList() }
 
     private fun getSuspender(indicator: ProgressIndicator): Any? = try {
         val cls = Class.forName("com.intellij.openapi.progress.impl.ProgressSuspender")
