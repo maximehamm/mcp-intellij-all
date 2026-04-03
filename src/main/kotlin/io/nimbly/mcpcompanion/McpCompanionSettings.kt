@@ -38,6 +38,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             "get_debug_variables"  to "Returns local variables from the current debugger stack frame",
             "get_test_results"     to "Returns last test run results: status, duration, failure messages",
             "replace_text_undoable" to "Replaces text in a file, undoable with Cmd+Z",
+            "delete_file"          to "Deletes a file via IntelliJ VFS so the IDE is immediately notified",
             "add_conditional_breakpoint" to "Adds a breakpoint with condition in one call, or updates condition if breakpoint exists",
             "navigate_to"              to "Opens a file and places the cursor at a given line and column",
             "select_text"              to "Opens a file and selects a text range (ready to copy with Cmd+C)",

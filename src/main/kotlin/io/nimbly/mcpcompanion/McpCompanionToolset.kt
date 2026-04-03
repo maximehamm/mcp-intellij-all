@@ -96,14 +96,17 @@ class McpCompanionToolset : McpToolset {
 - get_debug_variables        → read local variables from the current stack frame
 - get_debug_output           → read the debug console
 
-### Editing
+### Editing & file operations
 - replace_text_undoable      → replace text in a file already open in the editor (Cmd+Z undoable)
                                Use this for targeted edits to open files — the user can undo instantly.
 - replace_file_text_by_path  → (built-in) overwrite a whole file via IntelliJ API — auto-refreshes the editor
+                               params: pathInProject (relative), newFileText (full content)
 - create_new_file_with_text  → (built-in) create a new file via IntelliJ API — auto-refreshes the editor
+                               params: pathInProject (relative), text (full content)
+- delete_file                → delete a file via IntelliJ VFS — IDE is immediately notified
 
-IMPORTANT: Prefer replace_file_text_by_path and create_new_file_with_text over the native Write/Edit tools
-whenever working on a project open in IntelliJ. This avoids stale editors and manual VFS refresh.
+IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any file operation
+(create, modify, delete) on a project open in IntelliJ. This keeps the IDE in sync automatically.
 
 ## Typical workflows
 
@@ -681,6 +684,28 @@ whenever working on a project open in IntelliJ. This avoids stale editors and ma
         }, XValuePlace.TREE)
         latch.await(2, TimeUnit.SECONDS)
         return DebugVariable(name = name, type = type, value = value)
+    }
+
+    // ── delete_file ───────────────────────────────────────────────────────────
+
+    @McpTool(name = "delete_file")
+    @McpDescription(description = """
+        Deletes a file or an empty directory via the IntelliJ VFS so the IDE is immediately notified.
+        Prefer this over shell rm commands when working on a project open in IntelliJ.
+        filePath: path relative to the project root.
+    """)
+    suspend fun delete_file(filePath: String): String {
+        disabledMessage("delete_file")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
+                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+            com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
+                vFile.delete(this)
+            }
+            "Deleted: $filePath"
+        }
     }
 
     // ── navigate_to ───────────────────────────────────────────────────────────
