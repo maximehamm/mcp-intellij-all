@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "1.6.3"
+version = "1.8.0"
 
 repositories {
     mavenCentral()
@@ -39,6 +39,8 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.8.0</b> — <code>get_project_structure</code>: now includes SDK homePath and all available SDKs registered in IntelliJ.</li>
+                <li><b>1.7.0</b> — New tool: <code>get_project_structure</code> — returns SDK, modules, source roots (source/test/resource/testResource), excluded folders, and module dependencies.</li>
                 <li><b>1.6.0</b> — Claude Code setup panel: Add to CLAUDE.md button (undoable), permissions snippet with Copy button. New get_mcp_companion_overview tool. Fix endCol inclusive in highlight_text and select_text.</li>
                 <li><b>1.5.0</b> — New navigation and highlighting tools: navigate_to, select_text, highlight_text (theme-aware, Escape to clear), clear_highlights.</li>
                 <li><b>1.4.0</b> — New breakpoint tools: get_breakpoints (with conditions), add_conditional_breakpoint, set_breakpoint_condition, mute_breakpoints, debug_run_configuration.</li>

@@ -21,6 +21,11 @@ import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.module.ModuleType
+import com.intellij.openapi.projectRoots.ProjectJdkTable
+import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindowManager
@@ -76,6 +81,7 @@ class McpCompanionToolset : McpToolset {
 
 ### Exploration & navigation
 - get_open_editors       → know which files are open and where the caret is
+- get_project_structure  → list modules, SDK, source roots, dependencies — call this first on a new project
 - navigate_to            → move the caret to a file:line:column (do this before explaining anything)
 - select_text            → select an exact range (startCol/endCol are 1-based, endCol is INCLUSIVE)
 - highlight_text         → highlight multiple zones at once (declaration + all usages)
@@ -708,6 +714,74 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         }
     }
 
+    // ── get_project_structure ─────────────────────────────────────────────────
+
+    @McpTool(name = "get_project_structure")
+    @McpDescription(description = """
+        Returns the structure of the IntelliJ project: active SDK (with homePath), all SDKs registered
+        in IntelliJ (with homePath, useful to suggest switching), modules, source roots, excluded folders,
+        and module-to-module dependencies.
+        Useful to understand the project layout (where sources, tests, and resources live) before
+        navigating or editing files.
+        Source root types: source, test, resource, testResource.
+        All paths are relative to the project root.
+    """)
+    suspend fun get_project_structure(): String {
+        disabledMessage("get_project_structure")?.let { return it }
+        val project = coroutineContext.project
+        return runReadAction {
+            val basePath = project.basePath ?: ""
+            val sdk = ProjectRootManager.getInstance(project).projectSdk?.let { sdk ->
+                SdkInfo(name = sdk.name, type = sdk.sdkType.name, version = sdk.versionString, homePath = sdk.homePath)
+            }
+            val availableSdks = ProjectJdkTable.getInstance().allJdks.map { s ->
+                SdkInfo(name = s.name, type = s.sdkType.name, version = s.versionString, homePath = s.homePath)
+            }
+            val modules = ModuleManager.getInstance(project).modules.map { module ->
+                val rootManager = ModuleRootManager.getInstance(module)
+                val sourceRoots = rootManager.contentEntries.flatMap { entry ->
+                    entry.sourceFolders.map { sf ->
+                        val path = sf.file?.path?.let { relativize(basePath, it) } ?: sf.url
+                        val rootTypeStr = sf.rootType.toString().lowercase()
+                        val type = when {
+                            "resource" in rootTypeStr && sf.isTestSource -> "testResource"
+                            "resource" in rootTypeStr -> "resource"
+                            sf.isTestSource -> "test"
+                            else -> "source"
+                        }
+                        SourceRootInfo(path = path, type = type)
+                    }
+                }
+                val excluded = rootManager.contentEntries.flatMap { entry ->
+                    entry.excludeFolders.mapNotNull { ef ->
+                        ef.file?.path?.let { relativize(basePath, it) } ?: ef.url
+                    }
+                }
+                val deps = rootManager.dependencies.map { it.name }
+                val moduleType = try { ModuleType.get(module).id } catch (_: Exception) { null }
+                ModuleInfo(
+                    name = module.name,
+                    type = moduleType,
+                    sourceRoots = sourceRoots,
+                    excludedFolders = excluded.ifEmpty { null },
+                    dependencies = deps.ifEmpty { null }
+                )
+            }
+            Json.encodeToString(ProjectStructure(
+                name = project.name,
+                basePath = basePath,
+                sdk = sdk,
+                availableSdks = availableSdks,
+                modules = modules
+            ))
+        }
+    }
+
+    private fun relativize(basePath: String, path: String): String =
+        if (basePath.isNotEmpty() && path.startsWith(basePath))
+            path.removePrefix(basePath).trimStart('/')
+        else path
+
     // ── navigate_to ───────────────────────────────────────────────────────────
 
     @McpTool(name = "navigate_to")
@@ -872,3 +946,8 @@ val MCP_HIGHLIGHT_KEY = Key<Boolean>("mcp.companion.highlight")
 @Serializable data class TestRunOutput(val runs: List<TestRun>, val error: String? = null)
 @Serializable data class TestRun(val name: String, val tests: List<TestNode>)
 @Serializable data class TestNode(val name: String, val status: String, val duration: Long? = null, val errorMessage: String? = null, val children: List<TestNode>? = null)
+
+@Serializable data class ProjectStructure(val name: String, val basePath: String, val sdk: SdkInfo?, val availableSdks: List<SdkInfo>, val modules: List<ModuleInfo>)
+@Serializable data class SdkInfo(val name: String, val type: String, val version: String?, val homePath: String? = null)
+@Serializable data class ModuleInfo(val name: String, val type: String? = null, val sourceRoots: List<SourceRootInfo>, val excludedFolders: List<String>? = null, val dependencies: List<String>? = null)
+@Serializable data class SourceRootInfo(val path: String, val type: String)
