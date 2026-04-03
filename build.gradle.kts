@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "1.6.2"
+version = "1.6.3"
 
 repositories {
     mavenCentral()
@@ -24,12 +24,12 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        local("/Users/maxime/Applications/IntelliJ IDEA 2025.3.3.app")
+        local("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
         bundledPlugin("com.intellij.mcpServer")
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2025.3.3.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
+    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
 }
 
 intellijPlatform {
@@ -69,7 +69,7 @@ tasks {
         enabled = false
     }
     runIde {
-        jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2025.3.3.app/Contents/lib/nio-fs.jar")
+        jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/nio-fs.jar")
     }
 }
 

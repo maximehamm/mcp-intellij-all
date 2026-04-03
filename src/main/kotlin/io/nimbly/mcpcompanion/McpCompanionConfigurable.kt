@@ -1,5 +1,7 @@
 package io.nimbly.mcpcompanion
 
+import com.intellij.mcpserver.annotations.McpDescription
+import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -11,6 +13,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.dsl.builder.BottomGap
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.util.ui.UIUtil
 import java.awt.Font
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -22,12 +25,14 @@ import javax.swing.Timer
 class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
 
     private val toolCheckboxes = mutableListOf<JCheckBox>()
+    private val descriptionLabels = mutableListOf<JLabel>()
     private var warningLabel: JLabel? = null
     private val refreshTimer = Timer(300) { refreshState() }
 
     override fun createPanel(): DialogPanel {
         val settings = McpCompanionSettings.getInstance()
         toolCheckboxes.clear()
+        descriptionLabels.clear()
 
         return panel {
             row {
@@ -59,19 +64,28 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
                 }
             }
 
-            group("Exposed Tools") {
-                McpCompanionSettings.ALL_TOOLS.forEach { (name, description) ->
-                    row {
-                        checkBox(name)
-                            .comment(description)
-                            .bindSelected(
-                                getter = { settings.isEnabled(name) },
-                                setter = { settings.setEnabled(name, it) }
-                            )
-                            .applyToComponent {
-                                toolCheckboxes.add(this)
-                                isEnabled = isMcpServerEnabled()
-                            }
+            McpCompanionSettings.TOOL_GROUPS.forEach { (groupName, toolNames) ->
+                group(groupName) {
+                    toolNames.forEach { name ->
+                        val tooltip = buildTooltip(name)
+                        val shortDesc = buildShortDescription(name)
+                        row {
+                            checkBox(name)
+                                .bindSelected(
+                                    getter = { settings.isEnabled(name) },
+                                    setter = { settings.setEnabled(name, it) }
+                                )
+                                .applyToComponent {
+                                    toolCheckboxes.add(this)
+                                    isEnabled = isMcpServerEnabled()
+                                    toolTipText = tooltip
+                                }
+                            label("<html><font color='${UIUtil.getContextHelpForeground().toHex()}'>$shortDesc</font></html>")
+                                .applyToComponent {
+                                    descriptionLabels.add(this)
+                                    toolTipText = tooltip
+                                }
+                        }
                     }
                 }
             }
@@ -84,6 +98,30 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
             }
         }
     }
+
+    // ── Descriptions via reflection on @McpDescription ───────────────────────
+
+    private fun rawDescription(toolName: String): String? = try {
+        McpCompanionToolset::class.java.methods
+            .find { it.getAnnotation(McpTool::class.java)?.name == toolName }
+            ?.getAnnotation(McpDescription::class.java)
+            ?.description
+            ?.trimIndent()
+    } catch (_: Exception) { null }
+
+    private fun buildShortDescription(toolName: String): String {
+        val raw = rawDescription(toolName) ?: return ""
+        val firstLine = raw.lines().firstOrNull { it.isNotBlank() }?.trim() ?: return ""
+        return if (firstLine.length > 80) firstLine.take(80) + "…" else firstLine
+    }
+
+    private fun buildTooltip(toolName: String): String? {
+        val raw = rawDescription(toolName) ?: return null
+        val escaped = raw.replace("&", "&amp;").replace("<", "&lt;").replace("\n", "<br/>")
+        return "<html>$escaped</html>"
+    }
+
+    private fun java.awt.Color.toHex() = "#%02x%02x%02x".format(red, green, blue)
 
     // ── Button actions ────────────────────────────────────────────────────────
 
@@ -119,18 +157,15 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
             return
         }
 
-        // Read-only check before any write
         val existingFile = baseDir.findChild("CLAUDE.md")
         if (existingFile != null) {
             val doc = FileDocumentManager.getInstance().getDocument(existingFile)
             if (doc != null && doc.text.contains("get_mcp_companion_overview")) {
-                Messages.showInfoMessage(
-                    "CLAUDE.md already contains MCP instructions.", "CLAUDE.md")
+                Messages.showInfoMessage("CLAUDE.md already contains MCP instructions.", "CLAUDE.md")
                 return
             }
         }
 
-        // Undoable write via IntelliJ VFS + Document API
         WriteCommandAction.runWriteCommandAction(project, "Add MCP Instructions to CLAUDE.md", null, {
             val vFile = existingFile ?: baseDir.createChildData(this, "CLAUDE.md")
             val doc = FileDocumentManager.getInstance().getDocument(vFile) ?: return@runWriteCommandAction
@@ -140,8 +175,7 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
         })
 
         Messages.showInfoMessage(
-            if (existingFile == null) "CLAUDE.md created."
-            else "MCP instructions added to CLAUDE.md.",
+            if (existingFile == null) "CLAUDE.md created." else "MCP instructions added to CLAUDE.md.",
             "CLAUDE.md")
     }
 
@@ -159,6 +193,7 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
         updateWarning()
         val mcpEnabled = isMcpServerEnabled()
         toolCheckboxes.forEach { it.isEnabled = mcpEnabled }
+        descriptionLabels.forEach { it.isEnabled = mcpEnabled }
     }
 
     override fun reset() {

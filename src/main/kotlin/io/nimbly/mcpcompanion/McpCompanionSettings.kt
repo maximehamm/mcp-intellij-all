@@ -29,25 +29,21 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     }
 
     companion object {
-        val ALL_TOOLS = listOf(
-            "get_mcp_companion_overview" to "Returns usage guide: all available tools, when to use them, and workflow examples",
-            "get_open_editors"     to "Returns all open files, focused editor, caret position and selection",
-            "get_build_output"     to "Returns the Build tool window: error tree + console output",
-            "get_run_output"       to "Returns the console output from the Run tool window",
-            "get_debug_output"     to "Returns the console output from the Debug tool window",
-            "get_debug_variables"  to "Returns local variables from the current debugger stack frame",
-            "get_test_results"     to "Returns last test run results: status, duration, failure messages",
-            "replace_text_undoable" to "Replaces text in a file, undoable with Cmd+Z",
-            "delete_file"          to "Deletes a file via IntelliJ VFS so the IDE is immediately notified",
-            "add_conditional_breakpoint" to "Adds a breakpoint with condition in one call, or updates condition if breakpoint exists",
-            "navigate_to"              to "Opens a file and places the cursor at a given line and column",
-            "select_text"              to "Opens a file and selects a text range (ready to copy with Cmd+C)",
-            "highlight_text"           to "Highlights multiple zones in a file with a yellow background",
-            "clear_highlights"         to "Removes all highlights added by highlight_text",
-            "debug_run_configuration"  to "Launches a run configuration in debug mode, waits for breakpoint or completion",
-            "get_breakpoints"          to "Lists all line breakpoints with file, line, enabled state and condition",
-            "mute_breakpoints"         to "Mutes or unmutes all breakpoints in the active debug session",
-            "set_breakpoint_condition" to "Sets or removes a condition on a breakpoint (filePath, line, condition)"
+
+        val TOOL_GROUPS = linkedMapOf(
+            "Editor & Navigation" to listOf(
+                "get_open_editors", "navigate_to", "select_text", "highlight_text", "clear_highlights"
+            ),
+            "Build & Tests" to listOf(
+                "get_build_output", "get_run_output", "get_test_results"
+            ),
+            "Debug" to listOf(
+                "debug_run_configuration", "get_debug_output", "get_debug_variables",
+                "get_breakpoints", "add_conditional_breakpoint", "set_breakpoint_condition", "mute_breakpoints"
+            ),
+            "General" to listOf(
+                "get_mcp_companion_overview", "replace_text_undoable", "delete_file"
+            )
         )
 
         fun getInstance(): McpCompanionSettings =
