@@ -54,6 +54,68 @@ class McpCompanionToolset : McpToolset {
         return null
     }
 
+    // ── get_mcp_companion_overview ────────────────────────────────────────────
+
+    @McpTool(name = "get_mcp_companion_overview")
+    @McpDescription(description = """
+        Returns the usage guide for MCP Server Companion: all available tools, when to use them,
+        and recommended workflows. Call this at the start of a session to know what you can do
+        directly inside IntelliJ.
+    """)
+    suspend fun get_mcp_companion_overview(): String {
+        disabledMessage("get_mcp_companion_overview")?.let { return it }
+        return """
+# MCP Server Companion — Usage Guide
+
+## Golden rules
+- This project is open in IntelliJ IDEA. ALWAYS prefer acting directly in the IDE over giving textual instructions.
+- When talking about code: navigate to it, highlight it, select it — don't just describe where it is.
+- When something fails: read the IDE output first, then explain.
+
+## Tools and when to use them
+
+### Exploration & navigation
+- get_open_editors       → know which files are open and where the caret is
+- navigate_to            → move the caret to a file:line:column (do this before explaining anything)
+- select_text            → select an exact range (startCol/endCol are 1-based, endCol is INCLUSIVE)
+- highlight_text         → highlight multiple zones at once (declaration + all usages)
+                           ranges format: "startLine:startCol:endLine:endCol" comma-separated, endCol INCLUSIVE
+- clear_highlights       → remove all highlights (user can also press Escape)
+
+### Build & run
+- get_build_output       → read compiler errors before answering a build question
+- get_run_output         → read console output after a run
+- get_test_results       → read test results (pass/fail/duration/message)
+
+### Debug
+- debug_run_configuration    → launch a named run config in debug mode
+- add_conditional_breakpoint → add or update a breakpoint with an optional condition
+- get_breakpoints            → list all breakpoints with conditions
+- set_breakpoint_condition   → change the condition of an existing breakpoint
+- mute_breakpoints           → enable/disable all breakpoints at once
+- get_debug_variables        → read local variables from the current stack frame
+- get_debug_output           → read the debug console
+
+### Editing
+- replace_text_undoable  → replace text in a file (Cmd+Z undoable)
+
+## Typical workflows
+
+**"Show me where X is used"**
+  1. highlight_text — declaration + all usage sites
+
+**"Why doesn't this compile?"**
+  1. get_build_output — read the error
+  2. navigate_to — go to the faulty line
+  3. explain + fix with replace_text_undoable
+
+**"Debug this"**
+  1. add_conditional_breakpoint — set breakpoint with condition
+  2. debug_run_configuration — start debug session
+  3. get_debug_variables — inspect variables once paused
+        """.trimIndent()
+    }
+
     // ── get_open_editors ──────────────────────────────────────────────────────
 
     @McpTool(name = "get_open_editors")
@@ -643,7 +705,9 @@ class McpCompanionToolset : McpToolset {
     @McpDescription(description = """
         Opens a file and selects a range of text so the user can copy it directly (Cmd+C).
         filePath: path relative to the project root.
-        startLine/startColumn and endLine/endColumn: 1-based positions.
+        startLine/startColumn: 1-based position of the first character to select.
+        endLine/endColumn: 1-based position of the LAST character to select (inclusive).
+        Example: to select "Hello" on line 3 starting at column 5, use startColumn=5, endColumn=9.
     """)
     suspend fun select_text(filePath: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int): String {
         disabledMessage("select_text")?.let { return it }
@@ -657,7 +721,7 @@ class McpCompanionToolset : McpToolset {
                 ?: return@invokeAndWaitIfNeeded "Could not open editor"
             val doc = editor.document
             val startOffset = (doc.getLineStartOffset(startLine - 1) + (startColumn - 1)).coerceAtMost(doc.textLength)
-            val endOffset = (doc.getLineStartOffset(endLine - 1) + (endColumn - 1)).coerceAtMost(doc.textLength)
+            val endOffset = (doc.getLineStartOffset(endLine - 1) + endColumn).coerceAtMost(doc.textLength)
             editor.selectionModel.setSelection(startOffset, endOffset)
             "Selected $filePath:$startLine:$startColumn → $endLine:$endColumn"
         }
@@ -670,8 +734,9 @@ class McpCompanionToolset : McpToolset {
         Highlights one or more exact text zones in a file using the IDE's standard search-result color (theme-aware).
         Useful to show where a variable is declared and all its usages at once.
         filePath: path relative to the project root.
-        ranges: comma-separated list of "startLine:startCol:endLine:endCol" (1-based),
-                e.g. "14:9:14:20,18:35:18:36".
+        ranges: comma-separated list of "startLine:startCol:endLine:endCol" (1-based).
+                startCol is the column of the first character; endCol is the column of the LAST character (inclusive).
+                Example: to highlight "Random" at line 17 columns 34-49, use "17:34:17:49".
                 Use get_file_text_by_path to read the file and identify exact column positions.
         Call clear_highlights to remove them.
     """)
@@ -698,8 +763,8 @@ class McpCompanionToolset : McpToolset {
                 val endLine   = (parts[2].trim().toIntOrNull() ?: continue) - 1
                 val endCol    = (parts[3].trim().toIntOrNull() ?: continue) - 1
                 if (startLine < 0 || endLine >= doc.lineCount) continue
-                val startOffset = (doc.getLineStartOffset(startLine) + startCol).coerceAtMost(doc.textLength)
-                val endOffset   = (doc.getLineStartOffset(endLine)   + endCol  ).coerceAtMost(doc.textLength)
+                val startOffset = (doc.getLineStartOffset(startLine) + startCol    ).coerceAtMost(doc.textLength)
+                val endOffset   = (doc.getLineStartOffset(endLine)   + endCol + 1  ).coerceAtMost(doc.textLength)
                 val h = editor.markupModel.addRangeHighlighter(
                     startOffset, endOffset,
                     com.intellij.openapi.editor.markup.HighlighterLayer.SELECTION - 1,

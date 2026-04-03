@@ -30,6 +30,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
     companion object {
         val ALL_TOOLS = listOf(
+            "get_mcp_companion_overview" to "Returns usage guide: all available tools, when to use them, and workflow examples",
             "get_open_editors"     to "Returns all open files, focused editor, caret position and selection",
             "get_build_output"     to "Returns the Build tool window: error tree + console output",
             "get_run_output"       to "Returns the console output from the Run tool window",

@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.nimbly"
-version = "1.5.0"
+version = "1.6.0"
 
 repositories {
     mavenCentral()
@@ -32,6 +32,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.6.0</b> — Claude Code setup panel: Add to CLAUDE.md button (undoable), permissions snippet with Copy button. New get_mcp_companion_overview tool. Fix endCol inclusive in highlight_text and select_text.</li>
                 <li><b>1.5.0</b> — New navigation and highlighting tools: navigate_to, select_text, highlight_text (theme-aware, Escape to clear), clear_highlights.</li>
                 <li><b>1.4.0</b> — New breakpoint tools: get_breakpoints (with conditions), add_conditional_breakpoint, set_breakpoint_condition, mute_breakpoints, debug_run_configuration.</li>
                 <li><b>1.3.1</b> — Fix settings page refresh: warning and grayed tools now update correctly after Apply.</li>
