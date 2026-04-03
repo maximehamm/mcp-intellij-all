@@ -130,6 +130,14 @@
             <li>
                 <b>clear_highlights</b> — Removes all highlights added by highlight_text.
             </li>
+            <li>
+                <b>get_running_processes</b> — Lists all active and paused background processes
+                currently running in IntelliJ (e.g. indexing, builds, Gradle syncs).
+            </li>
+            <li>
+                <b>manage_process</b> — Pauses, resumes, or cancels a background process identified by its title.
+                Actions: <code>pause</code>, <code>resume</code>, <code>cancel</code>.
+            </li>
         </ul>
     ]]></description>
 

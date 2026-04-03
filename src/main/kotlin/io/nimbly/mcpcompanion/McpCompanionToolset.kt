@@ -26,6 +26,9 @@ import com.intellij.openapi.module.ModuleType
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.impl.CoreProgressManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindowManager
@@ -87,6 +90,8 @@ class McpCompanionToolset : McpToolset {
 ### Exploration & navigation
 - get_open_editors       → know which files are open and where the caret is
 - get_project_structure  → list modules, SDK, source roots, dependencies — call this first on a new project
+- get_running_processes  → list background tasks (indexing, Gradle sync, …) — call this when IntelliJ seems busy
+- manage_process         → cancel / pause / resume a background task by title (partial match)
 - navigate_to            → move the caret to a file:line:column (do this before explaining anything)
 - select_text            → select an exact range (startCol/endCol are 1-based, endCol is INCLUSIVE)
 - highlight_text         → highlight multiple zones at once (declaration + all usages)
@@ -782,6 +787,149 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         }
     }
 
+    // ── get_running_processes ─────────────────────────────────────────────────
+
+    @McpTool(name = "get_running_processes")
+    @McpDescription(description = """
+        Returns all background processes currently running in IntelliJ — the same tasks visible
+        in the status bar (indexing, Gradle sync, compilation, inspections, etc.).
+        For each process:
+        - title: main label of the task
+        - details: secondary line (current file, step, etc.) if available
+        - progress: 0.0–1.0, or null if indeterminate
+        - cancellable: whether the task can be cancelled
+        Call this when IntelliJ seems busy, slow, or stuck to understand what it is doing.
+    """)
+    suspend fun get_running_processes(): String {
+        disabledMessage("get_running_processes")?.let { return it }
+        val seen = mutableSetOf<String>()
+        val processes = mutableListOf<RunningProcess>()
+
+        // Active processes (running threads)
+        for (ind in CoreProgressManager.getCurrentIndicators()) {
+            if (!ind.isRunning) continue
+            val title = ind.taskTitle() ?: ind.text?.takeIf { it.isNotBlank() } ?: continue
+            if (!seen.add(title)) continue
+            val details = ind.text2?.takeIf { it.isNotBlank() }
+            val progress = if (ind.isIndeterminate) null else ind.fraction.takeIf { it in 0.0..1.0 }
+            val cancellable = ind.reflectBoolean("isCancellable")
+            processes += RunningProcess(title = title, details = details, progress = progress, cancellable = cancellable, paused = false)
+        }
+
+        // Paused processes (suspended via ProgressSuspender)
+        for ((ind, suspender) in allSuspenderEntries()) {
+            if (!suspender.isSuspended()) continue
+            val title = ind.taskTitle() ?: ind.text?.takeIf { it.isNotBlank() } ?: continue
+            if (!seen.add("paused:$title")) continue
+            val progress = if (ind.isIndeterminate) null else ind.fraction.takeIf { it in 0.0..1.0 }
+            processes += RunningProcess(title = title, progress = progress, paused = true)
+        }
+
+        return if (processes.isEmpty()) "No background processes running"
+        else Json.encodeToString(processes)
+    }
+
+    // ── manage_process ────────────────────────────────────────────────────────
+
+    @McpTool(name = "manage_process")
+    @McpDescription(description = """
+        Controls a running background process by its title (as returned by get_running_processes).
+        title: partial, case-insensitive match (e.g. "index" matches "Indexing project…").
+        action: one of:
+          - "cancel" — stop the process (only if cancellable)
+          - "pause"  — suspend the process temporarily
+          - "resume" — resume a paused process
+        Returns a confirmation message or an error if the process is not found / action not supported.
+    """)
+    suspend fun manage_process(title: String, action: String): String {
+        disabledMessage("manage_process")?.let { return it }
+        // Search active indicators first
+        var match = CoreProgressManager.getCurrentIndicators().firstOrNull { ind ->
+            if (!ind.isRunning) return@firstOrNull false
+            val label = ind.taskTitle() ?: ind.text ?: ""
+            label.contains(title, ignoreCase = true)
+        }
+        // Also search paused indicators via ProgressSuspender map
+        var matchedSuspender: Any? = match?.let { getSuspender(it) }
+        if (match == null) {
+            val entry = allSuspenderEntries().firstOrNull { (ind, _) ->
+                val label = ind.taskTitle() ?: ind.text ?: ""
+                label.contains(title, ignoreCase = true)
+            }
+            match = entry?.first
+            matchedSuspender = entry?.second
+        }
+        if (match == null) return "No running process found matching \"$title\""
+
+        val label = match.taskTitle() ?: match.text?.takeIf { it.isNotBlank() } ?: title
+        return when (action.lowercase().trim()) {
+            "cancel" -> {
+                if (match.reflectBoolean("isCancellable") == false) "Process \"$label\" is not cancellable"
+                else {
+                    // If paused, resume first so the thread can actually check cancellation
+                    val suspender = matchedSuspender ?: getSuspender(match)
+                    if (suspender?.isSuspended() == true) {
+                        suspender.reflectInvoke("resumeProcess", "", "")
+                        Thread.sleep(100)
+                    }
+                    match.cancel()
+                    "Cancelled: \"$label\""
+                }
+            }
+            "pause" -> {
+                val suspender = matchedSuspender ?: getSuspender(match)
+                    ?: return "Process \"$label\" does not support pause"
+                suspender.reflectInvoke("suspendProcess", "Paused: \"$label\"", "Process \"$label\" does not support pause",
+                    arrayOf(String::class.java), arrayOf("Paused by MCP"))
+            }
+            "resume" -> {
+                val suspender = matchedSuspender ?: getSuspender(match)
+                    ?: return "Process \"$label\" does not support resume"
+                suspender.reflectInvoke("resumeProcess", "Resumed: \"$label\"", "Process \"$label\" does not support resume")
+            }
+            else -> "Unknown action \"$action\". Use: cancel, pause, resume"
+        }
+    }
+
+    private fun ProgressIndicator.taskTitle(): String? = try {
+        val taskInfo = javaClass.getMethod("getTaskInfo").invoke(this)
+        taskInfo?.javaClass?.getMethod("getTitle")?.invoke(taskInfo) as? String
+    } catch (_: Exception) { null }?.takeIf { it.isNotBlank() }
+
+    private fun ProgressIndicator.reflectBoolean(method: String): Boolean? = try {
+        javaClass.getMethod(method).invoke(this) as? Boolean
+    } catch (_: Exception) { null }
+
+    private fun ProgressIndicator.reflectInvoke(method: String, success: String, failure: String): String = try {
+        javaClass.getMethod(method).invoke(this); success
+    } catch (_: Exception) { failure }
+
+    private fun Any.reflectInvoke(method: String, success: String, failure: String,
+                                   paramTypes: Array<Class<*>> = emptyArray(),
+                                   args: Array<Any?> = emptyArray()): String = try {
+        javaClass.getMethod(method, *paramTypes).invoke(this, *args); success
+    } catch (_: Exception) { failure }
+
+    private fun getSuspender(indicator: ProgressIndicator): Any? = try {
+        val cls = Class.forName("com.intellij.openapi.progress.impl.ProgressSuspender")
+        cls.getMethod("getSuspender", ProgressIndicator::class.java).invoke(null, indicator)
+    } catch (_: Exception) { null }
+
+    /** Returns all (indicator, suspender) pairs from ProgressSuspender.ourProgressToSuspenderMap */
+    @Suppress("UNCHECKED_CAST")
+    private fun allSuspenderEntries(): List<Pair<ProgressIndicator, Any>> = try {
+        val cls = Class.forName("com.intellij.openapi.progress.impl.ProgressSuspender")
+        val field = cls.getDeclaredField("ourProgressToSuspenderMap").also { it.isAccessible = true }
+        val map = field.get(null) as? Map<ProgressIndicator, Any> ?: return emptyList()
+        map.entries.map { it.key to it.value }
+    } catch (_: Exception) { emptyList() }
+
+    private fun Any.isSuspended(): Boolean =
+        runCatching { javaClass.getMethod("isSuspended").invoke(this) as? Boolean ?: false }.getOrDefault(false)
+
+    private fun Any.suspendedText(): String? =
+        runCatching { javaClass.getMethod("getSuspendedText").invoke(this) as? String }.getOrNull()
+
     private fun relativize(basePath: String, path: String): String =
         if (basePath.isNotEmpty() && path.startsWith(basePath))
             path.removePrefix(basePath).trimStart('/')
@@ -951,6 +1099,8 @@ val MCP_HIGHLIGHT_KEY = Key<Boolean>("mcp.companion.highlight")
 @Serializable data class TestRunOutput(val runs: List<TestRun>, val error: String? = null)
 @Serializable data class TestRun(val name: String, val tests: List<TestNode>)
 @Serializable data class TestNode(val name: String, val status: String, val duration: Long? = null, val errorMessage: String? = null, val children: List<TestNode>? = null)
+
+@Serializable data class RunningProcess(val title: String, val details: String? = null, val progress: Double? = null, val cancellable: Boolean? = null, val paused: Boolean = false)
 
 @Serializable data class ProjectStructure(val name: String, val basePath: String, val sdk: SdkInfo?, val availableSdks: List<SdkInfo>, val modules: List<ModuleInfo>)
 @Serializable data class SdkInfo(val name: String, val type: String, val version: String?, val homePath: String? = null)
