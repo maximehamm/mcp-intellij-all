@@ -53,6 +53,11 @@ import kotlin.coroutines.coroutineContext
 
 class McpCompanionToolset : McpToolset {
 
+    // Explicit override prevents Kotlin from generating an invokespecial bridge to
+    // McpToolset.isEnabled() — which exists only in 2026.1+ and would cause
+    // NoSuchMethodError on 2025.3.x at runtime.
+    override fun isEnabled(): Boolean = true
+
     private fun disabledMessage(toolName: String): String? {
         if (!McpCompanionSettings.getInstance().isEnabled(toolName))
             return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
