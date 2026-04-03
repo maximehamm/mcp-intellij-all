@@ -27,6 +27,7 @@
 
         <p><i>"Add a breakpoint at line 18, start the debugger, stop when i == 3, then tell me the value of jj."</i></p>
         <p><i>"Open Main.java and place the cursor at line 42."</i></p>
+        <p><i>"Show me where variable i is declared and used in Main.java."</i></p>
 
         <b>Editor</b>
         <ul>
@@ -108,6 +109,20 @@
                 <b>set_breakpoint_condition</b> — Sets or removes a condition on an existing breakpoint.
                 Parameters: <code>filePath</code> (relative), <code>line</code> (1-based), <code>condition</code>
                 (expression string, or empty to remove).
+            </li>
+            <li>
+                <b>navigate_to</b> — Opens a file and places the cursor at a given line and column.
+            </li>
+            <li>
+                <b>select_text</b> — Opens a file and selects a text range (ready to copy with Cmd+C).
+            </li>
+            <li>
+                <b>highlight_text</b> — Highlights multiple zones in a file using the IDE's standard
+                search-result color (theme-aware). Press Escape to clear. Ranges are specified as
+                comma-separated <code>startLine:startCol:endLine:endCol</code> (1-based).
+            </li>
+            <li>
+                <b>clear_highlights</b> — Removes all highlights added by highlight_text.
             </li>
         </ul>
     ]]></description>

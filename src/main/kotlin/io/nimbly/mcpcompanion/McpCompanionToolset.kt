@@ -17,8 +17,11 @@ import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.colors.EditorColors
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.util.ui.UIUtil
@@ -611,7 +614,143 @@ class McpCompanionToolset : McpToolset {
         latch.await(2, TimeUnit.SECONDS)
         return DebugVariable(name = name, type = type, value = value)
     }
+
+    // ── navigate_to ───────────────────────────────────────────────────────────
+
+    @McpTool(name = "navigate_to")
+    @McpDescription(description = """
+        Opens a file in the editor and places the cursor at the given line and column.
+        filePath: path relative to the project root.
+        line: 1-based line number.
+        column: 1-based column number (default: 1).
+    """)
+    suspend fun navigate_to(filePath: String, line: Int, column: Int = 1): String {
+        disabledMessage("navigate_to")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
+                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+            com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, line - 1, (column - 1).coerceAtLeast(0))
+                .navigate(true)
+            "Navigated to $filePath:$line:$column"
+        }
+    }
+
+    // ── select_text ───────────────────────────────────────────────────────────
+
+    @McpTool(name = "select_text")
+    @McpDescription(description = """
+        Opens a file and selects a range of text so the user can copy it directly (Cmd+C).
+        filePath: path relative to the project root.
+        startLine/startColumn and endLine/endColumn: 1-based positions.
+    """)
+    suspend fun select_text(filePath: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int): String {
+        disabledMessage("select_text")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
+                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+            val editor = FileEditorManager.getInstance(project)
+                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, startLine - 1, (startColumn - 1).coerceAtLeast(0)), true)
+                ?: return@invokeAndWaitIfNeeded "Could not open editor"
+            val doc = editor.document
+            val startOffset = (doc.getLineStartOffset(startLine - 1) + (startColumn - 1)).coerceAtMost(doc.textLength)
+            val endOffset = (doc.getLineStartOffset(endLine - 1) + (endColumn - 1)).coerceAtMost(doc.textLength)
+            editor.selectionModel.setSelection(startOffset, endOffset)
+            "Selected $filePath:$startLine:$startColumn → $endLine:$endColumn"
+        }
+    }
+
+    // ── highlight_text ────────────────────────────────────────────────────────
+
+    @McpTool(name = "highlight_text")
+    @McpDescription(description = """
+        Highlights one or more exact text zones in a file using the IDE's standard search-result color (theme-aware).
+        Useful to show where a variable is declared and all its usages at once.
+        filePath: path relative to the project root.
+        ranges: comma-separated list of "startLine:startCol:endLine:endCol" (1-based),
+                e.g. "14:9:14:20,18:35:18:36".
+                Use get_file_text_by_path to read the file and identify exact column positions.
+        Call clear_highlights to remove them.
+    """)
+    suspend fun highlight_text(filePath: String, ranges: String): String {
+        disabledMessage("highlight_text")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+            val normalizedPath = filePath.replace('\\', '/')
+            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/$normalizedPath")
+                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+            val editor = FileEditorManager.getInstance(project)
+                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, 0), true)
+                ?: return@invokeAndWaitIfNeeded "Could not open editor"
+            val doc = editor.document
+            val attrs = EditorColorsManager.getInstance().globalScheme
+                .getAttributes(EditorColors.TEXT_SEARCH_RESULT_ATTRIBUTES)
+            var count = 0
+            for (range in ranges.split(",")) {
+                val parts = range.trim().split(":")
+                if (parts.size != 4) continue
+                val startLine = (parts[0].trim().toIntOrNull() ?: continue) - 1
+                val startCol  = (parts[1].trim().toIntOrNull() ?: continue) - 1
+                val endLine   = (parts[2].trim().toIntOrNull() ?: continue) - 1
+                val endCol    = (parts[3].trim().toIntOrNull() ?: continue) - 1
+                if (startLine < 0 || endLine >= doc.lineCount) continue
+                val startOffset = (doc.getLineStartOffset(startLine) + startCol).coerceAtMost(doc.textLength)
+                val endOffset   = (doc.getLineStartOffset(endLine)   + endCol  ).coerceAtMost(doc.textLength)
+                val h = editor.markupModel.addRangeHighlighter(
+                    startOffset, endOffset,
+                    com.intellij.openapi.editor.markup.HighlighterLayer.SELECTION - 1,
+                    attrs,
+                    com.intellij.openapi.editor.markup.HighlighterTargetArea.EXACT_RANGE
+                )
+                h.putUserData(MCP_HIGHLIGHT_KEY, true)
+                count++
+            }
+            "$count zone(s) highlighted in $filePath"
+        }
+    }
+
+    // ── clear_highlights ──────────────────────────────────────────────────────
+
+    @McpTool(name = "clear_highlights")
+    @McpDescription(description = """
+        Removes all highlights previously added by highlight_text from all open editors.
+        filePath: path relative to the project root. Leave empty to clear all open files.
+    """)
+    suspend fun clear_highlights(filePath: String = ""): String {
+        disabledMessage("clear_highlights")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            var count = 0
+            val editors = if (filePath.isEmpty()) {
+                FileEditorManager.getInstance(project).allEditors
+                    .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
+                    .map { it.editor }
+            } else {
+                val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+                val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
+                    ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+                FileEditorManager.getInstance(project).getEditors(vFile)
+                    .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
+                    .map { it.editor }
+            }
+            for (editor in editors) {
+                val toRemove = editor.markupModel.allHighlighters.filter {
+                    it.getUserData(MCP_HIGHLIGHT_KEY) == true
+                }
+                toRemove.forEach { editor.markupModel.removeHighlighter(it); count++ }
+            }
+            "$count highlight(s) cleared"
+        }
+    }
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+val MCP_HIGHLIGHT_KEY = Key<Boolean>("mcp.companion.highlight")
 
 // ── Data classes ──────────────────────────────────────────────────────────────
 
