@@ -97,9 +97,13 @@ class McpCompanionToolset : McpToolset {
 - get_debug_output           → read the debug console
 
 ### Editing
-- replace_text_undoable  → replace text in a file already open in the editor (Cmd+Z undoable)
-                           Use this for modifications to existing open files — the user can undo instantly.
-                           For bulk changes across many files or new file creation, prefer standard Write/Edit tools.
+- replace_text_undoable      → replace text in a file already open in the editor (Cmd+Z undoable)
+                               Use this for targeted edits to open files — the user can undo instantly.
+- replace_file_text_by_path  → (built-in) overwrite a whole file via IntelliJ API — auto-refreshes the editor
+- create_new_file_with_text  → (built-in) create a new file via IntelliJ API — auto-refreshes the editor
+
+IMPORTANT: Prefer replace_file_text_by_path and create_new_file_with_text over the native Write/Edit tools
+whenever working on a project open in IntelliJ. This avoids stale editors and manual VFS refresh.
 
 ## Typical workflows
 
