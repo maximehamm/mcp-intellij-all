@@ -29,7 +29,7 @@
 
         <h3>Available tools</h3>
 
-        <p><b>Editor &amp; Navigation</b></p>
+        <h4>Editor &amp; Navigation</h4>
         <ul>
             <li><b>get_open_editors</b> — Open files, focused editor with caret position, and current text selection.</li>
             <li><b>navigate_to</b> — Opens a file and places the cursor at a given line and column.</li>
@@ -38,14 +38,14 @@
             <li><b>clear_highlights</b> — Removes all highlights added by <code>highlight_text</code>.</li>
         </ul>
 
-        <p><b>Build &amp; Tests</b></p>
+        <h4>Build &amp; Tests</h4>
         <ul>
             <li><b>get_build_output</b> — Build tool window: structured error/warning tree with file names and line numbers, plus raw console text.</li>
             <li><b>get_run_output</b> — Console output from the Run tool window (all open tabs).</li>
             <li><b>get_test_results</b> — Last test run results: passed/failed/ignored status, duration, and failure messages with stack traces.</li>
         </ul>
 
-        <p><b>Debug</b></p>
+        <h4>Debug</h4>
         <ul>
             <li><b>debug_run_configuration</b> — Launches a run configuration in debug mode.</li>
             <li><b>get_debug_output</b> — Console output from the Debug tool window (all open tabs).</li>
@@ -56,14 +56,14 @@
             <li><b>mute_breakpoints</b> — Mutes or unmutes all breakpoints in the active debug session.</li>
         </ul>
 
-        <p><b>Diagnostic &amp; Processes</b></p>
+        <h4>Diagnostic &amp; Processes</h4>
         <ul>
             <li><b>get_intellij_diagnostic</b> — One-call diagnostic: indexing status, active notifications, running/paused processes, and <code>idea.log</code> WARN/ERROR tail. Use this first when something is not working as expected.</li>
             <li><b>get_running_processes</b> — Lists all active and paused background processes (indexing, Gradle syncs, builds, etc.).</li>
             <li><b>manage_process</b> — Pauses, resumes, or cancels a background process by title.</li>
         </ul>
 
-        <p><b>General</b></p>
+        <h4>General</h4>
         <ul>
             <li><b>get_mcp_companion_overview</b> — Describes all available MCP Companion tools and how to use them.</li>
             <li><b>get_project_structure</b> — Project SDK, modules, source roots, excluded folders, and module dependencies. All paths relative to project root.</li>
