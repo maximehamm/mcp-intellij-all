@@ -16,6 +16,11 @@
             workspace — editor state, build results, run/debug output, and live variable inspection.
         </p>
         <p>
+            <b>Requires:</b> the <a href="https://plugins.jetbrains.com/plugin/26071-mcp-server">JetBrains MCP Server</a>
+            plugin to be installed and enabled. It is bundled in IntelliJ IDEA Ultimate 2025.1+.
+            Users of Community Edition or other JetBrains IDEs can install it for free from the Marketplace.
+        </p>
+        <p>
             Source code and documentation: <a href="https://github.com/maximehamm/mcp-intellij-all">github.com/maximehamm/mcp-intellij-all</a>
         </p>
 
