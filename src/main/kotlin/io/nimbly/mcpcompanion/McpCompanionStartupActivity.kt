@@ -2,6 +2,7 @@ package io.nimbly.mcpcompanion
 
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 
@@ -29,6 +30,9 @@ class McpCompanionStartupActivity : ProjectActivity {
                         "MCP Server Companion activated",
                         "MCP Server was disabled and has been automatically enabled.",
                         NotificationType.INFORMATION)
+                    .addAction(com.intellij.notification.NotificationAction.createSimple("Open MCP Server Companion Settings") {
+                        ShowSettingsUtil.getInstance().showSettingsDialog(project, "MCP Server Companion")
+                    })
                     .notify(project)
             }
         } catch (_: Exception) {
