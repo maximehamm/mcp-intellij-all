@@ -20,8 +20,12 @@ class McpCompanionDiagnosticToolset : McpToolset {
     override fun isEnabled(): Boolean = true
 
     private fun disabledMessage(toolName: String): String? {
-        if (!McpCompanionSettings.getInstance().isEnabled(toolName))
-            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
+        if (!McpCompanionSettings.getInstance().isEnabled(toolName)) {
+            val extra = if (toolName in McpCompanionSettings.DISABLED_BY_DEFAULT)
+                " This tool is disabled by default for safety reasons. Ask the user to enable it first."
+            else ""
+            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
+        }
         McpCompanionSettings.getInstance().trackCall(toolName)
         return null
     }

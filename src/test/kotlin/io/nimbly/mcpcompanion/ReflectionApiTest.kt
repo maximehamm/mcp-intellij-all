@@ -122,6 +122,75 @@ class ReflectionApiTest {
             "McpServerSettings.MyState.getEnableMcpServer() must return boolean")
     }
 
+    // ── TerminalViewImpl (send_to_terminal) ────────────────────────────────────
+    // send_to_terminal uses TerminalViewImpl.createSendTextBuilder() + doSendText().
+    // If the class or methods disappear, the tool will silently return an error — catch
+    // it early here so the test suite flags the broken reflection before shipping.
+
+    @Test
+    fun `TerminalViewImpl exists in frontend terminal package`() {
+        val cls = runCatching {
+            Class.forName("com.intellij.terminal.frontend.view.impl.TerminalViewImpl")
+        }.getOrNull()
+        if (cls == null) {
+            println("WARNING: TerminalViewImpl not found — send_to_terminal may not work (terminal API changed)")
+            return
+        }
+        println("OK: TerminalViewImpl found: ${cls.name}")
+    }
+
+    @Test
+    fun `TerminalViewImpl createSendTextBuilder exists`() {
+        val cls = runCatching {
+            Class.forName("com.intellij.terminal.frontend.view.impl.TerminalViewImpl")
+        }.getOrNull() ?: run {
+            println("INFO: TerminalViewImpl not on classpath — skipping")
+            return
+        }
+        val method = generateSequence(cls as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .find { it.name == "createSendTextBuilder" && it.parameterCount == 0 }
+        assertNotNull(method, "TerminalViewImpl.createSendTextBuilder() not found — send_to_terminal Strategy 2 is broken")
+        println("OK: TerminalViewImpl.createSendTextBuilder() → ${method!!.returnType.name}")
+    }
+
+    @Test
+    fun `TerminalViewImpl doSendText exists`() {
+        val cls = runCatching {
+            Class.forName("com.intellij.terminal.frontend.view.impl.TerminalViewImpl")
+        }.getOrNull() ?: run {
+            println("INFO: TerminalViewImpl not on classpath — skipping")
+            return
+        }
+        val method = generateSequence(cls as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .find { it.name == "doSendText" && it.parameterCount == 1 }
+        assertNotNull(method, "TerminalViewImpl.doSendText() not found — send_to_terminal Strategy 2 is broken")
+        println("OK: TerminalViewImpl.doSendText(${method!!.parameterTypes[0].name})")
+    }
+
+    @Test
+    fun `TerminalSendTextOptions has constructor with String as first param`() {
+        val termViewCls = runCatching {
+            Class.forName("com.intellij.terminal.frontend.view.impl.TerminalViewImpl")
+        }.getOrNull() ?: run {
+            println("INFO: TerminalViewImpl not on classpath — skipping")
+            return
+        }
+        val doSendText = generateSequence(termViewCls as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .find { it.name == "doSendText" && it.parameterCount == 1 }
+            ?: run { println("WARNING: doSendText not found — skipping TerminalSendTextOptions check"); return }
+        val optsCls = doSendText.parameterTypes[0]
+        val ctor = optsCls.constructors
+            .sortedBy { it.parameterCount }
+            .find { it.parameterTypes.isNotEmpty() && it.parameterTypes[0] == String::class.java }
+        assertNotNull(ctor,
+            "${optsCls.simpleName} has no constructor with String as first param — send_to_terminal direct send is broken")
+        println("OK: ${optsCls.simpleName}(${ctor!!.parameterTypes.joinToString { it.simpleName }}) — " +
+            "send_to_terminal can construct options directly")
+    }
+
     // ── Optional: isCancellable / suspend / resume ────────────────────────────
     // These are best-effort: our code handles their absence gracefully.
     // Tests print a warning rather than failing — a future removal surfaces
