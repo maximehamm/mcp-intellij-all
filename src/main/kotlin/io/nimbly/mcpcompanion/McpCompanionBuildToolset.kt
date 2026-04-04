@@ -495,6 +495,69 @@ class McpCompanionBuildToolset : McpToolset {
             children = children
         )
     }
+
+    // ── get_terminal_output ───────────────────────────────────────────────────
+
+    @McpTool(name = "get_terminal_output")
+    @McpDescription(description = """
+        Returns the visible output of all tabs in the embedded Terminal tool window.
+        For each tab:
+        - name: tab label (e.g. "Local", "bash")
+        - active: true on the currently selected tab
+        - output: visible terminal content (screen buffer + recent history)
+        Use this to read command output, script results, or any text typed in the terminal.
+    """)
+    suspend fun get_terminal_output(): String {
+        disabledMessage("get_terminal_output")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
+                ?: return@invokeAndWaitIfNeeded "Terminal tool window not found"
+            val selectedContent = toolWindow.contentManager.selectedContent
+            val tabs = toolWindow.contentManager.contents.mapNotNull { content ->
+                val name = content.displayName ?: "Terminal"
+                val component = content.component as? javax.swing.JComponent ?: return@mapNotNull null
+                val isActive = content === selectedContent
+                // New block terminal: editor-backed output
+                val text = readEditorText(component)
+                // Fallback: classic JediTerm shell widget
+                    ?: readJediTermText(component)
+                TerminalTab(name = name, active = isActive, output = text)
+            }
+            if (tabs.isEmpty()) "No terminal tabs found"
+            else Json.encodeToString(TerminalOutput(tabs))
+        }
+    }
+
+    private fun readJediTermText(component: javax.swing.JComponent): String? = try {
+        val widgetCls = Class.forName("org.jetbrains.plugins.terminal.ShellTerminalWidget")
+        val widget = UIUtil.findComponentsOfType(component, widgetCls as Class<javax.swing.JComponent>)
+            .firstOrNull() ?: return null
+        // ShellTerminalWidget → getTerminalPanel() → getTerminalTextBuffer()
+        val panel = generateSequence(widget.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == "getTerminalPanel" }
+            ?.invoke(widget) ?: return null
+        val buffer = generateSequence(panel.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == "getTerminalTextBuffer" }
+            ?.invoke(panel) ?: return null
+        val height = (generateSequence(buffer.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == "getHeight" }
+            ?.invoke(buffer) as? Int) ?: 24
+        val getLine = generateSequence(buffer.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == "getLine" && it.parameterCount == 1 }
+        val lines = (0 until height).mapNotNull { row ->
+            val line = runCatching { getLine?.invoke(buffer, row) }.getOrNull() ?: return@mapNotNull null
+            (generateSequence(line.javaClass as Class<*>?) { it.superclass }
+                .flatMap { it.methods.asSequence() }
+                .find { it.name == "getText" }
+                ?.invoke(line) as? String)?.trimEnd()
+        }
+        lines.joinToString("\n").trim().ifEmpty { null }
+    } catch (_: Exception) { null }
 }
 
 // ── Data classes ──────────────────────────────────────────────────────────────
@@ -513,3 +576,6 @@ class McpCompanionBuildToolset : McpToolset {
 @Serializable data class TestRunOutput(val runs: List<TestRun>, val error: String? = null)
 @Serializable data class TestRun(val name: String, val tests: List<TestNode>)
 @Serializable data class TestNode(val name: String, val status: String, val duration: Long? = null, val errorMessage: String? = null, val children: List<TestNode>? = null)
+
+@Serializable data class TerminalOutput(val tabs: List<TerminalTab>)
+@Serializable data class TerminalTab(val name: String, val active: Boolean = false, val output: String? = null)

@@ -26,6 +26,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_console_output` ⚠️ | Console output from both Run and Debug tool windows, with active window and tab indicated |
 | `get_services_output` ⚠️ | Services tool window sessions: SQL output log, result grids, active session/tab indicated |
 | `get_test_results` 🔬 | Last test run results: passed/failed/ignored status, duration, and failure messages |
+| `get_terminal_output` ⚠️ | Content of all tabs in the embedded Terminal tool window |
 
 ### Debug
 | Tool | Description |
