@@ -96,6 +96,36 @@ Each tool can be individually enabled or disabled in **Settings → Tools → MC
 
 …and much more via `get_mcp_companion_overview`.
 
+## Testing
+
+The test suite has two layers:
+
+### Automated (no sandbox needed)
+
+Run with `./gradlew test`.
+
+| Class | What it covers |
+|-------|----------------|
+| `ReflectionApiTest` | Verifies every reflection call in the plugin still resolves against the current IntelliJ JARs (CoreProgressManager, TaskInfo, McpToolset, McpServerSettings…) |
+| `CodeAnalysisReflectionTest` | Verifies `HighlightInfo.offsetStore`, `getIntentionActionDescriptors`, `DocumentMarkupModel.forDocument`, `DaemonCodeAnalyzer.isRunning` |
+| `ToolsetIntegrationTest` | `BasePlatformTestCase` tests running in a headless IntelliJ — real PSI, real editor, real breakpoint manager. Covers: `get_open_editors`, caret/selection, highlight/clear, `relativize`, markup model, `replace_text_undoable`, `delete_file`, add/mute/condition breakpoints, `collectRunningProcesses` |
+
+### Manual only (require a running sandbox)
+
+These tools depend on tool windows or active sessions that don't exist in the headless environment. Test them via `runIde` + curl SSE (see `CLAUDE.md`).
+
+| Tool | Why it can't be automated |
+|------|--------------------------|
+| `get_build_output` | Requires the Build tool window |
+| `get_console_output` | Requires the Run / Debug tool windows |
+| `get_services_output` | Requires the Services tool window |
+| `get_test_results` | Requires the Run tool window with test results |
+| `debug_run_configuration` | Requires launching a real run configuration |
+| `get_debug_variables` | Requires an active debug session paused at a breakpoint |
+| `refresh_project` | Requires Gradle / Maven to be loaded |
+| `get_intellij_diagnostic` | Partially testable; idea.log and notifications require a live IDE |
+| `execute_ide_action` | Actions that open modal dialogs need a real UI |
+
 ## Setup
 
 ### 1. Install the MCP Server plugin
