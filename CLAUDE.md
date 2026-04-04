@@ -58,6 +58,8 @@ grep -v '"notifications/tools/list_changed"' /tmp/sse.txt | grep "data:" | tail 
 - Classes de test : `Calculator.java` + `CalculatorTest.java` (JUnit 5, 2 tests échouants intentionnels)
 - Lancer via `runIde` depuis ce projet, puis ouvrir `untitled4` dans le sandbox
 
+> ⚠️ **Règle de test** : pendant les tests, accéder au projet sandbox **uniquement via les outils MCP** (get_open_editors, get_project_structure, navigate_to, etc.). Tout accès disque direct (Read, Glob, Grep, Bash sur les fichiers du sandbox) est **interdit**.
+
 ## Workflow de développement
 
 1. Coder le tool dans `McpCompanionToolset.kt` — ajouter `disabledMessage("nom_tool")?.let { return it }` en tête

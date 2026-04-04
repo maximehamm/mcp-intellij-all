@@ -18,7 +18,7 @@
         <p>
             <b>Requires:</b> the <a href="https://plugins.jetbrains.com/plugin/26071-mcp-server">JetBrains MCP Server</a>
             plugin to be installed and enabled. It is bundled in IntelliJ IDEA Ultimate 2025.1+.
-            Users of Community Edition or other JetBrains IDEs can install it for free from the Marketplace.
+            Users of Community Edition, Android Studio, or other JetBrains IDEs can install it for free from the Marketplace.
         </p>
         <p>
             Source code and documentation: <a href="https://github.com/maximehamm/mcp-intellij-all">github.com/maximehamm/mcp-intellij-all</a>
@@ -58,6 +58,7 @@
 
         <h4>Diagnostic &amp; Processes</h4>
         <ul>
+            <li><b>get_ide_settings</b> — Read IntelliJ IDE settings: Gradle build delegation, SDK, compiler, encoding. Pass a keyword (<code>search</code>) to filter, a <code>key</code> for direct lookup, or a <code>prefix</code> (with optional <code>depth</code>) to retrieve all settings in a subtree.</li>
             <li><b>get_intellij_diagnostic</b> — One-call diagnostic: indexing status, active notifications, running/paused processes, and <code>idea.log</code> WARN/ERROR tail. Use this first when something is not working as expected.</li>
             <li><b>get_running_processes</b> — Lists all active and paused background processes (indexing, Gradle syncs, builds, etc.).</li>
             <li><b>manage_process</b> — Pauses, resumes, or cancels a background process by title.</li>
@@ -67,6 +68,7 @@
         <ul>
             <li><b>get_mcp_companion_overview</b> — Describes all available MCP Companion tools and how to use them.</li>
             <li><b>get_project_structure</b> — Project SDK, modules, source roots, excluded folders, and module dependencies. All paths relative to project root.</li>
+            <li><b>execute_ide_action</b> — Executes any IntelliJ action by ID (e.g. ShowSettings, ReformatCode, GotoFile), or searches for action IDs by keyword.</li>
             <li><b>replace_text_undoable</b> — Replaces text in a file via IntelliJ's document API (supports Cmd+Z undo).</li>
             <li><b>delete_file</b> — Deletes a file from the project (undoable).</li>
         </ul>

@@ -42,10 +42,10 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "get_breakpoints", "add_conditional_breakpoint", "set_breakpoint_condition", "mute_breakpoints"
             ),
             "Diagnostic & Processes" to listOf(
-                "get_intellij_diagnostic", "get_running_processes", "manage_process"
+                "get_intellij_diagnostic", "get_running_processes", "manage_process", "get_ide_settings"
             ),
             "General" to listOf(
-                "get_mcp_companion_overview", "get_project_structure", "replace_text_undoable", "delete_file"
+                "get_mcp_companion_overview", "get_project_structure", "execute_ide_action", "replace_text_undoable", "delete_file"
             )
         )
 

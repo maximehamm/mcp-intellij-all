@@ -4,8 +4,8 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 
 ## Requirements
 
-- IntelliJ IDEA 2024.3+
-- [MCP Server plugin](https://plugins.jetbrains.com/plugin/26071-mcp-server) installed
+- IntelliJ IDEA 2024.3+ or any JetBrains IDE (Android Studio, PyCharm, GoLand, WebStorm…)
+- [MCP Server plugin](https://plugins.jetbrains.com/plugin/26071-mcp-server) installed (bundled in IntelliJ IDEA Ultimate 2025.1+, free on the Marketplace for all other IDEs)
 - An AI client configured with `@jetbrains/mcp-proxy` (Claude Desktop, Cursor, etc.)
 
 ## Tools
@@ -29,9 +29,11 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `set_breakpoint_condition` | Sets or removes a condition on an existing breakpoint |
 | `mute_breakpoints` | Mutes or unmutes all breakpoints in the active debug session |
 | `get_project_structure` | Returns SDK, modules, source roots, excluded folders, and module dependencies |
+| `get_ide_settings` | Read IntelliJ settings: Gradle, SDK, compiler, encoding — search by keyword, direct key lookup, or prefix subtree with optional depth |
 | `get_intellij_diagnostic` | One-call diagnostic: indexing status, notifications, running processes, and idea.log WARN/ERROR tail |
 | `get_running_processes` | Lists active and paused background processes in IntelliJ |
 | `manage_process` | Pauses, resumes, or cancels a background process by title |
+| `execute_ide_action` | Execute any IntelliJ action by ID (e.g. ShowSettings, ReformatCode), or search for action IDs by keyword |
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
 | `delete_file` | Deletes a file from the project (undoable) |
 
@@ -39,27 +41,36 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 
 Each tool can be individually enabled or disabled in **Settings → Tools → MCP Server Companion**.
 
-![MCP Server Companion Settings](docs/settings-screenshot.png)
 
 ## Example prompts
 
-**Editor**
+**Editor & Navigation**
 - *"What file am I currently editing, and what line is my cursor on?"*
-- *"Look at the file I'm editing and suggest improvements for the selected code."*
+- *"Navigate to the `processOrder` method and highlight all its usages."*
+- *"Look at the selected code and suggest improvements — make changes undoable."*
 
-**Build**
-- *"Check my build output and tell me what errors I have."*
-- *"Run a build, check the result, and fix any errors."*
-- *"I have a build error — can you identify the cause and fix it? Make it undoable."*
-
-**Run & Debug**
+**Build & Run**
+- *"Build the project, check the result, and fix any errors."*
 - *"Run the program and show me the output."*
+- *"I have a build error — identify the cause and fix it."*
+
+**Debug**
+- *"Set a breakpoint at line 42 with condition `i > 3`, launch debug, and tell me the variable values when it stops."*
 - *"What are the current variable values at this breakpoint?"*
-- *"Set a breakpoint at line 13, launch debug, and stop when i=3."*
 
 **Tests**
 - *"Run the tests and tell me which ones failed and why."*
-- *"Fix the failing tests."*
+- *"Fix the failing tests, run them again, and confirm they pass."*
+
+**Database (Services)**
+- *"Show me the result of the last SQL query in the Services window."*
+
+**Diagnostics & Settings**
+- *"Is IntelliJ building with Gradle or its own compiler?"*
+- *"What errors or warnings does IntelliJ currently show?"*
+- *"What JDK is configured for this project?"*
+
+…and much more via `get_mcp_companion_overview`.
 
 ## Setup
 

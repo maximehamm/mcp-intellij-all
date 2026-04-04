@@ -117,6 +117,21 @@ class McpCompanionToolset : McpToolset {
 - mute_breakpoints           → enable/disable all breakpoints at once
 - get_debug_variables        → read local variables from the current stack frame
 
+### Diagnostic & settings
+- get_intellij_diagnostic    → notifications, errors, background tasks, IDE log — call this when something looks wrong
+- get_ide_settings           → read IntelliJ settings (Gradle, compiler, SDK, encoding…)
+                               no param = common settings overview
+                               search="gradle" = filter all properties by keyword
+                               key="x" = direct lookup of one property
+                               prefix="gradle" = all settings whose key starts with "gradle"
+                               prefix + depth=1 = limit to one dot-segment beyond the prefix
+
+### IDE actions
+- execute_ide_action         → execute any IntelliJ action by ID, or search for action IDs by keyword
+                               search="settings" = list actions whose name/ID contains "settings"
+                               actionId="ShowSettings" = open the Settings dialog
+                               actionId="GotoFile", "ReformatCode", "OptimizeImports", "Git.Branches", …
+
 ### Editing & file operations
 - replace_text_undoable      → replace text in a file already open in the editor (Cmd+Z undoable)
                                Use this for targeted edits to open files — the user can undo instantly.
@@ -586,6 +601,242 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
                 Json.encodeToString(ServicesOutput(sessions = listOf(ServiceSession(name = "info", output = "No service sessions found"))))
             else
                 Json.encodeToString(ServicesOutput(sessions))
+        }
+    }
+
+    // ── get_ide_settings ─────────────────────────────────────────────────────
+
+    @McpTool(name = "get_ide_settings")
+    @McpDescription(description = """
+        Reads IntelliJ IDE settings.
+        - No parameters: returns the most useful settings (build tool, SDK, Gradle, compiler, encoding…)
+        - search: filters all known settings by keyword (substring match on key name)
+        - key: reads one specific setting key directly
+        - prefix: returns all settings whose key starts with the given prefix (e.g. "gradle")
+          combine with depth to limit how many dot-separated segments are returned beyond the prefix
+          (e.g. prefix="gradle", depth=1 → only "gradle.xxx" keys, not "gradle.xxx.yyy")
+        Results are returned as a flat JSON map of key → value.
+    """)
+    suspend fun get_ide_settings(search: String? = null, key: String? = null, prefix: String? = null, depth: Int? = null): String {
+        disabledMessage("get_ide_settings")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded {
+            val known = knownIdeSettings(project)
+            val results = linkedMapOf<String, String?>()
+            when {
+                key != null -> {
+                    // Direct PropertiesComponent lookup, then known settings
+                    val pc = com.intellij.ide.util.PropertiesComponent.getInstance()
+                    val pcProj = com.intellij.ide.util.PropertiesComponent.getInstance(project)
+                    results[key] = pc.getValue(key) ?: pcProj.getValue(key) ?: known[key]
+                }
+                prefix != null -> {
+                    val normalizedPrefix = if (prefix.endsWith(".")) prefix else "$prefix."
+                    val prefixSegments = normalizedPrefix.trimEnd('.').split(".").size
+                    known.filter { (k, _) -> k.startsWith(normalizedPrefix) || k == prefix }
+                        .filter { (k, _) ->
+                            if (depth == null) true
+                            else k.split(".").size <= prefixSegments + depth
+                        }
+                        .forEach { (k, v) -> results[k] = v }
+                }
+                search != null -> {
+                    val lower = search.lowercase()
+                    known.filter { (k, _) -> k.lowercase().contains(lower) }
+                        .forEach { (k, v) -> results[k] = v }
+                }
+                else -> results.putAll(known)
+            }
+            Json.encodeToString(results as Map<String, String?>)
+        }
+    }
+
+    private fun knownIdeSettings(project: com.intellij.openapi.project.Project): Map<String, String?> {
+        val map = linkedMapOf<String, String?>()
+
+        // Project name & path
+        map["project.name"]     = project.name
+        map["project.basePath"] = project.basePath
+
+        // Project SDK
+        runCatching {
+            val sdk = com.intellij.openapi.roots.ProjectRootManager.getInstance(project).projectSdk
+            map["project.sdk.name"]    = sdk?.name
+            map["project.sdk.type"]    = sdk?.sdkType?.name
+            map["project.sdk.version"] = sdk?.versionString
+        }
+
+        // Gradle settings (via reflection — uses Gradle plugin's own classloader)
+        // Silently skipped when Gradle plugin is not available (PyCharm, WebStorm, etc.)
+        val gradlePlugin = com.intellij.ide.plugins.PluginManagerCore.getPlugin(
+            com.intellij.openapi.extensions.PluginId.getId("com.intellij.gradle")
+        )
+        if (gradlePlugin != null) {
+            val gradleError = runCatching {
+                val gsClass = Class.forName("org.jetbrains.plugins.gradle.settings.GradleSettings", true, gradlePlugin.classLoader)
+                val gs = gsClass.getMethod("getInstance", com.intellij.openapi.project.Project::class.java).invoke(null, project)
+                val linked = gs.javaClass.getMethod("getLinkedProjectsSettings").invoke(gs)
+                val all = (linked as? Iterable<*>)?.toList() ?: emptyList<Any>()
+                map["gradle.linkedProjects.count"] = all.size.toString()
+                val first = all.firstOrNull()
+                if (first != null) {
+                    map["gradle.delegatedBuild"]           = runCatching { first.javaClass.getMethod("getDelegatedBuild").invoke(first)?.toString() }.getOrNull()
+                    map["gradle.gradleJvm"]                = runCatching { first.javaClass.getMethod("getGradleJvm").invoke(first)?.toString() }.getOrNull()
+                    map["gradle.gradleHome"]               = runCatching { first.javaClass.getMethod("getGradleHome").invoke(first)?.toString() }.getOrNull()
+                    map["gradle.testRunner"]               = runCatching { first.javaClass.getMethod("getTestRunner").invoke(first)?.toString() }.getOrNull()
+                    map["gradle.resolveModulePerSourceSet"]= runCatching { first.javaClass.getMethod("isResolveModulePerSourceSet").invoke(first)?.toString() }.getOrNull()
+                }
+            }.exceptionOrNull()
+            if (gradleError != null) map["gradle.error"] = gradleError.message ?: gradleError.toString()
+        }
+
+        // Compiler configuration (via reflection)
+        runCatching {
+            val ccClass = Class.forName("com.intellij.compiler.CompilerConfiguration")
+            val cc = ccClass.getMethod("getInstance", com.intellij.openapi.project.Project::class.java).invoke(null, project)
+            map["compiler.projectBytecodeTarget"] = runCatching { cc.javaClass.getMethod("getProjectBytecodeTarget").invoke(cc)?.toString() }.getOrNull()
+            map["compiler.addNotNullAssertions"]  = runCatching { cc.javaClass.getMethod("isAddNotNullAssertions").invoke(cc)?.toString() }.getOrNull()
+        }
+
+        // Encoding
+        runCatching {
+            val em = com.intellij.openapi.vfs.encoding.EncodingProjectManager.getInstance(project)
+            map["encoding.default"] = em.defaultCharsetName
+            runCatching { map["encoding.nativesToAscii"] = em.javaClass.getMethod("isNativesToAscii").invoke(em)?.toString() }
+        }
+
+        // Git settings (via reflection — silently skipped when Git plugin is absent)
+        val gitPlugin = listOf("Git4Idea", "com.intellij.vcs.git", "git4idea")
+            .mapNotNull { com.intellij.ide.plugins.PluginManagerCore.getPlugin(com.intellij.openapi.extensions.PluginId.getId(it)) }
+            .firstOrNull()
+        if (gitPlugin != null) {
+            runCatching {
+                val cl = gitPlugin.classLoader
+                val gsClass = Class.forName("git4idea.config.GitVcsSettings", true, cl)
+                val gs = gsClass.getMethod("getInstance", com.intellij.openapi.project.Project::class.java).invoke(null, project)
+                map["git.pathToGit"]              = runCatching { gs.javaClass.getMethod("getPathToGit").invoke(gs)?.toString() }.getOrNull()
+                map["git.updateMethod"]           = runCatching { gs.javaClass.getMethod("getUpdateMethod").invoke(gs)?.toString() }.getOrNull()
+                map["git.syncSetting"]            = runCatching { gs.javaClass.getMethod("getSyncSetting").invoke(gs)?.toString() }.getOrNull()
+                map["git.autoFetch"]              = runCatching { gs.javaClass.getMethod("isAutoFetch").invoke(gs)?.toString() }.getOrNull()
+                map["git.autoFetchIntervalMin"]   = runCatching { gs.javaClass.getMethod("getAutoFetchSleepIntervalInMinutes").invoke(gs)?.toString() }.getOrNull()
+                map["git.signOffCommit"]          = runCatching { gs.javaClass.getMethod("isSignOffCommit").invoke(gs)?.toString() }.getOrNull()
+                map["git.commitMessageTempl"]     = runCatching { gs.javaClass.getMethod("getCommitMessageTemplate").invoke(gs)?.toString() }.getOrNull()
+            }.onFailure { map["git.error"] = it.message ?: it.toString() }
+        }
+
+        return map
+    }
+
+    private fun buildTreePath(tree: javax.swing.JTree, target: Any): javax.swing.tree.TreePath? {
+        val model = tree.model ?: return null
+        fun search(node: Any, path: List<Any>): List<Any>? {
+            if (node === target) return path + node
+            for (i in 0 until model.getChildCount(node)) {
+                val found = search(model.getChild(node, i), path + node)
+                if (found != null) return found
+            }
+            return null
+        }
+        val nodes = search(model.root, emptyList()) ?: return null
+        return javax.swing.tree.TreePath(nodes.toTypedArray())
+    }
+
+    // ── execute_ide_action ───────────────────────────────────────────────────
+
+    @McpTool(name = "execute_ide_action")
+    @McpDescription(description = """
+        Executes an IntelliJ IDE action by its action ID, opens a specific Settings page, or searches for action IDs.
+        - actionId: execute this action (e.g. "ReformatCode", "GotoFile", "Git.Branches")
+        - configurable: open Settings directly at a named page (e.g. "Gradle", "Compiler", "Editor")
+        - search: find action IDs and names matching a keyword (returns up to 30 matches)
+        Tip: use search first to discover the right action ID, then call with actionId to trigger it.
+        Common IDs: GotoFile, ReformatCode, OptimizeImports, GotoClass, FindUsages, Vcs.UpdateProject, Git.Branches
+    """)
+    suspend fun execute_ide_action(actionId: String? = null, configurable: String? = null, search: String? = null): String {
+        disabledMessage("execute_ide_action")?.let { return it }
+        val project = coroutineContext.project
+        val am = com.intellij.openapi.actionSystem.ActionManager.getInstance()
+        return when {
+            configurable != null -> {
+                val lower = configurable.lowercase()
+                // Project Structure pages (SDKs, Modules, Libraries, Artifacts…) require a different dialog
+                val isProjectStructurePage = lower in setOf("sdks", "modules", "libraries", "artifacts", "facets", "project", "problems", "global libraries")
+                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                    if (isProjectStructurePage) {
+                        // Open Project Structure dialog via its action
+                        val psAction = am.getAction("ShowProjectStructureSettings")
+                        if (psAction != null) {
+                            val frame = com.intellij.openapi.wm.WindowManager.getInstance().getFrame(project)
+                            // Start Timer BEFORE tryToExecute — tryToExecute blocks the EDT inside the modal loop
+                            // so anything after it never runs. Timer fires inside the modal secondary loop.
+                            val searchTerms = listOf(configurable, configurable.trimEnd('s'), configurable + "s")
+                            javax.swing.Timer(1000) { _ ->
+                                outer@ for (window in java.awt.Window.getWindows()) {
+                                    if (!window.isVisible) continue
+                                    val container = (window as? javax.swing.RootPaneContainer)
+                                        ?.contentPane as? javax.swing.JComponent ?: continue
+                                    for (list in UIUtil.findComponentsOfType(container, javax.swing.JList::class.java)) {
+                                        val model = list.model
+                                        for (i in 0 until model.size) {
+                                            val item = model.getElementAt(i)?.toString() ?: continue
+                                            if (searchTerms.any { item.equals(it, ignoreCase = true) }) {
+                                                list.selectedIndex = i
+                                                list.ensureIndexIsVisible(i)
+                                                list.selectionModel.setSelectionInterval(i, i)
+                                                break@outer
+                                            }
+                                        }
+                                    }
+                                }
+                            }.apply { isRepeats = false; start() }
+                            // Open dialog AFTER starting the timer
+                            am.tryToExecute(psAction, null, frame, com.intellij.openapi.actionSystem.ActionPlaces.UNKNOWN, true)
+                        }
+                    } else {
+                        // Non-PS page: delegate to Settings dialog (works for Gradle, Editor, Plugins, SSH Terminal…)
+                        com.intellij.openapi.options.ShowSettingsUtil.getInstance()
+                            .showSettingsDialog(project, configurable)
+                    }
+                }
+                if (isProjectStructurePage) "Opening Project Structure at '$configurable'"
+                else "Opening Settings searching for '$configurable'. If the wrong page opened, the name was not found — try a different spelling or use search to find the right actionId."
+            }
+            actionId != null -> {
+                val action = invokeAndWaitIfNeeded { am.getAction(actionId) }
+                    ?: return "Action '$actionId' not found. Use search parameter to find valid IDs."
+                val label = action.templatePresentation.text
+                // Use invokeLater so the EDT is free to show modal dialogs (Settings, etc.)
+                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                    val dataContext = com.intellij.openapi.actionSystem.impl.SimpleDataContext.builder()
+                        .add(com.intellij.openapi.actionSystem.CommonDataKeys.PROJECT, project)
+                        .build()
+                    @Suppress("DEPRECATION")
+                    val event = com.intellij.openapi.actionSystem.AnActionEvent.createFromDataContext(
+                        com.intellij.openapi.actionSystem.ActionPlaces.UNKNOWN,
+                        action.templatePresentation.clone(),
+                        dataContext
+                    )
+                    action.actionPerformed(event)
+                }
+                "Action '$actionId' triggered: $label"
+            }
+            search != null -> {
+                invokeAndWaitIfNeeded {
+                    val lower = search.lowercase()
+                    val matches = am.getActionIdList("")
+                        .filter { id ->
+                            id.lowercase().contains(lower) ||
+                            am.getAction(id)?.templatePresentation?.text?.lowercase()?.contains(lower) == true
+                        }
+                        .take(30)
+                        .joinToString("\n") { id ->
+                            val text = am.getAction(id)?.templatePresentation?.text?.takeIf { it.isNotBlank() }
+                            if (text != null) "$id  →  $text" else id
+                        }
+                    if (matches.isEmpty()) "No actions found matching '$search'" else matches
+                }
+            }
+            else -> "Provide 'actionId' to execute an action, or 'search' to find action IDs by keyword."
         }
     }
 

@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "1.12.0"
+version = "1.14.0"
 
 repositories {
     mavenCentral()
@@ -43,6 +43,8 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.14.0</b> — New tool: <code>execute_ide_action</code> — execute any IntelliJ action by ID, or search for action IDs by keyword. <code>get_ide_settings</code>: new <code>prefix</code> + <code>depth</code> parameters for subtree lookup; Gradle section silently skipped on non-Gradle IDEs.</li>
+                <li><b>1.13.0</b> — New tool: <code>get_ide_settings</code> — read IntelliJ settings by keyword search or direct key lookup (Gradle, SDK, compiler, encoding…).</li>
                 <li><b>1.12.0</b> — New tool: <code>get_console_output</code> — unified Run + Debug console output with active window and active tab indicated. Replaces <code>get_run_output</code> and <code>get_debug_output</code>.</li>
                 <li><b>1.11.0</b> — <code>get_services_output</code> rewrite: sessions grouped by node name (console_1, script.sql…), SQL output log, result grids with real column names, selected session/tab indicated.</li>
                 <li><b>1.10.3</b> — Marketplace overview: use h4 headers for tool groups for better spacing.</li>
