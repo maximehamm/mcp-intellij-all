@@ -28,6 +28,13 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         myState.enabledTools[toolName] = enabled
     }
 
+    // In-memory call counts — reset on every IDE restart
+    private val callCounts = mutableMapOf<String, Int>()
+
+    fun trackCall(name: String) { callCounts[name] = (callCounts[name] ?: 0) + 1 }
+    fun getCallCount(name: String): Int = callCounts[name] ?: 0
+    fun maxCallCount(): Int = callCounts.values.maxOrNull() ?: 0
+
     companion object {
 
         val TOOL_GROUPS = linkedMapOf(

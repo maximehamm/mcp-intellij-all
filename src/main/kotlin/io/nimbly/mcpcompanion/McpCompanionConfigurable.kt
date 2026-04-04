@@ -11,15 +11,22 @@ import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.dsl.builder.BottomGap
+import com.intellij.ui.dsl.builder.RightGap
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import com.intellij.util.ui.UIUtil
+import java.awt.Dimension
 import java.awt.Font
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.RenderingHints
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.awt.event.HierarchyEvent
 import javax.swing.JCheckBox
 import javax.swing.JLabel
+import javax.swing.JPanel
 import javax.swing.Timer
 
 class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
@@ -29,10 +36,54 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
     private var warningLabel: JLabel? = null
     private val refreshTimer = Timer(300) { refreshState() }
 
+    private data class UsageRow(val toolName: String, val bar: UsageBarPanel)
+    private val usageRows = mutableListOf<UsageRow>()
+
+    private inner class UsageBarPanel(val toolName: String) : JPanel() {
+        var scale: Int = 10
+        init {
+            preferredSize = Dimension(BAR_W + COUNT_W, 18)
+            isOpaque = false
+        }
+        override fun paintComponent(g: Graphics) {
+            super.paintComponent(g)
+            val settings = McpCompanionSettings.getInstance()
+            val count = settings.getCallCount(toolName)
+            val g2 = g as Graphics2D
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            val fg = UIUtil.getLabelForeground()
+            val barH = 5
+            val y = (height - barH) / 2
+            val trackW = BAR_W - 2
+            // Track
+            g2.color = java.awt.Color(fg.red, fg.green, fg.blue, 35)
+            g2.fillRoundRect(0, y, trackW, barH, barH, barH)
+            // Fill
+            if (count > 0) {
+                val fillW = ((trackW * count.toFloat()) / scale).toInt().coerceAtLeast(barH)
+                g2.color = java.awt.Color(fg.red, fg.green, fg.blue, 180)
+                g2.fillRoundRect(0, y, fillW, barH, barH, barH)
+            }
+            // Count number — left-aligned just after the track, with a small gap
+            if (count > 0) {
+                val countStr = "$count"
+                g2.font = UIUtil.getLabelFont().deriveFont(Font.PLAIN, 10f)
+                val fm = g2.fontMetrics
+                g2.color = UIUtil.getContextHelpForeground()
+                g2.drawString(countStr, BAR_W + 3, (height + fm.ascent - fm.descent) / 2)
+            }
+        }
+    }
+
     override fun createPanel(): DialogPanel {
         val settings = McpCompanionSettings.getInstance()
         toolCheckboxes.clear()
         descriptionLabels.clear()
+        usageRows.clear()
+
+        // Fixed checkbox width = widest tool name — ensures bars align across all groups
+        val longestName = McpCompanionSettings.TOOL_GROUPS.values.flatten().maxByOrNull { it.length } ?: ""
+        val maxCbWidth = JCheckBox(longestName).preferredSize.width
 
         return panel {
             row {
@@ -78,10 +129,18 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
                                     setter = { settings.setEnabled(name, it) }
                                 )
                                 .applyToComponent {
+                                    preferredSize = Dimension(maxCbWidth, preferredSize.height)
+                                    minimumSize = Dimension(maxCbWidth, minimumSize.height)
                                     toolCheckboxes.add(this)
                                     isEnabled = isMcpServerEnabled()
                                     toolTipText = tooltip
                                 }
+                                .gap(RightGap.SMALL)
+                            val bar = UsageBarPanel(name)
+                            usageRows += UsageRow(name, bar)
+                            cell(bar).applyToComponent {
+                                toolTipText = buildUsageTooltip(name)
+                            }.customize(UnscaledGaps(right = 6))
                             label("<html><font color='${UIUtil.getContextHelpForeground().toHex()}'>$shortDesc</font></html>")
                                 .applyToComponent {
                                     descriptionLabels.add(this)
@@ -124,6 +183,12 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
     }
 
     private fun java.awt.Color.toHex() = "#%02x%02x%02x".format(red, green, blue)
+
+    private fun buildUsageTooltip(toolName: String): String {
+        val count = McpCompanionSettings.getInstance().getCallCount(toolName)
+        return if (count == 0) "Not called since IDE launch"
+        else "$count call${if (count > 1) "s" else ""} since IDE launch"
+    }
 
     // ── Button actions ────────────────────────────────────────────────────────
 
@@ -196,6 +261,13 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
         val mcpEnabled = isMcpServerEnabled()
         toolCheckboxes.forEach { it.isEnabled = mcpEnabled }
         descriptionLabels.forEach { it.isEnabled = mcpEnabled }
+        val maxCalls = McpCompanionSettings.getInstance().maxCallCount()
+        val scale = if (maxCalls <= 0) 10 else ((maxCalls + 9) / 10) * 10
+        usageRows.forEach { row ->
+            row.bar.scale = scale
+            row.bar.toolTipText = buildUsageTooltip(row.toolName)
+            row.bar.repaint()
+        }
     }
 
     override fun reset() {
@@ -209,6 +281,9 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
     }
 
     companion object {
+        private const val BAR_W = 68
+        private const val COUNT_W = 26
+
         fun isMcpServerEnabled(): Boolean = try {
             val cls = Class.forName("com.intellij.mcpserver.settings.McpServerSettings")
             val instance = cls.methods.find { it.name == "getInstance" && it.parameterCount == 0 }?.invoke(null)
