@@ -33,6 +33,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_intellij_diagnostic` | One-call diagnostic: indexing status, notifications, running processes, and idea.log WARN/ERROR tail |
 | `get_running_processes` | Lists active and paused background processes in IntelliJ |
 | `manage_process` | Pauses, resumes, or cancels a background process by title |
+| `refresh_project` | Sync Gradle or Maven build system — detects the build tool automatically from the project root |
 | `execute_ide_action` | Execute any IntelliJ action by ID (e.g. ShowSettings, ReformatCode), or search for action IDs by keyword |
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
 | `delete_file` | Deletes a file from the project (undoable) |

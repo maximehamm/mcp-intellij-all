@@ -127,6 +127,8 @@ class McpCompanionToolset : McpToolset {
                                prefix + depth=1 = limit to one dot-segment beyond the prefix
 
 ### IDE actions
+- refresh_project            → sync Gradle or Maven — detects the build system automatically
+                               use after modifying build.gradle, pom.xml, or when dependencies drift
 - execute_ide_action         → execute any IntelliJ action by ID, or search for action IDs by keyword
                                search="settings" = list actions whose name/ID contains "settings"
                                actionId="ShowSettings" = open the Settings dialog
@@ -838,6 +840,56 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
             }
             else -> "Provide 'actionId' to execute an action, or 'search' to find action IDs by keyword."
         }
+    }
+
+    // ── refresh_project ──────────────────────────────────────────────────────
+
+    @McpTool(name = "refresh_project")
+    @McpDescription(description = """
+        Refreshes (reimports/syncs) the project build system configuration.
+        Automatically detects Gradle or Maven from the project root and triggers the appropriate sync action.
+        Use this after modifying build.gradle, pom.xml, settings.gradle, or when dependencies are out of sync.
+        Returns what was triggered, or an error if no build system is detected.
+    """)
+    suspend fun refresh_project(): String {
+        disabledMessage("refresh_project")?.let { return it }
+        val project = coroutineContext.project
+        val basePath = project.basePath ?: return "Cannot determine project base path"
+        val am = com.intellij.openapi.actionSystem.ActionManager.getInstance()
+
+        val rootFiles = java.io.File(basePath).listFiles()?.map { it.name } ?: emptyList()
+        val hasGradle = rootFiles.any { it in listOf("build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts") }
+        val hasMaven = "pom.xml" in rootFiles
+
+        if (!hasGradle && !hasMaven)
+            return "No Gradle or Maven build files found in project root ($basePath)"
+
+        val results = mutableListOf<String>()
+
+        fun triggerAction(actionId: String, label: String) {
+            val action = invokeAndWaitIfNeeded { am.getAction(actionId) } ?: run {
+                results += "$label: action '$actionId' not available in this IDE"
+                return
+            }
+            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                val dataContext = com.intellij.openapi.actionSystem.impl.SimpleDataContext.builder()
+                    .add(com.intellij.openapi.actionSystem.CommonDataKeys.PROJECT, project)
+                    .build()
+                @Suppress("DEPRECATION")
+                val event = com.intellij.openapi.actionSystem.AnActionEvent.createFromDataContext(
+                    com.intellij.openapi.actionSystem.ActionPlaces.UNKNOWN,
+                    action.templatePresentation.clone(),
+                    dataContext
+                )
+                action.actionPerformed(event)
+            }
+            results += "$label sync triggered"
+        }
+
+        if (hasGradle) triggerAction("ExternalSystem.RefreshAllProjects", "Gradle")
+        if (hasMaven)  triggerAction("Maven.Reimport", "Maven")
+
+        return results.joinToString("\n")
     }
 
     // ── get_console_output ───────────────────────────────────────────────────

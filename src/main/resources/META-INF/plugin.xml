@@ -8,24 +8,19 @@
         <p>
             <b>MCP Server Companion</b> extends the built-in
             <a href="https://plugins.jetbrains.com/plugin/26071-mcp-server">JetBrains MCP Server</a>
-            with additional tools for AI clients such as Claude Desktop and Cursor.
-        </p>
-        <p>
-            MCP (Model Context Protocol) is an open standard that lets AI assistants interact directly
-            with your IDE. This plugin adds tools that give your AI deeper access to your IntelliJ
-            workspace — editor state, build results, run/debug output, and live variable inspection.
+            with additional tools for AI clients such as Claude, ChatPGT, Cursor...
         </p>
         <p>
             <b>Requires:</b> the <a href="https://plugins.jetbrains.com/plugin/26071-mcp-server">JetBrains MCP Server</a>
             plugin to be installed and enabled. It is bundled in IntelliJ IDEA Ultimate 2025.1+.
-            Users of Community Edition, Android Studio, or other JetBrains IDEs can install it for free from the Marketplace.
         </p>
         <p>
             Source code and documentation: <a href="https://github.com/maximehamm/mcp-intellij-all">github.com/maximehamm/mcp-intellij-all</a>
         </p>
 
         <h3>Settings</h3>
-        <p>Each tool can be individually enabled or disabled in <b>Settings → Tools → MCP Server Companion</b>.</p>
+        <p>Each tool can be individually enabled or disabled in
+        <b>  Settings → Tools → MCP Server Companion</b>.</p>
 
         <h3>Available tools</h3>
 
@@ -68,6 +63,7 @@
         <ul>
             <li><b>get_mcp_companion_overview</b> — Describes all available MCP Companion tools and how to use them.</li>
             <li><b>get_project_structure</b> — Project SDK, modules, source roots, excluded folders, and module dependencies. All paths relative to project root.</li>
+            <li><b>refresh_project</b> — Syncs the project build system (Gradle or Maven). Detects the build system automatically from the project root.</li>
             <li><b>execute_ide_action</b> — Executes any IntelliJ action by ID (e.g. ShowSettings, ReformatCode, GotoFile), or searches for action IDs by keyword.</li>
             <li><b>replace_text_undoable</b> — Replaces text in a file via IntelliJ's document API (supports Cmd+Z undo).</li>
             <li><b>delete_file</b> — Deletes a file from the project (undoable).</li>
