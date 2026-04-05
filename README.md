@@ -119,7 +119,7 @@ Install [MCP Server](https://plugins.jetbrains.com/plugin/26071-mcp-server) from
 
 ### 2. Build and install this plugin
 
-```bash
+```
 git clone https://github.com/maximehamm/mcp-intellij-all.git
 cd mcp-intellij-all
 ./gradlew buildPlugin
@@ -144,7 +144,7 @@ Add the JetBrains MCP proxy to your AI client config (e.g. `claude_desktop_confi
 
 ## Development
 
-```bash
+```
 ./gradlew runIde              # Launch a sandbox IntelliJ with the plugin
 ./gradlew buildPlugin         # Build the distributable .zip
 ./gradlew test                # Run automated tests (headless, ~3s)
