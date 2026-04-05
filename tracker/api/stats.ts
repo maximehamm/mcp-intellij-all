@@ -1,10 +1,12 @@
-import { sql } from '@vercel/postgres';
+import { neon } from '@neondatabase/serverless';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).end();
 
-  const result = await sql`
+  const sql = neon(process.env.POSTGRES_URL!);
+
+  const rows = await sql`
     SELECT tool_name, COUNT(*)::int AS cnt
     FROM events
     GROUP BY tool_name
@@ -12,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   `;
 
   const stats: Record<string, number> = {};
-  for (const row of result.rows) {
+  for (const row of rows) {
     stats[row.tool_name] = row.cnt;
   }
 

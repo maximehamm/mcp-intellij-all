@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@vercel/postgres": "^0.10.0"
+    "@neondatabase/serverless": "^0.10.0"
   },
   "devDependencies": {
     "@vercel/node": "^3.0.0",

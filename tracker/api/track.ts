@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { neon } from '@neondatabase/serverless';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -14,6 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const version = typeof plugin_version === 'string' ? plugin_version.slice(0, 20) : 'unknown';
+  const sql = neon(process.env.POSTGRES_URL!);
 
   await sql`
     INSERT INTO events (client_id, tool_name, plugin_version, created_at)
