@@ -100,7 +100,7 @@ Each tool can be individually enabled or disabled in **Settings → Tools → MC
 
 ## Testing
 
-Headless, ~3 seconds, no sandbox needed. Run with `./gradlew test` (or `--rerun-tasks` to bypass cache and see individual test output).
+Headless, ~3 seconds, no sandbox needed.
 
 | Class | Type | What it covers |
 |-------|------|----------------|
@@ -145,9 +145,10 @@ Add the JetBrains MCP proxy to your AI client config (e.g. `claude_desktop_confi
 ## Development
 
 ```bash
-./gradlew runIde        # Launch a sandbox IntelliJ with the plugin
-./gradlew buildPlugin   # Build the distributable .zip
-./gradlew test          # Run automated tests (headless, ~3s)
+./gradlew runIde              # Launch a sandbox IntelliJ with the plugin
+./gradlew buildPlugin         # Build the distributable .zip
+./gradlew test                # Run automated tests (headless, ~3s)
+./gradlew test --rerun-tasks  # Force re-run and show individual test output
 ```
 
 ## License
