@@ -62,6 +62,7 @@ class McpCompanionToolset : McpToolset {
                            "activeWindow" tells you which window is currently visible; "active: true" marks the focused tab
 - get_services_output    → SQL output log and result grids from the Services tool window
 - get_test_results       → read test results (pass/fail/duration/message)
+- get_terminal_output    → content of all tabs in the embedded Terminal tool window
 
 ### Debug
 - debug_run_configuration    → launch a named run config in debug mode
