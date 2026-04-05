@@ -96,6 +96,9 @@ tasks {
         useJUnitPlatform()
         jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/nio-fs.jar")
     }
+    named("publishPlugin") {
+        dependsOn("test")
+    }
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
