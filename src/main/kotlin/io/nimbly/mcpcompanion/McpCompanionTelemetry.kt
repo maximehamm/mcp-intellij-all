@@ -7,7 +7,7 @@ import java.net.URL
 object McpCompanionTelemetry {
 
     // Replace with your actual Vercel deployment URL once deployed
-    private const val BASE_URL = "https://TODO_REPLACE_WITH_YOUR_VERCEL_URL"
+    private const val BASE_URL = "https://mcp-intellij-g23v4uokg-maxime-hamm-projects.vercel.app"
     private const val TRACK_URL = "$BASE_URL/api/track"
     const val STATS_URL = "$BASE_URL/api/stats"
 
