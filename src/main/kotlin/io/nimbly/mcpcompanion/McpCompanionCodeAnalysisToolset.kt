@@ -1,7 +1,9 @@
 package io.nimbly.mcpcompanion
 
-import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
+import com.intellij.codeInsight.daemon.impl.HighlightInfo
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.editor.impl.DocumentMarkupModel
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
@@ -82,9 +84,11 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
             files.flatMap { (relPath, vFile) ->
                 val document = FileDocumentManager.getInstance().getDocument(vFile)
                     ?: return@flatMap emptyList()
-                @Suppress("UnstableApiUsage")
-                DaemonCodeAnalyzerImpl.getHighlights(document, minSeverity, project)
-                    .filter { !it.description.isNullOrBlank() }
+                val markupModel = DocumentMarkupModel.forDocument(document, project, false)
+                    ?: return@flatMap emptyList()
+                markupModel.allHighlighters
+                    .mapNotNull { it.errorStripeTooltip as? HighlightInfo }
+                    .filter { it.severity >= minSeverity && !it.description.isNullOrBlank() }
                     .map { info ->
                         val line = document.getLineNumber(info.startOffset) + 1
                         val col  = info.startOffset - document.getLineStartOffset(line - 1) + 1
@@ -131,7 +135,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         // Check if the daemon is still running — if so, highlights (and fixes) are not ready yet
         val daemonRunning = runReadAction {
             runCatching {
-                val daemon = DaemonCodeAnalyzerImpl.getInstance(project)
+                val daemon = DaemonCodeAnalyzer.getInstance(project)
                 daemon.javaClass.getMethod("isRunning").invoke(daemon) as? Boolean ?: false
             }.getOrDefault(false)
         }
@@ -145,9 +149,11 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         val offset    = (lineStart + column - 1).coerceIn(lineStart, document.getLineEndOffset(line - 1))
 
         val highlights = runReadAction {
-            @Suppress("UnstableApiUsage")
-            DaemonCodeAnalyzerImpl.getHighlights(document, HighlightSeverity.INFORMATION, project)
-                .filter { it.startOffset <= offset && it.endOffset >= offset }
+            val markupModel = DocumentMarkupModel.forDocument(document, project, false)
+            markupModel?.allHighlighters
+                ?.mapNotNull { it.errorStripeTooltip as? HighlightInfo }
+                ?.filter { it.severity >= HighlightSeverity.INFORMATION && it.startOffset <= offset && it.endOffset >= offset }
+                ?: emptyList()
         }
         if (highlights.isEmpty()) return "No quick fixes found at $filePath:$line:$column"
 
