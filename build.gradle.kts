@@ -26,11 +26,13 @@ dependencies {
     intellijPlatform {
         local("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app")
         bundledPlugin("com.intellij.mcpServer")
+        testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
+    testImplementation("junit:junit:4.13.2")
     compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
 testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.ide.impl.jar"))
     testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.core.impl.jar"))

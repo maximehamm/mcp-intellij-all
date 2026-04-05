@@ -44,7 +44,7 @@ class McpCompanionEditorToolset : McpToolset {
         return Json.encodeToString(state)
     }
 
-    private fun buildEditorState(project: com.intellij.openapi.project.Project): EditorState {
+    internal fun buildEditorState(project: com.intellij.openapi.project.Project): EditorState {
         val fem = FileEditorManager.getInstance(project)
         val openFiles = fem.openFiles.map { it.path }
         val focusedEditor = fem.selectedTextEditor?.let { editor ->

@@ -228,7 +228,7 @@ class McpCompanionDebugToolset : McpToolset {
         return "Debug session started for '$configurationName'. Use get_debug_variables to inspect variables if stopped at a breakpoint."
     }
 
-    private fun resolveDebugVariable(name: String, xValue: XValue): DebugVariable {
+    internal fun resolveDebugVariable(name: String, xValue: XValue): DebugVariable {
         var type: String? = null
         var value: String? = null
         val latch = CountDownLatch(1)

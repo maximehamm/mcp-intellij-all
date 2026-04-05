@@ -39,7 +39,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         return null
     }
 
-    private fun relativize(basePath: String, path: String): String =
+    internal fun relativize(basePath: String, path: String): String =
         if (basePath.isNotEmpty() && path.startsWith(basePath))
             path.removePrefix(basePath).trimStart('/')
         else path
