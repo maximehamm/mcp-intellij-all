@@ -97,6 +97,10 @@
 
     <extensions defaultExtensionNs="com.intellij.mcpServer">
         <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionToolset"/>
+        <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionEditorToolset"/>
+        <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionBuildToolset"/>
+        <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionDebugToolset"/>
+        <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionDiagnosticToolset"/>
         <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionCodeAnalysisToolset"/>
     </extensions>
 </idea-plugin>

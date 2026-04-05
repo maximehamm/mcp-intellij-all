@@ -163,7 +163,7 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
     // ── Descriptions via reflection on @McpDescription ───────────────────────
 
     private fun rawDescription(toolName: String): String? = try {
-        val toolsetClasses = listOf(McpCompanionToolset::class.java, McpCompanionCodeAnalysisToolset::class.java)
+        val toolsetClasses = listOf(McpCompanionToolset::class.java, McpCompanionEditorToolset::class.java, McpCompanionBuildToolset::class.java, McpCompanionDebugToolset::class.java, McpCompanionDiagnosticToolset::class.java, McpCompanionCodeAnalysisToolset::class.java)
         toolsetClasses.firstNotNullOfOrNull { cls ->
             cls.methods
                 .find { it.getAnnotation(McpTool::class.java)?.name == toolName }
