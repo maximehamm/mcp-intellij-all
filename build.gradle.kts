@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "2.2.0"
+version = "2.3.0"
 
 repositories {
     mavenCentral()
@@ -45,6 +45,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>2.3.0</b> — New tool: <code>send_to_terminal</code> — executes a shell command in the embedded Terminal (disabled by default). <code>send_to_terminal</code> and <code>delete_file</code> are now disabled by default for safety; disabled-by-default tools show a clear message asking the user to enable them in Settings. Reflection tests added for <code>TerminalViewImpl.createSendTextBuilder()</code> and <code>doSendText()</code>.</li>
                 <li><b>2.2.0</b> — New tool: <code>get_terminal_output</code> — returns the visible content of all tabs in the embedded Terminal tool window.</li>
                 <li><b>2.1.0</b> — Test suite: 44 automated headless tests covering all toolsets. New <code>SandboxToolsHeadlessTest</code> covers previously manual-only tools (get_ide_settings, get_intellij_diagnostic, execute_ide_action, get_build_output, get_test_results, debug_run_configuration, get_debug_variables, refresh_project). README updated with test markers (🔬 / ⚠️) and light/heavy test classification.</li>
                 <li><b>2.0.0</b> — Major refactoring: plugin split into 6 focused toolset classes (Editor, Build, Debug, Diagnostic, CodeAnalysis, General) for better maintainability. No functional changes — all 29 tools remain identical.</li>

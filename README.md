@@ -23,10 +23,11 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | Tool | Description |
 |------|-------------|
 | `get_build_output` 🔬 | Build tool window: structured error tree with file/line numbers + console text |
-| `get_console_output` ⚠️ | Console output from both Run and Debug tool windows, with active window and tab indicated |
+| `get_console_output` 🔬 | Console output from both Run and Debug tool windows, with active window and tab indicated |
 | `get_services_output` ⚠️ | Services tool window sessions: SQL output log, result grids, active session/tab indicated |
 | `get_test_results` 🔬 | Last test run results: passed/failed/ignored status, duration, and failure messages |
-| `get_terminal_output` ⚠️ | Content of all tabs in the embedded Terminal tool window |
+| `get_terminal_output` 🔬 | Content of all tabs in the embedded Terminal tool window |
+| `send_to_terminal` 🔬 🔒 | Send a command to a terminal tab and execute it |
 
 ### Debug
 | Tool | Description |
@@ -60,9 +61,9 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_mcp_companion_overview` | Describes all available MCP Companion tools and how to use them |
 | `execute_ide_action` 🔬 | Execute any IntelliJ action by ID (e.g. ShowSettings, ReformatCode), or search for action IDs by keyword |
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
-| `delete_file` | Deletes a file from the project (undoable) |
+| `delete_file` 🔒 | Deletes a file from the project (undoable) |
 
-> 🔬 Core logic covered by headless tests. ⚠️ No automated test coverage.
+> 🔬 Core logic covered by headless tests. ⚠️ No automated test coverage. 🔒 Disabled by default — enable in Settings → Tools → MCP Server Companion.
 
 ## Settings
 
@@ -105,10 +106,10 @@ Headless, ~3 seconds, no sandbox needed.
 
 | Class | Type | What it covers |
 |-------|------|----------------|
-| `ReflectionApiTest` | light | Verifies every reflection call in the plugin still resolves against the current IntelliJ JARs (CoreProgressManager, TaskInfo, McpToolset, McpServerSettings…) |
+| `ReflectionApiTest` | light | Verifies every reflection call still resolves against current IntelliJ JARs: `CoreProgressManager`, `TaskInfo`, `McpToolset`, `McpServerSettings`, `TerminalViewImpl.createSendTextBuilder/doSendText`, `TerminalSendTextOptions` constructor |
 | `CodeAnalysisReflectionTest` | light | Verifies `HighlightInfo.offsetStore`, `getIntentionActionDescriptors`, `DocumentMarkupModel.forDocument`, `DaemonCodeAnalyzer.isRunning` |
 | `ToolsetIntegrationTest` | heavy | `BasePlatformTestCase` tests in a headless IntelliJ — real PSI, real editor, real breakpoint manager. Covers: `get_open_editors`, caret/selection, highlight/clear, `relativize`, markup model, `replace_text_undoable`, `delete_file`, add/mute/condition breakpoints, `collectRunningProcesses` |
-| `SandboxToolsHeadlessTest` | heavy | Headless coverage for tools marked 🔬: `get_ide_settings`, `get_intellij_diagnostic` components (DumbService, notifications), `execute_ide_action` (ActionManager search), build tree parsing, `SMTestProxy` status mapping, `RunManager` lookup, and graceful fallbacks when tool windows are absent |
+| `SandboxToolsHeadlessTest` | heavy | Headless coverage for tools marked 🔬: `get_ide_settings`, `get_intellij_diagnostic` components, `execute_ide_action`, build tree parsing, `SMTestProxy` status mapping, `RunManager`, `get_console_output` structure (empty run/debug in headless), `get_terminal_output` fallback, `send_to_terminal` fallback + disabled-by-default behavior |
 
 Tools marked ⚠️ in the tables above have no automated test coverage and must be tested manually via `runIde` + curl SSE (see `CLAUDE.md`).
 

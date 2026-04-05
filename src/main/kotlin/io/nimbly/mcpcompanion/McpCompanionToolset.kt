@@ -22,8 +22,12 @@ class McpCompanionToolset : McpToolset {
     override fun isEnabled(): Boolean = true
 
     private fun disabledMessage(toolName: String): String? {
-        if (!McpCompanionSettings.getInstance().isEnabled(toolName))
-            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
+        if (!McpCompanionSettings.getInstance().isEnabled(toolName)) {
+            val extra = if (toolName in McpCompanionSettings.DISABLED_BY_DEFAULT)
+                " This tool is disabled by default for safety reasons. Ask the user to enable it first."
+            else ""
+            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
+        }
         McpCompanionSettings.getInstance().trackCall(toolName)
         return null
     }
@@ -63,6 +67,7 @@ class McpCompanionToolset : McpToolset {
 - get_services_output    → SQL output log and result grids from the Services tool window
 - get_test_results       → read test results (pass/fail/duration/message)
 - get_terminal_output    → content of all tabs in the embedded Terminal tool window
+- send_to_terminal       → send a command to a terminal tab and execute it (follow with get_terminal_output to read the result)
 
 ### Debug
 - debug_run_configuration    → launch a named run config in debug mode

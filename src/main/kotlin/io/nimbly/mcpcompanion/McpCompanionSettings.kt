@@ -22,7 +22,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     override fun getState(): State = myState
     override fun loadState(state: State) { myState = state }
 
-    fun isEnabled(toolName: String): Boolean = myState.enabledTools.getOrDefault(toolName, true)
+    fun isEnabled(toolName: String): Boolean = myState.enabledTools.getOrDefault(toolName, toolName !in DISABLED_BY_DEFAULT)
 
     fun setEnabled(toolName: String, enabled: Boolean) {
         myState.enabledTools[toolName] = enabled
@@ -37,12 +37,15 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
     companion object {
 
+        /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
+        val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file")
+
         val TOOL_GROUPS = linkedMapOf(
             "Editor & Navigation" to listOf(
                 "get_open_editors", "navigate_to", "select_text", "highlight_text", "clear_highlights"
             ),
             "Build & Tests" to listOf(
-                "get_build_output", "get_console_output", "get_services_output", "get_test_results", "get_terminal_output"
+                "get_build_output", "get_console_output", "get_services_output", "get_test_results", "get_terminal_output", "send_to_terminal"
             ),
             "Debug" to listOf(
                 "debug_run_configuration", "get_debug_variables",

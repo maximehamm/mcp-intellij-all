@@ -168,6 +168,79 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         assertNotNull("Error message should be present", node.errorMessage)
     }
 
+    // ── get_console_output ────────────────────────────────────────────────────
+
+    fun `test get_console_output returns valid structure when no Run or Debug window`() {
+        val result = invokeAndWaitIfNeeded {
+            McpCompanionBuildToolset().extractConsoleOutput(project)
+        }
+        println("  activeWindow = ${result.activeWindow}")
+        println("  run tabs     = ${result.run.size}")
+        println("  debug tabs   = ${result.debug.size}")
+        // In headless: no Run/Debug tool windows → both lists empty, activeWindow null
+        assertNull("activeWindow should be null when no window is visible", result.activeWindow)
+        assertNotNull("run list should not be null", result.run)
+        assertNotNull("debug list should not be null", result.debug)
+        // No active run/debug session → both empty
+        assertTrue("run tabs should be empty in headless", result.run.isEmpty())
+        assertTrue("debug tabs should be empty in headless", result.debug.isEmpty())
+    }
+
+    // ── get_terminal_output ───────────────────────────────────────────────────
+
+    fun `test get_terminal_output graceful fallback when Terminal window absent`() {
+        val result = invokeAndWaitIfNeeded {
+            McpCompanionBuildToolset().extractTerminalTabs(project)
+        }
+        println("  result = '$result'")
+        // In headless there is no Terminal tool window — should return an error string, not throw
+        assertNotNull("Should return a non-null result", result)
+        assertTrue("Should contain 'not found' or tab list",
+            result.contains("not found", ignoreCase = true) || result.startsWith("{"))
+    }
+
+    // ── send_to_terminal ──────────────────────────────────────────────────────
+
+    fun `test send_to_terminal graceful fallback when Terminal window absent`() {
+        val settings = McpCompanionSettings.getInstance()
+        settings.setEnabled("send_to_terminal", true)
+        try {
+            val result = invokeAndWaitIfNeeded {
+                McpCompanionBuildToolset().sendToTerminalImpl(project, "pwd", null)
+            }
+            println("  result = '$result'")
+            assertTrue("Should return 'not found' error when no terminal window",
+                result.contains("not found", ignoreCase = true) || result == "Command sent to terminal")
+        } finally {
+            settings.setEnabled("send_to_terminal", false)
+        }
+    }
+
+    // ── send_to_terminal disabled-by-default ──────────────────────────────────
+
+    fun `test send_to_terminal is disabled by default`() {
+        assertTrue("send_to_terminal should be in DISABLED_BY_DEFAULT",
+            "send_to_terminal" in McpCompanionSettings.DISABLED_BY_DEFAULT)
+        val enabled = McpCompanionSettings.getInstance().isEnabled("send_to_terminal")
+        println("  send_to_terminal enabled = $enabled")
+        assertFalse("send_to_terminal should be disabled by default", enabled)
+    }
+
+    fun `test delete_file is disabled by default`() {
+        assertTrue("delete_file should be in DISABLED_BY_DEFAULT",
+            "delete_file" in McpCompanionSettings.DISABLED_BY_DEFAULT)
+        assertFalse("delete_file should be disabled by default",
+            McpCompanionSettings.getInstance().isEnabled("delete_file"))
+    }
+
+    fun `test regular tools are enabled by default`() {
+        for (tool in listOf("get_open_editors", "get_build_output", "get_terminal_output", "get_intellij_diagnostic")) {
+            val enabled = McpCompanionSettings.getInstance().isEnabled(tool)
+            println("  $tool enabled = $enabled")
+            assertTrue("$tool should be enabled by default", enabled)
+        }
+    }
+
     // ── refresh_project ───────────────────────────────────────────────────────
 
     fun `test refresh_project detects no build files in headless project`() {

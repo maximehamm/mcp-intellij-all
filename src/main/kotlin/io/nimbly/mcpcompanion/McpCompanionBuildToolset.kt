@@ -27,8 +27,12 @@ class McpCompanionBuildToolset : McpToolset {
     override fun isEnabled(): Boolean = true
 
     private fun disabledMessage(toolName: String): String? {
-        if (!McpCompanionSettings.getInstance().isEnabled(toolName))
-            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
+        if (!McpCompanionSettings.getInstance().isEnabled(toolName)) {
+            val extra = if (toolName in McpCompanionSettings.DISABLED_BY_DEFAULT)
+                " This tool is disabled by default for safety reasons. Ask the user to enable it first."
+            else ""
+            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
+        }
         McpCompanionSettings.getInstance().trackCall(toolName)
         return null
     }
@@ -392,56 +396,58 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_console_output(): String {
         disabledMessage("get_console_output")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
-            val runWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
-            val debugWindow = ToolWindowManager.getInstance(project).getToolWindow("Debug")
+        return invokeAndWaitIfNeeded { Json.encodeToString(extractConsoleOutput(project)) }
+    }
 
-            val runVisible = runWindow?.isVisible == true
-            val debugVisible = debugWindow?.isVisible == true
-            val activeWindow: String? = when {
-                debugVisible && !runVisible -> "debug"
-                runVisible && !debugVisible -> "run"
-                debugVisible && runVisible ->
-                    if (XDebuggerManager.getInstance(project).debugSessions.isNotEmpty()) "debug" else "run"
-                else -> null
-            }
+    internal fun extractConsoleOutput(project: com.intellij.openapi.project.Project): ConsoleOutput {
+        val runWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
+        val debugWindow = ToolWindowManager.getInstance(project).getToolWindow("Debug")
 
-            val selectedRunContent = runWindow?.contentManager?.selectedContent
-            val runTabs = runWindow?.contentManager?.contents?.map { content ->
-                val trees = UIUtil.findComponentsOfType(content.component, JTree::class.java)
-                val treeNodes = trees.firstOrNull()?.model?.let { buildBuildNodes(it, it.root) }
-                val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-                val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
-                    .joinToString("\n---\n").ifEmpty { null }
-                ConsoleTab(
-                    name = content.displayName ?: "Run",
-                    active = content === selectedRunContent,
-                    tree = treeNodes?.ifEmpty { null },
-                    console = consoleText
-                )
-            } ?: emptyList()
+        val runVisible = runWindow?.isVisible == true
+        val debugVisible = debugWindow?.isVisible == true
+        val activeWindow: String? = when {
+            debugVisible && !runVisible -> "debug"
+            runVisible && !debugVisible -> "run"
+            debugVisible && runVisible ->
+                if (XDebuggerManager.getInstance(project).debugSessions.isNotEmpty()) "debug" else "run"
+            else -> null
+        }
 
-            val activeSessions = XDebuggerManager.getInstance(project).debugSessions
-            val sessionByName = activeSessions.associateBy { it.sessionName }
-            val selectedDebugContent = debugWindow?.contentManager?.selectedContent
-            val debugTabs = debugWindow?.contentManager?.contents?.map { content ->
-                val name = content.displayName ?: "Debug"
-                val session = sessionByName[name]
-                val consoleFromSession = session?.consoleView?.let { cv ->
-                    (cv as? ConsoleViewImpl)?.readText()
-                        ?: UIUtil.findComponentsOfType(cv.component, ConsoleViewImpl::class.java)
-                            .mapNotNull { it.readText()?.ifEmpty { null } }
-                            .joinToString("\n---\n").ifEmpty { null }
-                }
-                val consoleText = consoleFromSession
-                    ?: UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
+        val selectedRunContent = runWindow?.contentManager?.selectedContent
+        val runTabs = runWindow?.contentManager?.contents?.map { content ->
+            val trees = UIUtil.findComponentsOfType(content.component, JTree::class.java)
+            val treeNodes = trees.firstOrNull()?.model?.let { buildBuildNodes(it, it.root) }
+            val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
+            val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
+                .joinToString("\n---\n").ifEmpty { null }
+            ConsoleTab(
+                name = content.displayName ?: "Run",
+                active = content === selectedRunContent,
+                tree = treeNodes?.ifEmpty { null },
+                console = consoleText
+            )
+        } ?: emptyList()
+
+        val activeSessions = XDebuggerManager.getInstance(project).debugSessions
+        val sessionByName = activeSessions.associateBy { it.sessionName }
+        val selectedDebugContent = debugWindow?.contentManager?.selectedContent
+        val debugTabs = debugWindow?.contentManager?.contents?.map { content ->
+            val name = content.displayName ?: "Debug"
+            val session = sessionByName[name]
+            val consoleFromSession = session?.consoleView?.let { cv ->
+                (cv as? ConsoleViewImpl)?.readText()
+                    ?: UIUtil.findComponentsOfType(cv.component, ConsoleViewImpl::class.java)
                         .mapNotNull { it.readText()?.ifEmpty { null } }
                         .joinToString("\n---\n").ifEmpty { null }
-                ConsoleTab(name = name, active = content === selectedDebugContent, console = consoleText)
-            } ?: emptyList()
+            }
+            val consoleText = consoleFromSession
+                ?: UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
+                    .mapNotNull { it.readText()?.ifEmpty { null } }
+                    .joinToString("\n---\n").ifEmpty { null }
+            ConsoleTab(name = name, active = content === selectedDebugContent, console = consoleText)
+        } ?: emptyList()
 
-            Json.encodeToString(ConsoleOutput(activeWindow = activeWindow, run = runTabs, debug = debugTabs))
-        }
+        return ConsoleOutput(activeWindow = activeWindow, run = runTabs, debug = debugTabs)
     }
 
     // ── get_test_results ──────────────────────────────────────────────────────
@@ -510,23 +516,218 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_terminal_output(): String {
         disabledMessage("get_terminal_output")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
-            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
-                ?: return@invokeAndWaitIfNeeded "Terminal tool window not found"
-            val selectedContent = toolWindow.contentManager.selectedContent
-            val tabs = toolWindow.contentManager.contents.mapNotNull { content ->
-                val name = content.displayName ?: "Terminal"
-                val component = content.component as? javax.swing.JComponent ?: return@mapNotNull null
-                val isActive = content === selectedContent
-                // New block terminal: editor-backed output
-                val text = readEditorText(component)
-                // Fallback: classic JediTerm shell widget
-                    ?: readJediTermText(component)
-                TerminalTab(name = name, active = isActive, output = text)
-            }
-            if (tabs.isEmpty()) "No terminal tabs found"
-            else Json.encodeToString(TerminalOutput(tabs))
+        return invokeAndWaitIfNeeded { extractTerminalTabs(project) }
+    }
+
+    internal fun extractTerminalTabs(project: com.intellij.openapi.project.Project): String {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
+            ?: return "Terminal tool window not found"
+        val selectedContent = toolWindow.contentManager.selectedContent
+        val tabs = toolWindow.contentManager.contents.mapNotNull { content ->
+            val name = content.displayName ?: "Terminal"
+            val component = content.component as? javax.swing.JComponent ?: return@mapNotNull null
+            val isActive = content === selectedContent
+            val text = readEditorText(component) ?: readJediTermText(component)
+            TerminalTab(name = name, active = isActive, output = text)
         }
+        return if (tabs.isEmpty()) "No terminal tabs found"
+        else Json.encodeToString(TerminalOutput(tabs))
+    }
+
+    // ── send_to_terminal ──────────────────────────────────────────────────────
+
+    @McpTool(name = "send_to_terminal")
+    @McpDescription(description = """
+        Sends a command to the embedded Terminal tool window and executes it (presses Enter).
+        Parameters:
+        - command: the shell command to run (e.g. "ls -la", "gradle test")
+        - tab: optional tab name to target; defaults to the currently active tab
+        Use get_terminal_output afterwards to read the result.
+    """)
+    suspend fun send_to_terminal(command: String, tab: String? = null): String {
+        disabledMessage("send_to_terminal")?.let { return it }
+        val project = coroutineContext.project
+        return invokeAndWaitIfNeeded { sendToTerminalImpl(project, command, tab) }
+    }
+
+    internal fun sendToTerminalImpl(project: com.intellij.openapi.project.Project, command: String, tab: String?): String {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
+            ?: return "Terminal tool window not found"
+        val content = if (tab != null)
+            toolWindow.contentManager.contents.firstOrNull { it.displayName == tab }
+                ?: return "Terminal tab '$tab' not found"
+        else
+            toolWindow.contentManager.selectedContent
+                ?: toolWindow.contentManager.contents.firstOrNull()
+                ?: return "No terminal tab available"
+        // Strategy 1: get TerminalWidget via TerminalView.WIDGET_KEY stored on Content
+        val widget = getTerminalWidget(content)
+        if (widget != null) {
+            val result = invokeTerminalSendCommand(widget, command)
+            if (result != null) return result
+        }
+        // Strategy 2..N: scan component tree
+        val component = content.component as? javax.swing.JComponent
+            ?: return "Terminal component not accessible"
+        return sendTerminalCommand(component, project, command)
+    }
+
+    /** Retrieve the terminal widget stored by the Terminal plugin on a Content via TerminalView.WIDGET_KEY. */
+    private fun getTerminalWidget(content: com.intellij.ui.content.Content): Any? = runCatching {
+        val termViewCls = Class.forName("org.jetbrains.plugins.terminal.TerminalView")
+        val keyField = (termViewCls.declaredFields + termViewCls.fields)
+            .find { it.name == "WIDGET_KEY" } ?: return@runCatching null
+        keyField.isAccessible = true
+        val key = keyField.get(null) as? com.intellij.openapi.util.Key<*> ?: return@runCatching null
+        @Suppress("UNCHECKED_CAST")
+        content.getUserData(key as com.intellij.openapi.util.Key<Any>)
+    }.getOrNull()
+
+    /** Call executeCommand or sendCommandToExecute on any object that exposes it. */
+    private fun invokeTerminalSendCommand(widget: Any, command: String): String? {
+        val method = generateSequence(widget.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() + it.methods.asSequence() }
+            .find { (it.name == "executeCommand" || it.name == "sendCommandToExecute")
+                && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java }
+            ?: return null
+        return runCatching {
+            method.isAccessible = true
+            method.invoke(widget, command)
+            "Command sent to terminal"
+        }.getOrNull()
+    }
+
+    private fun sendTerminalCommand(component: javax.swing.JComponent, project: com.intellij.openapi.project.Project, command: String): String {
+        // Strategy 2: TerminalViewImpl.createSendTextBuilder() — new frontend terminal (2024.2+)
+        runCatching {
+            val termPanelCls = Class.forName("com.intellij.terminal.frontend.view.impl.TerminalViewImpl\$TerminalPanel")
+            val termPanel = UIUtil.findComponentsOfType(component, termPanelCls as Class<javax.swing.JComponent>).firstOrNull()
+            if (termPanel != null) {
+                val outerField = termPanel.javaClass.declaredFields.find { it.name.startsWith("this$") }
+                outerField?.isAccessible = true
+                val termViewImpl = outerField?.get(termPanel)
+                if (termViewImpl != null) {
+                    val result = sendViaTerminalViewImpl(termViewImpl, command)
+                    if (result != null) return result
+                }
+            }
+        }
+        // Strategy 3: scan component tree for executeCommand/sendCommandToExecute on any AWT component
+        val hit = findComponentWithTerminalMethod(component)
+        if (hit != null) {
+            val (target, method) = hit
+            runCatching {
+                method.isAccessible = true
+                method.invoke(target, command)
+                return "Command sent to terminal"
+            }.onFailure { e ->
+                return "Found method ${method.name} but invocation failed: ${e.message}"
+            }
+        }
+        // Strategy 3: new block terminal — find the writable input EditorEx, set text, dispatch Enter
+        runCatching {
+            val compCls = Class.forName("com.intellij.openapi.editor.impl.EditorComponentImpl")
+            val editorComps = UIUtil.findComponentsOfType(component, compCls as Class<javax.swing.JComponent>)
+            for (editorComp in editorComps) {
+                val editorField = generateSequence(editorComp.javaClass as Class<*>?) { it.superclass }
+                    .flatMap { it.declaredFields.asSequence() }
+                    .find { it.name == "myEditor" || it.name == "editor" } ?: continue
+                editorField.isAccessible = true
+                val editor = editorField.get(editorComp) as? com.intellij.openapi.editor.Editor ?: continue
+                if (editor.isViewer || !editor.document.isWritable) continue
+                com.intellij.openapi.application.ApplicationManager.getApplication().runWriteAction {
+                    editor.document.setText(command)
+                }
+                val contentComp = editor.contentComponent
+                contentComp.requestFocusInWindow()
+                val enterEvent = java.awt.event.KeyEvent(
+                    contentComp, java.awt.event.KeyEvent.KEY_PRESSED,
+                    System.currentTimeMillis(), 0,
+                    java.awt.event.KeyEvent.VK_ENTER, java.awt.event.KeyEvent.CHAR_UNDEFINED
+                )
+                java.awt.Toolkit.getDefaultToolkit().systemEventQueue.postEvent(enterEvent)
+                return "Command sent to terminal"
+            }
+        }
+        // Strategy 4: TtyConnector.write — scan tree for any component with getTtyConnector()
+        val tty = findTtyConnector(component)
+        if (tty != null) {
+            runCatching {
+                val write = generateSequence(tty.javaClass as Class<*>?) { it.superclass }
+                    .flatMap { it.methods.asSequence() }
+                    .find { it.name == "write" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java }
+                if (write != null) {
+                    write.invoke(tty, command + "\n")
+                    return "Command sent to terminal"
+                }
+            }
+        }
+        return "Could not find a way to send command to this terminal type"
+    }
+
+    private fun findTtyConnector(root: java.awt.Component): Any? {
+        fun scan(comp: java.awt.Component): Any? {
+            val method = generateSequence(comp.javaClass as Class<*>?) { it.superclass }
+                .flatMap { it.methods.asSequence() }
+                .find { it.name == "getTtyConnector" && it.parameterCount == 0 }
+            if (method != null) return runCatching { method.invoke(comp) }.getOrNull()
+            if (comp is java.awt.Container) { for (child in comp.components) { scan(child)?.let { return it } } }
+            return null
+        }
+        return scan(root)
+    }
+
+    /**
+     * Send command via TerminalViewImpl.doSendText() — new frontend terminal (IntelliJ 2024.2+).
+     * Constructs TerminalSendTextOptions directly (no builder) to avoid setText() side-effects.
+     * Returns success message or null if the API is not available.
+     */
+    private fun sendViaTerminalViewImpl(termViewImpl: Any, command: String): String? {
+        // Find doSendText(TerminalSendTextOptions) on TerminalViewImpl
+        val doSendText = generateSequence(termViewImpl.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .find { it.name == "doSendText" && it.parameterCount == 1 }
+            ?: return null
+        doSendText.isAccessible = true
+        val optsCls = doSendText.parameterTypes[0]
+        // Construct TerminalSendTextOptions: first String param = command+"\n", Booleans = true, Ints = 0
+        val ctor = optsCls.constructors
+            .sortedBy { it.parameterCount }
+            .find { it.parameterTypes.isNotEmpty() && it.parameterTypes[0] == String::class.java }
+            ?: return null
+        return runCatching {
+            ctor.isAccessible = true
+            val args = Array(ctor.parameterCount) { i ->
+                val type = ctor.parameterTypes[i]
+                when {
+                    i == 0 -> command
+                    type == Boolean::class.javaPrimitiveType || type == Boolean::class.javaObjectType -> true
+                    type == Int::class.javaPrimitiveType || type == Int::class.javaObjectType -> 0
+                    else -> null
+                }
+            }
+            val opts = ctor.newInstance(*args)
+            doSendText.invoke(termViewImpl, opts)
+            "Command sent to terminal"
+        }.getOrNull()
+    }
+
+    /** Depth-first scan of the component tree for any component with executeCommand or sendCommandToExecute(String). */
+    private fun findComponentWithTerminalMethod(root: java.awt.Component): Pair<Any, java.lang.reflect.Method>? {
+        val targetNames = setOf("executeCommand", "sendCommandToExecute")
+        fun scan(comp: java.awt.Component): Pair<Any, java.lang.reflect.Method>? {
+            val method = generateSequence(comp.javaClass as Class<*>?) { it.superclass }
+                .flatMap { it.declaredMethods.asSequence() }
+                .find { it.name in targetNames && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java }
+            if (method != null) return comp to method
+            if (comp is java.awt.Container) {
+                for (child in comp.components) {
+                    scan(child)?.let { return it }
+                }
+            }
+            return null
+        }
+        return scan(root)
     }
 
     private fun readJediTermText(component: javax.swing.JComponent): String? = try {
