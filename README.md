@@ -61,7 +61,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
 | `delete_file` | Deletes a file from the project (undoable) |
 
-> Tools marked ⚠️ require a running IDE sandbox and cannot be covered by automated tests (`./gradlew test`).
+> Tools marked ⚠️ require a running IDE sandbox and cannot be covered by automated tests.
 
 ## Settings
 
