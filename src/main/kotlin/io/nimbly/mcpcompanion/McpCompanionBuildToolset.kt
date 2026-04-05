@@ -50,7 +50,7 @@ class McpCompanionBuildToolset : McpToolset {
         return Json.encodeToString(BuildOutput(tabs))
     }
 
-    private fun extractBuildTabs(project: com.intellij.openapi.project.Project): List<BuildTab> {
+    internal fun extractBuildTabs(project: com.intellij.openapi.project.Project): List<BuildTab> {
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Build")
             ?: return listOf(BuildTab(name = "error", tree = null, console = "Build tool window not found"))
         return toolWindow.contentManager.contents.map { content ->
@@ -68,7 +68,7 @@ class McpCompanionBuildToolset : McpToolset {
         }
     }
 
-    private fun buildBuildNodes(model: TreeModel, node: Any): List<BuildNode> {
+    internal fun buildBuildNodes(model: TreeModel, node: Any): List<BuildNode> {
         val result = mutableListOf<BuildNode>()
         val childCount = model.getChildCount(node)
         for (i in 0 until childCount) result.add(toBuildNode(model, model.getChild(node, i)))
@@ -462,7 +462,7 @@ class McpCompanionBuildToolset : McpToolset {
         return Json.encodeToString(output)
     }
 
-    private fun extractTestResults(project: com.intellij.openapi.project.Project): TestRunOutput {
+    internal fun extractTestResults(project: com.intellij.openapi.project.Project): TestRunOutput {
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
             ?: return TestRunOutput(runs = emptyList(), error = "Run tool window not found")
         val runs = toolWindow.contentManager.contents.mapNotNull { content ->
@@ -478,7 +478,7 @@ class McpCompanionBuildToolset : McpToolset {
         return TestRunOutput(runs = runs)
     }
 
-    private fun buildTestNode(proxy: SMTestProxy): TestNode {
+    internal fun buildTestNode(proxy: SMTestProxy): TestNode {
         val status = when {
             proxy.isPassed  -> "PASSED"
             proxy.isDefect  -> "FAILED"

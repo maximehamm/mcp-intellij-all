@@ -72,7 +72,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
         }
     }
 
-    private fun knownIdeSettings(project: com.intellij.openapi.project.Project): Map<String, String?> {
+    internal fun knownIdeSettings(project: com.intellij.openapi.project.Project): Map<String, String?> {
         val map = linkedMapOf<String, String?>()
 
         map["project.name"]     = project.name
