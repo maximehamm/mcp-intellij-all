@@ -95,6 +95,9 @@ tasks {
     test {
         useJUnitPlatform()
         jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/nio-fs.jar")
+        testLogging {
+            events("passed", "skipped", "failed")
+        }
     }
     named("publishPlugin") {
         dependsOn("test")
