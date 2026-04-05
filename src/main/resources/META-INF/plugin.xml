@@ -27,6 +27,8 @@
         <h4>Editor &amp; Navigation</h4>
         <ul>
             <li><b>get_open_editors</b> — Open files, focused editor with caret position, and current text selection.</li>
+            <li><b>get_file_problems</b> — IDE-detected errors, warnings, and infos for a file or all open editors.</li>
+            <li><b>get_quick_fixes</b> — Quick fix suggestions at a specific file:line:column. Use after get_file_problems to get actionable fixes for a reported problem.</li>
             <li><b>navigate_to</b> — Opens a file and places the cursor at a given line and column.</li>
             <li><b>select_text</b> — Opens a file and selects a text range (ready to copy with Cmd+C).</li>
             <li><b>highlight_text</b> — Highlights multiple zones in a file using the IDE's search-result color (theme-aware). Press Escape to clear.</li>
@@ -95,5 +97,6 @@
 
     <extensions defaultExtensionNs="com.intellij.mcpServer">
         <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionToolset"/>
+        <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionCodeAnalysisToolset"/>
     </extensions>
 </idea-plugin>

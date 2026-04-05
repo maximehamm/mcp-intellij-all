@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "1.16.0"
+version = "1.18.0"
 
 repositories {
     mavenCentral()
@@ -43,6 +43,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>1.17.0</b> — New tool: <code>get_file_problems</code> — IDE errors/warnings with quick fix suggestions for a file or all open editors.</li>
                 <li><b>1.16.0</b> — Settings: usage bars showing call counts per tool (session, auto-scaled). Diagnostic: idea.log now returns ERROR/SEVERE from last N minutes with stack traces; new <code>level</code> and <code>minutesBack</code> params.</li>
                 <li><b>1.15.0</b> — New tool: <code>refresh_project</code> — syncs Gradle or Maven build system automatically detected from project root.</li>
                 <li><b>1.14.0</b> — New tool: <code>execute_ide_action</code> — execute any IntelliJ action by ID, or search for action IDs by keyword. <code>get_ide_settings</code>: new <code>prefix</code> + <code>depth</code> parameters for subtree lookup; Gradle section silently skipped on non-Gradle IDEs.</li>

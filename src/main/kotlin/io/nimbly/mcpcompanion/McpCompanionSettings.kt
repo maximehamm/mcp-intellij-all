@@ -51,8 +51,11 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             "Diagnostic & Processes" to listOf(
                 "get_intellij_diagnostic", "get_running_processes", "manage_process", "get_ide_settings"
             ),
+            "Code Analysis" to listOf(
+                "get_file_problems", "get_quick_fixes", "refresh_project", "get_project_structure"
+            ),
             "General" to listOf(
-                "get_mcp_companion_overview", "get_project_structure", "refresh_project", "execute_ide_action", "replace_text_undoable", "delete_file"
+                "get_mcp_companion_overview", "execute_ide_action", "replace_text_undoable", "delete_file"
             )
         )
 

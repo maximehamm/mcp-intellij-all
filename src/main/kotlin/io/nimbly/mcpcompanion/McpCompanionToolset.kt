@@ -21,11 +21,6 @@ import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.module.ModuleManager
-import com.intellij.openapi.module.ModuleType
-import com.intellij.openapi.projectRoots.ProjectJdkTable
-import com.intellij.openapi.roots.ModuleRootManager
-import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationsManager
 import com.intellij.openapi.application.PathManager
@@ -93,33 +88,33 @@ class McpCompanionToolset : McpToolset {
 
 ## Tools and when to use them
 
-### Exploration & navigation
+### Editor & Navigation
 - get_open_editors       → know which files are open and where the caret is
-- get_project_structure  → list modules, SDK, source roots, dependencies — call this first on a new project
-- get_running_processes  → list background tasks (indexing, Gradle sync, …) — call this when IntelliJ seems busy
-- manage_process         → cancel / pause / resume a background task by title (partial match)
 - navigate_to            → move the caret to a file:line:column (do this before explaining anything)
 - select_text            → select an exact range (startCol/endCol are 1-based, endCol is INCLUSIVE)
 - highlight_text         → highlight multiple zones at once (declaration + all usages)
                            ranges format: "startLine:startCol:endLine:endCol" comma-separated, endCol INCLUSIVE
 - clear_highlights       → remove all highlights (user can also press Escape)
 
-### Build & run
+### Build & Tests
 - get_build_output       → read compiler errors before answering a build question
 - get_console_output     → read console output from Run AND Debug windows — use this whenever the user ran or debugged something
                            "activeWindow" tells you which window is currently visible; "active: true" marks the focused tab
+- get_services_output    → SQL output log and result grids from the Services tool window
 - get_test_results       → read test results (pass/fail/duration/message)
 
 ### Debug
 - debug_run_configuration    → launch a named run config in debug mode
-- add_conditional_breakpoint → add or update a breakpoint with an optional condition
+- get_debug_variables        → read local variables from the current stack frame
 - get_breakpoints            → list all breakpoints with conditions
+- add_conditional_breakpoint → add or update a breakpoint with an optional condition
 - set_breakpoint_condition   → change the condition of an existing breakpoint
 - mute_breakpoints           → enable/disable all breakpoints at once
-- get_debug_variables        → read local variables from the current stack frame
 
-### Diagnostic & settings
+### Diagnostic & Processes
 - get_intellij_diagnostic    → notifications, errors, background tasks, ERROR/SEVERE from idea.log (last 5 min) — call this when something looks wrong
+- get_running_processes      → list background tasks (indexing, Gradle sync, …) — call this when IntelliJ seems busy
+- manage_process             → cancel / pause / resume a background task by title (partial match)
 - get_ide_settings           → read IntelliJ settings (Gradle, compiler, SDK, encoding…)
                                no param = common settings overview
                                search="gradle" = filter all properties by keyword
@@ -127,15 +122,20 @@ class McpCompanionToolset : McpToolset {
                                prefix="gradle" = all settings whose key starts with "gradle"
                                prefix + depth=1 = limit to one dot-segment beyond the prefix
 
-### IDE actions
-- refresh_project            → sync Gradle or Maven — detects the build system automatically
-                               use after modifying build.gradle, pom.xml, or when dependencies drift
+### Code Analysis
+- get_file_problems      → IDE-detected errors/warnings for a file or all open editors
+                           severity="error" (default) / "warning" / "all"
+- get_quick_fixes        → quick fix suggestions at a specific file:line:column
+                           ⚠ file must be open in editor; use after get_file_problems
+- refresh_project        → sync Gradle or Maven — detects the build system automatically
+                           use after modifying build.gradle, pom.xml, or when dependencies drift
+- get_project_structure  → list modules, SDK, source roots, dependencies — call this first on a new project
+
+### General
+- get_mcp_companion_overview → this overview
 - execute_ide_action         → execute any IntelliJ action by ID, or search for action IDs by keyword
                                search="settings" = list actions whose name/ID contains "settings"
-                               actionId="ShowSettings" = open the Settings dialog
-                               actionId="GotoFile", "ReformatCode", "OptimizeImports", "Git.Branches", …
-
-### Editing & file operations
+                               actionId="ShowSettings", "GotoFile", "ReformatCode", "OptimizeImports", …
 - replace_text_undoable      → replace text in a file already open in the editor (Cmd+Z undoable)
                                Use this for targeted edits to open files — the user can undo instantly.
 - replace_file_text_by_path  → (built-in) overwrite a whole file via IntelliJ API — auto-refreshes the editor
@@ -156,6 +156,11 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
   1. get_build_output — read the error
   2. navigate_to — go to the faulty line
   3. explain + fix with replace_text_undoable
+
+**"Fix code problems"**
+  1. get_file_problems — list errors/warnings
+  2. get_quick_fixes — get fix suggestions at the problem position
+  3. replace_text_undoable — apply the fix
 
 **"Debug this"**
   1. add_conditional_breakpoint — set breakpoint with condition
@@ -843,56 +848,6 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         }
     }
 
-    // ── refresh_project ──────────────────────────────────────────────────────
-
-    @McpTool(name = "refresh_project")
-    @McpDescription(description = """
-        Refreshes (reimports/syncs) the project build system configuration.
-        Automatically detects Gradle or Maven from the project root and triggers the appropriate sync action.
-        Use this after modifying build.gradle, pom.xml, settings.gradle, or when dependencies are out of sync.
-        Returns what was triggered, or an error if no build system is detected.
-    """)
-    suspend fun refresh_project(): String {
-        disabledMessage("refresh_project")?.let { return it }
-        val project = coroutineContext.project
-        val basePath = project.basePath ?: return "Cannot determine project base path"
-        val am = com.intellij.openapi.actionSystem.ActionManager.getInstance()
-
-        val rootFiles = java.io.File(basePath).listFiles()?.map { it.name } ?: emptyList()
-        val hasGradle = rootFiles.any { it in listOf("build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts") }
-        val hasMaven = "pom.xml" in rootFiles
-
-        if (!hasGradle && !hasMaven)
-            return "No Gradle or Maven build files found in project root ($basePath)"
-
-        val results = mutableListOf<String>()
-
-        fun triggerAction(actionId: String, label: String) {
-            val action = invokeAndWaitIfNeeded { am.getAction(actionId) } ?: run {
-                results += "$label: action '$actionId' not available in this IDE"
-                return
-            }
-            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                val dataContext = com.intellij.openapi.actionSystem.impl.SimpleDataContext.builder()
-                    .add(com.intellij.openapi.actionSystem.CommonDataKeys.PROJECT, project)
-                    .build()
-                @Suppress("DEPRECATION")
-                val event = com.intellij.openapi.actionSystem.AnActionEvent.createFromDataContext(
-                    com.intellij.openapi.actionSystem.ActionPlaces.UNKNOWN,
-                    action.templatePresentation.clone(),
-                    dataContext
-                )
-                action.actionPerformed(event)
-            }
-            results += "$label sync triggered"
-        }
-
-        if (hasGradle) triggerAction("ExternalSystem.RefreshAllProjects", "Gradle")
-        if (hasMaven)  triggerAction("Maven.Reimport", "Maven")
-
-        return results.joinToString("\n")
-    }
-
     // ── get_console_output ───────────────────────────────────────────────────
 
     @McpTool(name = "get_console_output")
@@ -1255,69 +1210,6 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         }
     }
 
-    // ── get_project_structure ─────────────────────────────────────────────────
-
-    @McpTool(name = "get_project_structure")
-    @McpDescription(description = """
-        Returns the structure of the IntelliJ project: active SDK (with homePath), all SDKs registered
-        in IntelliJ (with homePath, useful to suggest switching), modules, source roots, excluded folders,
-        and module-to-module dependencies.
-        Useful to understand the project layout (where sources, tests, and resources live) before
-        navigating or editing files.
-        Source root types: source, test, resource, testResource.
-        All paths are relative to the project root.
-    """)
-    suspend fun get_project_structure(): String {
-        disabledMessage("get_project_structure")?.let { return it }
-        val project = coroutineContext.project
-        return runReadAction {
-            val basePath = project.basePath ?: ""
-            val sdk = ProjectRootManager.getInstance(project).projectSdk?.let { sdk ->
-                SdkInfo(name = sdk.name, type = sdk.sdkType.name, version = sdk.versionString, homePath = sdk.homePath)
-            }
-            val availableSdks = ProjectJdkTable.getInstance().allJdks.map { s ->
-                SdkInfo(name = s.name, type = s.sdkType.name, version = s.versionString, homePath = s.homePath)
-            }
-            val modules = ModuleManager.getInstance(project).modules.map { module ->
-                val rootManager = ModuleRootManager.getInstance(module)
-                val sourceRoots = rootManager.contentEntries.flatMap { entry ->
-                    entry.sourceFolders.map { sf ->
-                        val path = sf.file?.path?.let { relativize(basePath, it) } ?: sf.url
-                        val rootTypeStr = sf.rootType.toString().lowercase()
-                        val type = when {
-                            "resource" in rootTypeStr && sf.isTestSource -> "testResource"
-                            "resource" in rootTypeStr -> "resource"
-                            sf.isTestSource -> "test"
-                            else -> "source"
-                        }
-                        SourceRootInfo(path = path, type = type)
-                    }
-                }
-                val excluded = rootManager.contentEntries.flatMap { entry ->
-                    entry.excludeFolders.mapNotNull { ef ->
-                        ef.file?.path?.let { relativize(basePath, it) } ?: ef.url
-                    }
-                }
-                val deps = rootManager.dependencies.map { it.name }
-                val moduleType = try { ModuleType.get(module).id } catch (_: Exception) { null }
-                ModuleInfo(
-                    name = module.name,
-                    type = moduleType,
-                    sourceRoots = sourceRoots,
-                    excludedFolders = excluded.ifEmpty { null },
-                    dependencies = deps.ifEmpty { null }
-                )
-            }
-            Json.encodeToString(ProjectStructure(
-                name = project.name,
-                basePath = basePath,
-                sdk = sdk,
-                availableSdks = availableSdks,
-                modules = modules
-            ))
-        }
-    }
-
     // ── get_running_processes ─────────────────────────────────────────────────
 
     @McpTool(name = "get_running_processes")
@@ -1473,11 +1365,6 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
 
     private fun Any.suspendedText(): String? =
         runCatching { javaClass.getMethod("getSuspendedText").invoke(this) as? String }.getOrNull()
-
-    private fun relativize(basePath: String, path: String): String =
-        if (basePath.isNotEmpty() && path.startsWith(basePath))
-            path.removePrefix(basePath).trimStart('/')
-        else path
 
     // ── get_intellij_diagnostic ───────────────────────────────────────────────
 
@@ -1736,11 +1623,6 @@ val MCP_HIGHLIGHT_KEY = Key<Boolean>("mcp.companion.highlight")
 @Serializable data class TestNode(val name: String, val status: String, val duration: Long? = null, val errorMessage: String? = null, val children: List<TestNode>? = null)
 
 @Serializable data class RunningProcess(val title: String, val details: String? = null, val progress: Double? = null, val cancellable: Boolean? = null, val paused: Boolean = false)
-
-@Serializable data class ProjectStructure(val name: String, val basePath: String, val sdk: SdkInfo?, val availableSdks: List<SdkInfo>, val modules: List<ModuleInfo>)
-@Serializable data class SdkInfo(val name: String, val type: String, val version: String?, val homePath: String? = null)
-@Serializable data class ModuleInfo(val name: String, val type: String? = null, val sourceRoots: List<SourceRootInfo>, val excludedFolders: List<String>? = null, val dependencies: List<String>? = null)
-@Serializable data class SourceRootInfo(val path: String, val type: String)
 
 @Serializable data class IntellijDiagnostic(val indexing: IndexingStatus, val notifications: List<DiagnosticNotification>, val processes: List<RunningProcess>, val logEntries: List<String>)
 @Serializable data class IndexingStatus(val active: Boolean)
