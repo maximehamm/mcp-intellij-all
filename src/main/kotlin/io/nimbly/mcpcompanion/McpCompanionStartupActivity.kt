@@ -1,5 +1,6 @@
 package io.nimbly.mcpcompanion
 
+import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
@@ -26,6 +27,30 @@ class McpCompanionStartupActivity : ProjectActivity {
         }
 
         val ourSettings = McpCompanionSettings.getInstance()
+
+        // ── Telemetry consent notification (shown once) ───────────────────────
+        if (!ourSettings.isTelemetryNotificationShown()) {
+            ourSettings.setTelemetryNotificationShown(true)  // mark shown immediately — dismiss = accept
+            ApplicationManager.getApplication().invokeLater {
+                NotificationGroupManager.getInstance()
+                    .getNotificationGroup("MCP Server Companion")
+                    .createNotification(
+                        "MCP Server Companion — Usage Statistics",
+                        "To improve this plugin, anonymous usage statistics are shared " +
+                        "(tool names and call counts only — no code, no file paths, no project data). " +
+                        "You can change this anytime in Settings → Tools → MCP Server Companion.",
+                        NotificationType.INFORMATION
+                    )
+                    .addAction(NotificationAction.createSimple("OK, got it") {
+                        ourSettings.setTelemetryEnabled(true)
+                    })
+                    .addAction(NotificationAction.createSimple("Disable sharing") {
+                        ourSettings.setTelemetryEnabled(false)
+                    })
+                    .notify(project)
+            }
+        }
+
         if (ourSettings.state.firstLaunchDone) return
         ourSettings.state.firstLaunchDone = true
 

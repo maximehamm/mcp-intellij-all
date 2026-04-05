@@ -16,7 +16,9 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         @JvmField
         var firstLaunchDone: Boolean = false
         @JvmField
-        var telemetryEnabled: Boolean = false
+        var telemetryEnabled: Boolean = true   // opt-out — consent asked on first launch
+        @JvmField
+        var telemetryNotificationShown: Boolean = false
         @JvmField
         var anonymousId: String = java.util.UUID.randomUUID().toString()
     }
@@ -35,6 +37,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     fun isTelemetryEnabled(): Boolean = myState.telemetryEnabled
     fun setTelemetryEnabled(enabled: Boolean) { myState.telemetryEnabled = enabled }
     fun getAnonymousId(): String = myState.anonymousId
+    fun isTelemetryNotificationShown(): Boolean = myState.telemetryNotificationShown
+    fun setTelemetryNotificationShown(shown: Boolean) { myState.telemetryNotificationShown = shown }
 
     // In-memory call counts — reset on every IDE restart
     private val callCounts = mutableMapOf<String, Int>()
