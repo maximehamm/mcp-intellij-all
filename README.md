@@ -144,7 +144,7 @@ Add the JetBrains MCP proxy to your AI client config (e.g. `claude_desktop_confi
 
 ## Development
 
-```bash
+```
 ./gradlew runIde
 ```
 Launch a sandbox IntelliJ with the plugin
