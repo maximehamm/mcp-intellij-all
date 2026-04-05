@@ -22,16 +22,16 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 ### Build & Tests
 | Tool | Description |
 |------|-------------|
-| `get_build_output` ⁺ | Build tool window: structured error tree with file/line numbers + console text |
-| `get_console_output` ⁺ | Console output from both Run and Debug tool windows, with active window and tab indicated |
-| `get_services_output` ⁺ | Services tool window sessions: SQL output log, result grids, active session/tab indicated |
-| `get_test_results` ⁺ | Last test run results: passed/failed/ignored status, duration, and failure messages |
+| `get_build_output` ⚠️ | Build tool window: structured error tree with file/line numbers + console text |
+| `get_console_output` ⚠️ | Console output from both Run and Debug tool windows, with active window and tab indicated |
+| `get_services_output` ⚠️ | Services tool window sessions: SQL output log, result grids, active session/tab indicated |
+| `get_test_results` ⚠️ | Last test run results: passed/failed/ignored status, duration, and failure messages |
 
 ### Debug
 | Tool | Description |
 |------|-------------|
-| `debug_run_configuration` ⁺ | Launches a run configuration in debug mode |
-| `get_debug_variables` ⁺ | Local variables and values from the current debugger stack frame |
+| `debug_run_configuration` ⚠️ | Launches a run configuration in debug mode |
+| `get_debug_variables` ⚠️ | Local variables and values from the current debugger stack frame |
 | `get_breakpoints` | Lists all line breakpoints with file, line, enabled state, and condition |
 | `add_conditional_breakpoint` | Adds a breakpoint with an optional condition expression |
 | `set_breakpoint_condition` | Sets or removes a condition on an existing breakpoint |
@@ -40,7 +40,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 ### Diagnostic & Processes
 | Tool | Description |
 |------|-------------|
-| `get_intellij_diagnostic` ⁺ | One-call diagnostic: indexing status, notifications, running processes, and idea.log WARN/ERROR tail |
+| `get_intellij_diagnostic` ⚠️ | One-call diagnostic: indexing status, notifications, running processes, and idea.log WARN/ERROR tail |
 | `get_running_processes` | Lists active and paused background processes in IntelliJ |
 | `manage_process` | Pauses, resumes, or cancels a background process by title |
 | `get_ide_settings` | Read IntelliJ settings: Gradle, SDK, compiler, encoding — search by keyword, direct key lookup, or prefix subtree with optional depth |
@@ -50,18 +50,18 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 |------|-------------|
 | `get_file_problems` | IDE-detected errors/warnings for a file or all open editors |
 | `get_quick_fixes` | Quick fix suggestions at a specific file:line:column — use after get_file_problems |
-| `refresh_project` ⁺ | Sync Gradle or Maven build system — detects the build tool automatically from the project root |
+| `refresh_project` ⚠️ | Sync Gradle or Maven build system — detects the build tool automatically from the project root |
 | `get_project_structure` | Returns SDK, modules, source roots, excluded folders, and module dependencies |
 
 ### General
 | Tool | Description |
 |------|-------------|
 | `get_mcp_companion_overview` | Describes all available MCP Companion tools and how to use them |
-| `execute_ide_action` ⁺ | Execute any IntelliJ action by ID (e.g. ShowSettings, ReformatCode), or search for action IDs by keyword |
+| `execute_ide_action` ⚠️ | Execute any IntelliJ action by ID (e.g. ShowSettings, ReformatCode), or search for action IDs by keyword |
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
 | `delete_file` | Deletes a file from the project (undoable) |
 
-> ⁺ These tools require a running IDE sandbox and cannot be covered by automated tests (`./gradlew test`).
+> Tools marked ⚠️ require a running IDE sandbox and cannot be covered by automated tests (`./gradlew test`).
 
 ## Settings
 
@@ -108,7 +108,7 @@ Run with `./gradlew test` (headless, ~3 seconds, no sandbox needed).
 | `CodeAnalysisReflectionTest` | Verifies `HighlightInfo.offsetStore`, `getIntentionActionDescriptors`, `DocumentMarkupModel.forDocument`, `DaemonCodeAnalyzer.isRunning` |
 | `ToolsetIntegrationTest` | `BasePlatformTestCase` tests running in a headless IntelliJ — real PSI, real editor, real breakpoint manager. Covers: `get_open_editors`, caret/selection, highlight/clear, `relativize`, markup model, `replace_text_undoable`, `delete_file`, add/mute/condition breakpoints, `collectRunningProcesses` |
 
-Tools marked ⁺ in the tables above require a running sandbox and are tested manually via `runIde` + curl SSE (see `CLAUDE.md`).
+Tools marked ⚠️ in the tables above require a running sandbox and are tested manually via `runIde` + curl SSE (see `CLAUDE.md`).
 
 ## Setup
 
