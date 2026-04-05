@@ -145,8 +145,9 @@ Add the JetBrains MCP proxy to your AI client config (e.g. `claude_desktop_confi
 ## Development
 
 ```bash
-./gradlew runIde   # Launch a sandbox IntelliJ with the plugin
-./gradlew buildPlugin  # Build the distributable .zip
+./gradlew runIde        # Launch a sandbox IntelliJ with the plugin
+./gradlew buildPlugin   # Build the distributable .zip
+./gradlew test          # Run automated tests (headless, ~3s)
 ```
 
 ## License
