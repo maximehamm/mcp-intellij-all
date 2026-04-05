@@ -101,12 +101,7 @@ Each tool can be individually enabled or disabled in **Settings → Tools → MC
 
 ## Testing
 
-```bash
-./gradlew test                   # run (uses cache if nothing changed)
-./gradlew test --rerun-tasks     # force re-run and show individual test output
-```
-
-Headless, ~3 seconds, no sandbox needed.
+Headless, ~3 seconds, no sandbox needed. Run with `./gradlew test` (or `--rerun-tasks` to bypass cache and see individual test output).
 
 | Class | Type | What it covers |
 |-------|------|----------------|
