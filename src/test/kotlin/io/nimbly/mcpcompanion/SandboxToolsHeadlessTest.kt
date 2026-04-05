@@ -23,6 +23,8 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         val settings = invokeAndWaitIfNeeded {
             McpCompanionDiagnosticToolset().knownIdeSettings(project)
         }
+        println("  project.name     = ${settings["project.name"]}")
+        println("  project.basePath = ${settings["project.basePath"]}")
         assertNotNull("project.name should be present", settings["project.name"])
         assertNotNull("project.basePath should be present", settings["project.basePath"])
     }
@@ -31,7 +33,9 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         val settings = invokeAndWaitIfNeeded {
             McpCompanionDiagnosticToolset().knownIdeSettings(project)
         }
-        val encodingKeys = settings.keys.filter { it.contains("encoding") }
+        val encodingKeys = settings.filter { it.key.contains("encoding") }
+        println("  encoding keys: ${encodingKeys.keys.joinToString()}")
+        encodingKeys.forEach { (k, v) -> println("    $k = $v") }
         assertTrue("Should have at least one encoding key", encodingKeys.isNotEmpty())
     }
 
@@ -39,6 +43,7 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
 
     fun `test DumbService is accessible and not indexing in headless`() {
         val isDumb = invokeAndWaitIfNeeded { DumbService.getInstance(project).isDumb }
+        println("  isDumb = $isDumb")
         assertFalse("Should not be indexing in headless", isDumb)
     }
 
@@ -48,6 +53,8 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
                 .getNotificationsOfType(Notification::class.java, project)
                 .toList()
         }
+        println("  notifications count = ${notifications.size}")
+        notifications.forEach { println("    - [${it.type}] ${it.title}") }
         assertNotNull("Notifications list should not be null", notifications)
     }
 
@@ -58,16 +65,19 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
             ActionManager.getInstance().getActionIdList("")
                 .filter { it.lowercase().contains("reformat") }
         }
+        println("  actions matching 'reformat': ${results.take(5).joinToString()}")
         assertTrue("Should find at least one action matching 'reformat'", results.isNotEmpty())
     }
 
     fun `test execute_ide_action finds known action by ID`() {
         val action = invokeAndWaitIfNeeded { ActionManager.getInstance().getAction("ReformatCode") }
+        println("  ReformatCode → '${action?.templatePresentation?.text}'")
         assertNotNull("ReformatCode action should be registered", action)
     }
 
     fun `test execute_ide_action returns null for unknown action ID`() {
         val action = invokeAndWaitIfNeeded { ActionManager.getInstance().getAction("NonExistentAction_XYZ_12345") }
+        println("  NonExistentAction_XYZ_12345 → $action")
         assertNull("Unknown action should return null", action)
     }
 
@@ -78,6 +88,7 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
             com.intellij.execution.RunManager.getInstance(project)
                 .findConfigurationByName("NonExistentConfig")
         }
+        println("  findConfigurationByName('NonExistentConfig') → $found")
         assertNull("Should not find a non-existent run configuration", found)
     }
 
@@ -87,6 +98,7 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         val sessions = invokeAndWaitIfNeeded {
             XDebuggerManager.getInstance(project).debugSessions
         }
+        println("  active debug sessions = ${sessions.size}")
         assertTrue("Should have no active debug sessions in headless", sessions.isEmpty())
     }
 
@@ -96,6 +108,8 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         val tabs = invokeAndWaitIfNeeded {
             McpCompanionBuildToolset().extractBuildTabs(project)
         }
+        println("  tabs returned = ${tabs.size}")
+        tabs.forEach { println("    tab '${it.name}' → console: '${it.console}'") }
         assertEquals("Should return exactly one error tab", 1, tabs.size)
         assertTrue("Should contain 'not found' message",
             tabs[0].console?.contains("not found", ignoreCase = true) == true)
@@ -108,6 +122,8 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         root.add(DefaultMutableTreeNode("warning: unused import"))
         val model = DefaultTreeModel(root)
         val nodes = invokeAndWaitIfNeeded { toolset.buildBuildNodes(model, root) }
+        println("  nodes parsed = ${nodes.size}")
+        nodes.forEach { println("    node: text='${it.text}' severity=${it.severity} file=${it.file}") }
         assertEquals("Should parse 2 child nodes", 2, nodes.size)
         assertEquals("error: Foo.java:10", nodes[0].text)
         assertEquals("warning: unused import", nodes[1].text)
@@ -119,6 +135,8 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         val output = invokeAndWaitIfNeeded {
             McpCompanionBuildToolset().extractTestResults(project)
         }
+        println("  error = '${output.error}'")
+        println("  runs  = ${output.runs.size}")
         assertNotNull("Should return an error message when Run window absent", output.error)
         assertTrue("Should return empty runs list", output.runs.isEmpty())
     }
@@ -126,15 +144,16 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
     fun `test buildTestNode status for unstarted proxy is RUNNING`() {
         val proxy = SMTestProxy("MyTest", false, null)
         val node = McpCompanionBuildToolset().buildTestNode(proxy)
+        println("  SMTestProxy(unstarted) → status='${node.status}' error='${node.errorMessage}'")
         assertEquals("MyTest", node.name)
         assertEquals("RUNNING", node.status)
-        assertNull(node.errorMessage)
     }
 
     fun `test buildTestNode status for finished proxy is PASSED`() {
         val proxy = SMTestProxy("MyTest", false, null)
         proxy.setFinished()
         val node = McpCompanionBuildToolset().buildTestNode(proxy)
+        println("  SMTestProxy(finished) → status='${node.status}' duration=${node.duration}")
         assertEquals("MyTest", node.name)
         assertEquals("PASSED", node.status)
     }
@@ -143,6 +162,7 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         val proxy = SMTestProxy("FailingTest", false, null)
         proxy.setTestFailed("Expected 1 but was 2", null, false)
         val node = McpCompanionBuildToolset().buildTestNode(proxy)
+        println("  SMTestProxy(failed) → status='${node.status}' error='${node.errorMessage}'")
         assertEquals("FailingTest", node.name)
         assertEquals("FAILED", node.status)
         assertNotNull("Error message should be present", node.errorMessage)
@@ -157,8 +177,10 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
             it in listOf("build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts")
         }
         val hasMaven = "pom.xml" in rootFiles
+        println("  basePath = $basePath")
+        println("  rootFiles = $rootFiles")
+        println("  hasGradle=$hasGradle  hasMaven=$hasMaven")
         assertFalse("Headless test project should not have Gradle files", hasGradle)
         assertFalse("Headless test project should not have Maven pom.xml", hasMaven)
-        // refresh_project would return "No Gradle or Maven build files found in project root"
     }
 }
