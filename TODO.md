@@ -1,5 +1,9 @@
 # TODO
 
+## High priority
+
+- **execute_database_query** — Execute a SQL query in the Database tool window
+
 ## New tools
 
 - **find_references** — Find all usages of a symbol across the project
