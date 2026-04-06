@@ -7,3 +7,6 @@
 - **get_call_hierarchy** — Who calls this method, and what does it call
 - **get_todo_items** — List TODO/FIXME comments across the project
 - **get_local_history** — IntelliJ local history for a file (even without git)
+- **add_bookmark** — Add a bookmark on a file/line
+- **get_bookmarks** — List all bookmarks in the project
+- **navigate_to_bookmark** — Navigate to a bookmark by name/mnemonic
