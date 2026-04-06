@@ -28,11 +28,13 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     override fun getState(): State = myState
     override fun loadState(state: State) { myState = state }
 
-    fun isEnabled(toolName: String): Boolean = myState.enabledTools.getOrDefault(toolName, toolName !in DISABLED_BY_DEFAULT)
+    fun isEnabled(toolName: String): Boolean =
+        myState.enabledTools.getOrDefault(toolName, toolName !in DISABLED_BY_DEFAULT)
 
     fun setEnabled(toolName: String, enabled: Boolean) {
         myState.enabledTools[toolName] = enabled
     }
+
 
     fun isTelemetryEnabled(): Boolean = myState.telemetryEnabled
     fun setTelemetryEnabled(enabled: Boolean) { myState.telemetryEnabled = enabled }
@@ -80,5 +82,6 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
         fun getInstance(): McpCompanionSettings =
             ApplicationManager.getApplication().getService(McpCompanionSettings::class.java)
+
     }
 }

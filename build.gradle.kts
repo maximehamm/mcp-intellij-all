@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "2.4.1"
+version = "2.4.2"
 
 repositories {
     mavenCentral()
@@ -34,6 +34,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
     testImplementation("junit:junit:4.13.2")
     compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
+    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver-frontend.jar"))
 testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.ide.impl.jar"))
     testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.core.impl.jar"))
 }
