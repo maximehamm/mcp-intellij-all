@@ -7,7 +7,6 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
-import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.tabs.JBTabs
 import com.intellij.util.ui.UIUtil
@@ -50,7 +49,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_build_output(): String {
         disabledMessage("get_build_output")?.let { return it }
         val project = coroutineContext.project
-        val tabs = invokeAndWaitIfNeeded { extractBuildTabs(project) }
+        val tabs = runOnEdt { extractBuildTabs(project) }
         return Json.encodeToString(BuildOutput(tabs))
     }
 
@@ -181,9 +180,9 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_services_output(): String {
         disabledMessage("get_services_output")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
+        return runOnEdt {
             val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Services")
-                ?: return@invokeAndWaitIfNeeded Json.encodeToString(
+                ?: return@runOnEdt Json.encodeToString(
                     ServicesOutput(sessions = listOf(ServiceSession(name = "error", output = "Services tool window not found"))))
 
             val contents = runCatching { toolWindow.contentManager.contents.toList() }.getOrElse { emptyList() }
@@ -396,7 +395,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_console_output(): String {
         disabledMessage("get_console_output")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded { Json.encodeToString(extractConsoleOutput(project)) }
+        return runOnEdt { Json.encodeToString(extractConsoleOutput(project)) }
     }
 
     internal fun extractConsoleOutput(project: com.intellij.openapi.project.Project): ConsoleOutput {
@@ -464,7 +463,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_test_results(): String {
         disabledMessage("get_test_results")?.let { return it }
         val project = coroutineContext.project
-        val output = invokeAndWaitIfNeeded { extractTestResults(project) }
+        val output = runOnEdt { extractTestResults(project) }
         return Json.encodeToString(output)
     }
 
@@ -516,7 +515,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_terminal_output(): String {
         disabledMessage("get_terminal_output")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded { extractTerminalTabs(project) }
+        return runOnEdt { extractTerminalTabs(project) }
     }
 
     internal fun extractTerminalTabs(project: com.intellij.openapi.project.Project): String {
@@ -547,7 +546,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun send_to_terminal(command: String, tab: String? = null): String {
         disabledMessage("send_to_terminal")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded { sendToTerminalImpl(project, command, tab) }
+        return runOnEdt { sendToTerminalImpl(project, command, tab) }
     }
 
     internal fun sendToTerminalImpl(project: com.intellij.openapi.project.Project, command: String, tab: String?): String {

@@ -7,7 +7,6 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.frame.XCompositeNode
 import com.intellij.xdebugger.frame.XDebuggerTreeNodeHyperlink
@@ -56,12 +55,12 @@ class McpCompanionDebugToolset : McpToolset {
         val sessions = XDebuggerManager.getInstance(project).debugSessions
         if (sessions.isEmpty()) return "No active debug session"
         val session = sessions.first()
-        val frame = invokeAndWaitIfNeeded { session.currentStackFrame }
+        val frame = runOnEdt { session.currentStackFrame }
             ?: return "No stack frame — program may still be running"
 
         val children = mutableListOf<Pair<String, XValue>>()
         val childrenLatch = CountDownLatch(1)
-        invokeAndWaitIfNeeded {
+        runOnEdt {
             frame.computeChildren(object : XCompositeNode {
                 override fun addChildren(list: XValueChildrenList, last: Boolean) {
                     for (i in 0 until list.size()) children.add(list.getName(i) to list.getValue(i))
@@ -95,12 +94,12 @@ class McpCompanionDebugToolset : McpToolset {
     suspend fun add_conditional_breakpoint(filePath: String, line: Int, condition: String = ""): String {
         disabledMessage("add_conditional_breakpoint")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
-            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+        return runOnEdt {
+            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
             val normalizedPath = filePath.replace('\\', '/')
             val file = com.intellij.openapi.vfs.LocalFileSystem.getInstance()
                 .findFileByPath("$basePath/$normalizedPath")
-                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+                ?: return@runOnEdt "File not found: $filePath"
             val manager = XDebuggerManager.getInstance(project).breakpointManager
             val existing = manager.allBreakpoints
                 .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
@@ -116,7 +115,7 @@ class McpCompanionDebugToolset : McpToolset {
                         .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(normalizedPath) }
                     if (found == null) Thread.sleep(100)
                 }
-                found ?: return@invokeAndWaitIfNeeded "Failed to create breakpoint at $filePath:$line"
+                found ?: return@runOnEdt "Failed to create breakpoint at $filePath:$line"
             }
             val expr = if (condition.isNotBlank())
                 com.intellij.xdebugger.XDebuggerUtil.getInstance()
@@ -139,7 +138,7 @@ class McpCompanionDebugToolset : McpToolset {
     suspend fun get_breakpoints(): String {
         disabledMessage("get_breakpoints")?.let { return it }
         val project = coroutineContext.project
-        val breakpoints = invokeAndWaitIfNeeded {
+        val breakpoints = runOnEdt {
             XDebuggerManager.getInstance(project).breakpointManager.allBreakpoints
                 .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
                 .map { bp ->
@@ -167,7 +166,7 @@ class McpCompanionDebugToolset : McpToolset {
     suspend fun mute_breakpoints(muted: Boolean): String {
         disabledMessage("mute_breakpoints")?.let { return it }
         val project = coroutineContext.project
-        val count = invokeAndWaitIfNeeded {
+        val count = runOnEdt {
             val breakpoints = XDebuggerManager.getInstance(project).breakpointManager.allBreakpoints
                 .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
             breakpoints.forEach { it.isEnabled = !muted }
@@ -189,12 +188,12 @@ class McpCompanionDebugToolset : McpToolset {
     suspend fun set_breakpoint_condition(filePath: String, line: Int, condition: String): String {
         disabledMessage("set_breakpoint_condition")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
+        return runOnEdt {
             val manager = XDebuggerManager.getInstance(project).breakpointManager
             val bp = manager.allBreakpoints
                 .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
                 .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(filePath.replace('\\', '/')) }
-                ?: return@invokeAndWaitIfNeeded "No breakpoint found at $filePath:$line"
+                ?: return@runOnEdt "No breakpoint found at $filePath:$line"
 
             if (condition.isEmpty()) {
                 bp.conditionExpression = null
@@ -221,7 +220,7 @@ class McpCompanionDebugToolset : McpToolset {
         disabledMessage("debug_run_configuration")?.let { return it }
         val project = coroutineContext.project
 
-        val settings = invokeAndWaitIfNeeded {
+        val settings = runOnEdt {
             com.intellij.execution.RunManager.getInstance(project).findConfigurationByName(configurationName)
         } ?: return "Configuration '$configurationName' not found"
 

@@ -5,7 +5,6 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -153,12 +152,12 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         val projectPath = project.basePath ?: return "error: no project base path"
         val virtualFile = LocalFileSystem.getInstance().findFileByPath("$projectPath/$pathInProject")
             ?: return "error: file not found: $pathInProject"
-        val document = invokeAndWaitIfNeeded {
+        val document = runOnEdt {
             FileDocumentManager.getInstance().getDocument(virtualFile)
         } ?: return "error: cannot open document for: $pathInProject"
         val offset = document.text.indexOf(oldText)
         if (offset == -1) return "error: text not found in file"
-        invokeAndWaitIfNeeded {
+        runOnEdt {
             WriteCommandAction.runWriteCommandAction(project, "MCP Replace", null, {
                 document.replaceString(offset, offset + oldText.length, newText)
             })
@@ -221,7 +220,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
                 else "Opening Settings searching for '$configurable'. If the wrong page opened, the name was not found — try a different spelling or use search to find the right actionId."
             }
             actionId != null -> {
-                val action = invokeAndWaitIfNeeded { am.getAction(actionId) }
+                val action = runOnEdt { am.getAction(actionId) }
                     ?: return "Action '$actionId' not found. Use search parameter to find valid IDs."
                 val label = action.templatePresentation.text
                 ApplicationManager.getApplication().invokeLater {
@@ -239,7 +238,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
                 "Action '$actionId' triggered: $label"
             }
             search != null -> {
-                invokeAndWaitIfNeeded {
+                runOnEdt {
                     val lower = search.lowercase()
                     val matches = am.getActionIdList("")
                         .filter { id ->
@@ -269,10 +268,10 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
     suspend fun delete_file(filePath: String): String {
         disabledMessage("delete_file")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
-            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+        return runOnEdt {
+            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
             val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+                ?: return@runOnEdt "File not found: $filePath"
             WriteCommandAction.runWriteCommandAction(project) {
                 vFile.delete(this)
             }

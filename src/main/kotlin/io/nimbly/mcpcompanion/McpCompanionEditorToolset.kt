@@ -4,8 +4,8 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
-import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -82,10 +82,10 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun navigate_to(filePath: String, line: Int, column: Int = 1): String {
         disabledMessage("navigate_to")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
-            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+        return runOnEdt {
+            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
             val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+                ?: return@runOnEdt "File not found: $filePath"
             com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, line - 1, (column - 1).coerceAtLeast(0))
                 .navigate(true)
             "Navigated to $filePath:$line:$column"
@@ -96,7 +96,8 @@ class McpCompanionEditorToolset : McpToolset {
 
     @McpTool(name = "select_text")
     @McpDescription(description = """
-        Opens a file and selects a range of text so the user can copy it directly (Cmd+C).
+        Opens a file (if not already open), brings it to the foreground, scrolls to the target
+        range and selects it so the user can copy it directly (Cmd+C).
         filePath: path relative to the project root.
         startLine/startColumn: 1-based position of the first character to select.
         endLine/endColumn: 1-based position of the LAST character to select (inclusive).
@@ -105,17 +106,21 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun select_text(filePath: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int): String {
         disabledMessage("select_text")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
-            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+        return runOnEdt {
+            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
             val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+                ?: return@runOnEdt "File not found: $filePath"
+            // Open the file, bring it to the foreground and place the caret at the start of the range
             val editor = FileEditorManager.getInstance(project)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, startLine - 1, (startColumn - 1).coerceAtLeast(0)), true)
-                ?: return@invokeAndWaitIfNeeded "Could not open editor"
+                ?: return@runOnEdt "Could not open editor"
             val doc = editor.document
             val startOffset = (doc.getLineStartOffset(startLine - 1) + (startColumn - 1)).coerceAtMost(doc.textLength)
-            val endOffset = (doc.getLineStartOffset(endLine - 1) + endColumn).coerceAtMost(doc.textLength)
+            val endOffset   = (doc.getLineStartOffset(endLine   - 1) + endColumn        ).coerceAtMost(doc.textLength)
             editor.selectionModel.setSelection(startOffset, endOffset)
+            // Move the caret to the start of the selection and scroll it into view
+            editor.caretModel.moveToOffset(startOffset)
+            editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
             "Selected $filePath:$startLine:$startColumn → $endLine:$endColumn"
         }
     }
@@ -124,7 +129,9 @@ class McpCompanionEditorToolset : McpToolset {
 
     @McpTool(name = "highlight_text")
     @McpDescription(description = """
-        Highlights one or more exact text zones in a file using the IDE's standard search-result color (theme-aware).
+        Opens a file (if not already open), brings it to the foreground, highlights one or more
+        exact text zones using the IDE's standard search-result color (theme-aware), and scrolls
+        to the first highlighted range.
         Useful to show where a variable is declared and all its usages at once.
         filePath: path relative to the project root.
         ranges: comma-separated list of "startLine:startCol:endLine:endCol" (1-based).
@@ -136,28 +143,39 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun highlight_text(filePath: String, ranges: String): String {
         disabledMessage("highlight_text")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
-            val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+        return runOnEdt {
+            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
             val normalizedPath = filePath.replace('\\', '/')
             val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/$normalizedPath")
-                ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+                ?: return@runOnEdt "File not found: $filePath"
+            // Parse ranges first so we can navigate to the first one when opening the file
+            data class ParsedRange(val startLine: Int, val startCol: Int, val endLine: Int, val endCol: Int)
+            val parsed = ranges.split(",").mapNotNull { range ->
+                val parts = range.trim().split(":")
+                if (parts.size != 4) return@mapNotNull null
+                ParsedRange(
+                    startLine = (parts[0].trim().toIntOrNull() ?: return@mapNotNull null) - 1,
+                    startCol  = (parts[1].trim().toIntOrNull() ?: return@mapNotNull null) - 1,
+                    endLine   = (parts[2].trim().toIntOrNull() ?: return@mapNotNull null) - 1,
+                    endCol    = (parts[3].trim().toIntOrNull() ?: return@mapNotNull null) - 1,
+                )
+            }
+            val firstRange = parsed.firstOrNull()
+            // Open the file, bring it to the foreground and place the caret at the first range
+            val navLine = firstRange?.startLine ?: 0
+            val navCol  = firstRange?.startCol  ?: 0
             val editor = FileEditorManager.getInstance(project)
-                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, 0), true)
-                ?: return@invokeAndWaitIfNeeded "Could not open editor"
+                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, navLine, navCol), true)
+                ?: return@runOnEdt "Could not open editor"
             val doc = editor.document
             val attrs = EditorColorsManager.getInstance().globalScheme
                 .getAttributes(EditorColors.TEXT_SEARCH_RESULT_ATTRIBUTES)
             var count = 0
-            for (range in ranges.split(",")) {
-                val parts = range.trim().split(":")
-                if (parts.size != 4) continue
-                val startLine = (parts[0].trim().toIntOrNull() ?: continue) - 1
-                val startCol  = (parts[1].trim().toIntOrNull() ?: continue) - 1
-                val endLine   = (parts[2].trim().toIntOrNull() ?: continue) - 1
-                val endCol    = (parts[3].trim().toIntOrNull() ?: continue) - 1
-                if (startLine < 0 || endLine >= doc.lineCount) continue
-                val startOffset = (doc.getLineStartOffset(startLine) + startCol    ).coerceAtMost(doc.textLength)
-                val endOffset   = (doc.getLineStartOffset(endLine)   + endCol + 1  ).coerceAtMost(doc.textLength)
+            var firstStartOffset: Int? = null
+            for (r in parsed) {
+                if (r.startLine < 0 || r.endLine >= doc.lineCount) continue
+                val startOffset = (doc.getLineStartOffset(r.startLine) + r.startCol    ).coerceAtMost(doc.textLength)
+                val endOffset   = (doc.getLineStartOffset(r.endLine)   + r.endCol + 1  ).coerceAtMost(doc.textLength)
                 val h = editor.markupModel.addRangeHighlighter(
                     startOffset, endOffset,
                     com.intellij.openapi.editor.markup.HighlighterLayer.SELECTION - 1,
@@ -165,7 +183,13 @@ class McpCompanionEditorToolset : McpToolset {
                     com.intellij.openapi.editor.markup.HighlighterTargetArea.EXACT_RANGE
                 )
                 h.putUserData(MCP_HIGHLIGHT_KEY, true)
+                if (firstStartOffset == null) firstStartOffset = startOffset
                 count++
+            }
+            // Scroll to the first highlighted range
+            firstStartOffset?.let { offset ->
+                editor.caretModel.moveToOffset(offset)
+                editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
             }
             "$count zone(s) highlighted in $filePath"
         }
@@ -181,16 +205,16 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun clear_highlights(filePath: String = ""): String {
         disabledMessage("clear_highlights")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
+        return runOnEdt {
             var count = 0
             val editors = if (filePath.isEmpty()) {
                 FileEditorManager.getInstance(project).allEditors
                     .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
                     .map { it.editor }
             } else {
-                val basePath = project.basePath ?: return@invokeAndWaitIfNeeded "Project base path not found"
+                val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
                 val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                    ?: return@invokeAndWaitIfNeeded "File not found: $filePath"
+                    ?: return@runOnEdt "File not found: $filePath"
                 FileEditorManager.getInstance(project).getEditors(vFile)
                     .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
                     .map { it.editor }

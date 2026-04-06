@@ -7,7 +7,6 @@ import com.intellij.mcpserver.project
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationsManager
 import com.intellij.openapi.application.PathManager
-import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.DumbService
 import kotlinx.serialization.Serializable
@@ -46,7 +45,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
     suspend fun get_ide_settings(search: String? = null, key: String? = null, prefix: String? = null, depth: Int? = null): String {
         disabledMessage("get_ide_settings")?.let { return it }
         val project = coroutineContext.project
-        return invokeAndWaitIfNeeded {
+        return runOnEdt {
             val known = knownIdeSettings(project)
             val results = linkedMapOf<String, String?>()
             when {
@@ -326,11 +325,11 @@ class McpCompanionDiagnosticToolset : McpToolset {
         disabledMessage("get_intellij_diagnostic")?.let { return it }
         val project = coroutineContext.project
 
-        val indexing = invokeAndWaitIfNeeded {
+        val indexing = runOnEdt {
             IndexingStatus(active = DumbService.getInstance(project).isDumb)
         }
 
-        val notifications = invokeAndWaitIfNeeded {
+        val notifications = runOnEdt {
             NotificationsManager.getNotificationsManager()
                 .getNotificationsOfType(Notification::class.java, project)
                 .map { n ->

@@ -10,7 +10,6 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -69,11 +68,11 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
             else              -> HighlightSeverity.ERROR
         }
 
-        val files = invokeAndWaitIfNeeded {
+        val files = runOnEdt {
             if (filePath != null) {
-                val basePath = project.basePath ?: return@invokeAndWaitIfNeeded emptyList()
+                val basePath = project.basePath ?: return@runOnEdt emptyList()
                 val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/$filePath")
-                    ?: return@invokeAndWaitIfNeeded emptyList()
+                    ?: return@runOnEdt emptyList()
                 listOf(filePath to vFile)
             } else {
                 FileEditorManager.getInstance(project).openFiles.map { vf ->
@@ -127,11 +126,11 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         val project = coroutineContext.project
         val basePath = project.basePath ?: return "Cannot determine project base path"
 
-        val vFile = invokeAndWaitIfNeeded {
+        val vFile = runOnEdt {
             LocalFileSystem.getInstance().findFileByPath("$basePath/$filePath")
         } ?: return "File not found: $filePath"
 
-        val isAlreadyOpen = invokeAndWaitIfNeeded {
+        val isAlreadyOpen = runOnEdt {
             FileEditorManager.getInstance(project).openFiles.any { it.path == vFile.path }
         }
         if (!isAlreadyOpen) return "File is not open in the editor. Open it first (e.g. via navigate_to), wait a moment for the IDE to analyse it, then call get_quick_fixes again."
@@ -145,7 +144,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
         if (daemonRunning) return "IDE is still analysing the file — inspections not ready yet. Wait a moment and call get_quick_fixes again."
 
-        val document = invokeAndWaitIfNeeded { FileDocumentManager.getInstance().getDocument(vFile) }
+        val document = runOnEdt { FileDocumentManager.getInstance().getDocument(vFile) }
             ?: return "Cannot read document for $filePath"
 
         if (line < 1 || line > document.lineCount) return "Line $line is out of range (file has ${document.lineCount} lines)"
@@ -166,7 +165,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         fun findDeclaredMethod(obj: Any, name: String, vararg params: Class<*>) = generateSequence(obj.javaClass as Class<*>?) { it.superclass }
             .flatMap { it.declaredMethods.asSequence() }.find { m -> m.name == name && m.parameterTypes.contentEquals(params) }?.also { it.isAccessible = true }
 
-        val fixes = invokeAndWaitIfNeeded {
+        val fixes = runOnEdt {
             val editor = FileEditorManager.getInstance(project)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile), false)
             val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
@@ -221,7 +220,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         val results = mutableListOf<String>()
 
         fun triggerAction(actionId: String, label: String) {
-            val action = invokeAndWaitIfNeeded { am.getAction(actionId) } ?: run {
+            val action = runOnEdt { am.getAction(actionId) } ?: run {
                 results += "$label: action '$actionId' not available in this IDE"
                 return
             }
