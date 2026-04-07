@@ -68,6 +68,16 @@ Tout appel par réflexion (`Class.forName`, `getDeclaredField`, `getMethod`, etc
 - Si l'API est optionnelle (plugin tiers, jar non garanti sur le classpath), utiliser `runCatching { }.getOrNull()` et imprimer `INFO:` / `WARNING:` sans `fail()` — le test passe toujours mais signale une dégradation.
 - Si l'API est obligatoire, utiliser `assertNotNull` / `assertEquals` pour faire échouer le build dès qu'elle disparaît.
 
+## Télémétrie (`McpCompanionTelemetry`)
+
+- Backend : **Vercel** + **Neon Postgres** — code dans `tracker/`
+- Payload envoyé à chaque appel d'outil : `client_id`, `tool_name`, `plugin_version`, `ide_product`, `ide_version`, `locale`
+- `plugin_version` → `PluginManagerCore.getPlugin(PluginId.getId("io.nimbly.mcp-companion"))?.version`
+- `ide_product` / `ide_version` → `ApplicationInfo.getInstance().versionName / fullVersion`
+- `locale` → `Locale.getDefault().toLanguageTag()`
+- Schema DB dans `tracker/schema.sql` — contient aussi les `ALTER TABLE` de migration
+- ⚠️ Si on ajoute un champ au payload : mettre à jour `tracker/api/track.ts` **ET** `tracker/schema.sql` (CREATE TABLE + ALTER TABLE migration), puis exécuter la migration dans **Vercel → Storage → ta DB → Query**
+
 ## Workflow de développement
 
 1. Coder le tool dans `McpCompanionToolset.kt` — ajouter `disabledMessage("nom_tool")?.let { return it }` en tête

@@ -1,5 +1,6 @@
 package io.nimbly.mcpcompanion
 
+import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.util.net.HttpConfigurable
 import java.io.OutputStreamWriter
@@ -21,9 +22,12 @@ object McpCompanionTelemetry {
         val settings = McpCompanionSettings.getInstance()
         if (!settings.isTelemetryEnabled()) return
 
-        val clientId = settings.getAnonymousId()
-        val version  = pluginVersion()
-        val payload  = """{"client_id":"$clientId","tool_name":"$toolName","plugin_version":"$version"}"""
+        val clientId   = settings.getAnonymousId()
+        val version    = pluginVersion()
+        val ideProduct = ideProduct()
+        val ideVersion = ideVersion()
+        val locale     = java.util.Locale.getDefault().toLanguageTag()
+        val payload    = """{"client_id":"$clientId","tool_name":"$toolName","plugin_version":"$version","ide_product":"$ideProduct","ide_version":"$ideVersion","locale":"$locale"}"""
 
         Thread {
             try {
@@ -66,7 +70,15 @@ object McpCompanionTelemetry {
         HttpConfigurable.getInstance().openConnection(url) as HttpURLConnection
 
     private fun pluginVersion(): String =
-        McpCompanionTelemetry::class.java.`package`?.implementationVersion ?: "dev"
+        com.intellij.ide.plugins.PluginManagerCore.getPlugin(
+            com.intellij.openapi.extensions.PluginId.getId("io.nimbly.mcp-companion")
+        )?.version ?: "dev"
+
+    private fun ideProduct(): String =
+        ApplicationInfo.getInstance().versionName ?: "unknown"
+
+    private fun ideVersion(): String =
+        ApplicationInfo.getInstance().fullVersion ?: "unknown"
 
     /** Minimal {"key": number} JSON parser — no external dependency needed. */
     private fun parseJsonIntMap(json: String): Map<String, Int> {
