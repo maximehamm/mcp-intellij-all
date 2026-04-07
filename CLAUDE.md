@@ -78,6 +78,8 @@ Tout appel par réflexion (`Class.forName`, `getDeclaredField`, `getMethod`, etc
 - Schema DB dans `tracker/schema.sql` — contient aussi les `ALTER TABLE` de migration
 - ⚠️ Si on ajoute un champ au payload : mettre à jour `tracker/api/track.ts` **ET** `tracker/schema.sql` (CREATE TABLE + ALTER TABLE migration), puis exécuter la migration dans **Vercel → Storage → ta DB → Query**
 - 🚀 **Vercel se déploie automatiquement à chaque push sur `main`** — pas de commande `vercel` à lancer
+- ⚠️ **URL de production** : `https://mcp-intellij-all.vercel.app` — projet Vercel `mcp-intellij-all`. Ne pas confondre avec l'ancienne instance `mcp-intellij-g23v4uokg-...` qui est obsolète et ne reçoit plus de mises à jour
+- Le `BASE_URL` dans `McpCompanionTelemetry.kt` doit toujours pointer vers `https://mcp-intellij-all.vercel.app`
 
 ## Workflow de développement
 

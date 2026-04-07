@@ -157,6 +157,9 @@ Add the JetBrains MCP proxy to your AI client config (e.g. `claude_desktop_confi
 The anonymous usage tracker is a Vercel serverless app in `tracker/`.
 **Vercel auto-deploys on every push to `main`** — no manual deploy needed.
 
+Production URL: `https://mcp-intellij-all.vercel.app` (Vercel project: `mcp-intellij-all`).
+This URL is hardcoded in `McpCompanionTelemetry.kt` — do not change it to a deployment-specific URL.
+
 If a new field is added to the telemetry payload:
 1. Update `tracker/api/track.ts` (extract + insert the new field)
 2. Update `tracker/schema.sql` (add column in `CREATE TABLE` + `ALTER TABLE` migration)
