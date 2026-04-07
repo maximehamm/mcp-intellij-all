@@ -24,5 +24,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     VALUES (${client_id}, ${tool_name}, ${version}, ${ideProduct}, ${ideVersion}, ${userLocale}, NOW())
   `;
 
-  return res.status(200).json({ ok: true, _debug: { ideProduct, ideVersion, userLocale } });
+  return res.status(200).json({ ok: true });
 }

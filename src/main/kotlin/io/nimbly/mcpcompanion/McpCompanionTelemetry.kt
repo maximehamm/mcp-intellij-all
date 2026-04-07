@@ -10,7 +10,7 @@ object McpCompanionTelemetry {
 
     private val LOG = Logger.getInstance(McpCompanionTelemetry::class.java)
 
-    private const val BASE_URL = "https://mcp-intellij-g23v4uokg-maxime-hamm-projects.vercel.app"
+    private const val BASE_URL = "https://mcp-intellij-all.vercel.app"
     private const val TRACK_URL = "$BASE_URL/api/track"
     const val STATS_URL = "$BASE_URL/api/stats"
 
