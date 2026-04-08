@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "2.6.0"
+version = "2.6.1"
 
 repositories {
     mavenCentral()
@@ -46,6 +46,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>2.6.1</b> — Minor plugin description improvements.</li>
                 <li><b>2.6.0</b> — New VCS tools: <code>get_vcs_changes</code> lists modified/added/deleted/moved files with optional unified diff; <code>get_vcs_branch</code> shows current branch and all local/remote branches; <code>get_vcs_log</code> returns recent commit history with author, date, and changed files; <code>get_vcs_blame</code> provides line-by-line annotation. <code>get_vcs_changes</code> and <code>get_vcs_blame</code> work with any VCS; <code>get_vcs_branch</code> and <code>get_vcs_log</code> require the Git plugin (bundled in IntelliJ IDEA).</li>
                 <li><b>2.5.1</b> — Minor plugin description improvements.</li>
                 <li><b>2.5.0</b> — New Database tools (IntelliJ IDEA Ultimate): <code>list_database_sources</code> lists configured data sources with URL, driver, and user; <code>get_database_schema</code> returns the full introspected schema tree — namespaces, tables, views, columns with types, primary keys, foreign keys, and indexes; <code>execute_database_query</code> executes any SQL query and returns results as JSON (disabled by default). All implemented via reflection through the Database plugin classloader — no compile dependency. Settings UI greys out Database tools when the plugin is not installed.</li>
