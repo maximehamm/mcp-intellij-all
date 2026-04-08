@@ -343,44 +343,63 @@ class McpCompanionVcsToolset : McpToolset {
         }
     }
 
-    /** Generates a unified diff between two strings using a simple LCS algorithm. */
-    private fun unifiedDiff(beforeLabel: String, afterLabel: String, before: String, after: String): String {
+    /** Generates a unified diff between two strings. No size limit — hunks are capped at MAX_HUNKS. */
+    internal fun unifiedDiff(beforeLabel: String, afterLabel: String, before: String, after: String): String {
         if (before == after) return "(no changes)"
         val a = before.lines()
         val b = after.lines()
+        val MAX_HUNKS = 20
 
-        // For large files fall back to a simple summary
-        if (a.size > 500 || b.size > 500) {
-            return "--- $beforeLabel\n+++ $afterLabel\n" +
-                "(file too large for inline diff — ${a.size} → ${b.size} lines)"
-        }
-
-        // LCS
-        val m = a.size; val n = b.size
-        val dp = Array(m + 1) { IntArray(n + 1) }
-        for (i in 1..m) for (j in 1..n)
-            dp[i][j] = if (a[i-1] == b[j-1]) dp[i-1][j-1] + 1 else maxOf(dp[i-1][j], dp[i][j-1])
-
-        // Backtrack to produce edit script: 'k'=keep, '-'=delete, '+'=add
+        // Edit script: 'k'=keep, '-'=delete, '+'=add
         data class Edit(val op: Char, val text: String)
-        val edits = mutableListOf<Edit>()
-        var i = m; var j = n
-        while (i > 0 || j > 0) {
-            when {
-                i > 0 && j > 0 && a[i-1] == b[j-1] -> { edits.add(Edit('k', a[i-1])); i--; j-- }
-                i > 0 && (j == 0 || dp[i-1][j] >= dp[i][j-1]) -> { edits.add(Edit('-', a[i-1])); i-- }
-                else -> { edits.add(Edit('+', b[j-1])); j-- }
+
+        // For small files use full LCS (exact diff).
+        // For large files use prefix/suffix alignment + raw diff of the middle section
+        // — handles the common case (version bump, small edits) without O(n²) cost.
+        val edits: List<Edit> = if (a.size <= 800 && b.size <= 800) {
+            val m = a.size; val n = b.size
+            val dp = Array(m + 1) { IntArray(n + 1) }
+            for (i in 1..m) for (j in 1..n)
+                dp[i][j] = if (a[i-1] == b[j-1]) dp[i-1][j-1] + 1 else maxOf(dp[i-1][j], dp[i][j-1])
+            val result = mutableListOf<Edit>()
+            var i = m; var j = n
+            while (i > 0 || j > 0) {
+                when {
+                    i > 0 && j > 0 && a[i-1] == b[j-1] -> { result.add(Edit('k', a[i-1])); i--; j-- }
+                    i > 0 && (j == 0 || dp[i-1][j] >= dp[i][j-1]) -> { result.add(Edit('-', a[i-1])); i-- }
+                    else -> { result.add(Edit('+', b[j-1])); j-- }
+                }
+            }
+            result.reversed()
+        } else {
+            // Large file: align common prefix and suffix, diff the middle block
+            var prefixLen = 0
+            while (prefixLen < a.size && prefixLen < b.size && a[prefixLen] == b[prefixLen]) prefixLen++
+            var suffixLen = 0
+            val aMiddleEnd = a.size - suffixLen
+            val bMiddleEnd = b.size - suffixLen
+            while (suffixLen < a.size - prefixLen && suffixLen < b.size - prefixLen &&
+                   a[a.size - 1 - suffixLen] == b[b.size - 1 - suffixLen]) suffixLen++
+            buildList {
+                for (i in 0 until prefixLen) add(Edit('k', a[i]))
+                for (i in prefixLen until a.size - suffixLen) add(Edit('-', a[i]))
+                for (i in prefixLen until b.size - suffixLen) add(Edit('+', b[i]))
+                for (i in a.size - suffixLen until a.size) add(Edit('k', a[i]))
             }
         }
-        edits.reverse()
 
-        // Format as unified diff with 3-line context
+        // Format hunks with 3-line context, capped at MAX_HUNKS
         val CONTEXT = 3
         val sb = StringBuilder("--- $beforeLabel\n+++ $afterLabel\n")
         var ei = 0
+        var hunkCount = 0
         while (ei < edits.size) {
             if (edits[ei].op == 'k') { ei++; continue }
-            // Find hunk boundaries
+            if (hunkCount >= MAX_HUNKS) {
+                val remaining = edits.drop(ei).count { it.op != 'k' }
+                sb.append("(... $remaining more changed line(s) in ${edits.size - ei} lines not shown — $MAX_HUNKS hunks limit reached)\n")
+                break
+            }
             val hStart = (ei - CONTEXT).coerceAtLeast(0)
             var hEnd = ei + 1
             while (hEnd < edits.size) {
@@ -398,6 +417,7 @@ class McpCompanionVcsToolset : McpToolset {
             for (e in edits.subList(hStart, hEnd))
                 sb.append("${if (e.op == 'k') ' ' else e.op}${e.text}\n")
             ei = hEnd
+            hunkCount++
         }
         return sb.toString().trimEnd()
     }
