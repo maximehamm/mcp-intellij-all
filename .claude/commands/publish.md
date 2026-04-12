@@ -1,65 +1,74 @@
 Publie le plugin sur le JetBrains Marketplace en suivant le workflow complet.
 
-## Étape 0 — Détecter les nouveaux tools
+## Étape 0 — Analyse initiale (silencieuse, sans tests)
 
-Compare `git diff main --name-only` et `git diff --cached --name-only` pour détecter si des fichiers `*Toolset.kt` ont été modifiés.
-Si oui, récupère les noms des nouveaux `@McpTool` ajoutés (grep sur les fichiers stagés).
-Garde cette liste pour les vérifications suivantes.
+Effectue ces opérations en parallèle sans rien afficher encore :
 
-## Étape 1 — Checklist qualité (BLOQUER si échec)
+**a) Détecter les nouveaux tools**
+Compare `git diff main --name-only` pour détecter si des fichiers `*Toolset.kt` ont été modifiés.
+Si oui, grep les nouveaux `@McpTool` ajoutés. Garde la liste.
 
-### 1a — Tests de réflexion
-Vérifie dans `src/test/kotlin/.../ReflectionApiTest.kt` (et tout fichier `*Test.kt` de réflexion) que chaque appel `Class.forName`, `getDeclaredField`, `getMethod` présent dans les fichiers `*Toolset.kt` stagés a bien un test correspondant.
-→ Si un appel de réflexion n'est pas couvert : **bloquer** et lister les appels manquants.
-
-### 1b — Tests automatiques pour nouveaux tools
-Si un nouveau tool a été détecté (étape 0) : vérifier qu'il existe au moins un test (dans `src/test/`) qui le couvre (heavy test, unit test, ou réflexion).
-→ Si aucun test pour un nouveau tool : **bloquer** et demander d'en ajouter.
-
-### 1c — Tests verts
-```bash
-./gradlew test 2>&1 | tail -20
-```
-→ Si `BUILD FAILED` ou tests en échec : **bloquer**.
-
-### 1d — README à jour
-Lis `README.md` et vérifie que le tableau des tools contient bien tous les tools listés dans `McpCompanionSettings.TOOL_GROUPS`.
-→ Si un tool est absent du README : **bloquer** et lister les manquants.
-
-### 1e — Overview à jour
-Lis le tool `get_mcp_companion_overview` dans `McpCompanionToolset.kt` et vérifie que chaque tool présent dans `McpCompanionSettings.TOOL_GROUPS` est mentionné dans le texte de l'overview.
-→ Si un tool est absent de l'overview : **bloquer** et lister les manquants.
-
-### 1f — Page Settings à jour (nouveaux tools seulement)
-Si un nouveau tool a été détecté : vérifie qu'il apparaît dans `McpCompanionSettings.TOOL_GROUPS` (il doit avoir été ajouté dans la bonne catégorie).
-→ Si absent : **bloquer**.
-
-Affiche un rapport de la checklist :
-```
-✅ Tests de réflexion couverts
-✅ Tests auto présents pour nouveaux tools
-✅ Tests verts
-✅ README à jour
-⚠️ Overview : tool 'get_foo' absent → BLOQUÉ
-```
-Ne pas continuer si un point est bloquant.
-
-## Étape 2 — Incrémenter la version automatiquement
-
+**b) Calculer les versions candidates**
 Lis la version actuelle dans `build.gradle.kts`.
+- Si `$ARGUMENTS` contient un numéro explicite → l'utiliser tel quel, pas de choix à proposer.
+- Sinon : calculer les deux options — option A (2ème digit+1, 3ème reset) et option B (3ème digit+1).
+  Pré-sélectionner l'option recommandée selon le contexte : A si nouveau tool détecté, B sinon.
 
-- Si `$ARGUMENTS` contient un numéro de version explicite (ex: `2.7.0`) → utilise-le directement.
-- Sinon, applique la règle :
-  - **Nouveau tool détecté** (étape 0) → incrémenter le **2ème digit** et remettre le 3ème à 0 (ex: `2.6.1` → `2.7.0`)
-  - **Pas de nouveau tool** (fix, amélioration) → incrémenter le **3ème digit** (ex: `2.6.1` → `2.6.2`)
+**c) Checklist qualité (sans tests)**
+- Réflexion : chaque `Class.forName`/`getDeclaredField`/`getMethod` dans les Toolset modifiés a un test dans `*ReflectionTest.kt` ?
+- Tests nouveaux tools : si nouveau tool, existe-t-il un test qui le couvre ?
+- README : tous les tools de `McpCompanionSettings.TOOL_GROUPS` présents dans `README.md` ?
+- Overview : tous les tools mentionnés dans `get_mcp_companion_overview` de `McpCompanionToolset.kt` ?
+- Settings : nouveau tool présent dans `McpCompanionSettings.TOOL_GROUPS` ?
 
-Affiche la version calculée et demande confirmation avant de modifier le fichier.
+## Étape 1 — Présentation du plan et confirmation unique
 
-## Étape 3 — Mettre à jour la version
+Affiche un récapitulatif structuré :
+
+```
+📦 Version actuelle : X.Y.Z  →  prochaine : ?
+🔧 Nouveaux tools : <liste ou "aucun">
+
+Checklist :
+  ✅/❌ Tests de réflexion
+  ✅/❌ Tests nouveaux tools
+  ⏳ Tests unitaires (seront lancés après confirmation)
+  ✅/❌ README à jour
+  ✅/❌ Overview à jour
+  ✅/❌ Settings à jour
+
+Fichiers modifiés : <liste git diff main --name-only>
+```
+
+Si un point statique est ❌ → expliquer le problème et **stopper**. Ne pas demander confirmation.
+
+Si tous les points statiques sont ✅ → demander **une seule fois** :
+
+> **"Quelle version veux-tu publier ?"**
+> - **A) X.Y+1.0** — nouveau tool / fonctionnalité majeure ← *(recommandé si nouveau tool)*
+> - **B) X.Y.Z+1** — fix / amélioration mineure ← *(recommandé sinon)*
+> - ou saisis un numéro libre
+>
+> *(Les tests seront lancés après ta réponse. Si KO → publication annulée malgré ta confirmation.)*
+
+Attendre la réponse. Si refus ou annulation → stopper.
+
+## Étape 1b — Tests unitaires (après confirmation)
+
+Lance les tests et affiche le résultat :
+
+```bash
+./gradlew test 2>&1 | tail -5
+```
+
+Si les tests échouent → **stopper immédiatement**, même si l'utilisateur a déjà confirmé :
+> ❌ Tests KO — publication annulée. Corriger les tests avant de relancer `/publish`.
+
+## Étape 2 — Mettre à jour la version
 
 Modifie la version dans `build.gradle.kts` avec l'outil Edit.
 
-## Étape 3b — What's New (2ème digit uniquement)
+## Étape 3 — What's New (2ème digit uniquement)
 
 Si le 2ème digit a été incrémenté (nouveau tool), ouvrir `src/main/resources/META-INF/plugin.xml` et localiser la section `<change-notes>`.
 
@@ -71,56 +80,34 @@ Attendre sa réponse, puis ajouter une entrée en tête de `<change-notes>` :
   <li>...</li>
 </ul>
 ```
-
-→ Passer cette étape si c'est uniquement une incrémentation du 3ème digit.
+→ Passer si 3ème digit seulement.
 
 ## Étape 4 — Build
 
 ```bash
-./gradlew buildPlugin
+./gradlew buildPlugin 2>&1 | grep -E "BUILD|error:"
 ```
-
-Vérifie que le build est `BUILD SUCCESSFUL`. Arrêter si erreur.
+Arrêter si `BUILD FAILED`.
 
 ## Étape 5 — Vérification de compatibilité
 
 ```bash
-./gradlew verifyPlugin
+./gradlew verifyPlugin 2>&1 | grep -E "BUILD|COMPATIBILITY_PROBLEMS|INTERNAL_API_USAGES"
 ```
+- `COMPATIBILITY_PROBLEMS` ou `INTERNAL_API_USAGES` → **stopper et signaler**.
+- Warnings mineurs → OK.
 
-Doit être `BUILD SUCCESSFUL`.
-- Si `COMPATIBILITY_PROBLEMS` ou `INTERNAL_API_USAGES` détectés → **stopper et signaler**. Ne pas publier.
-- Warnings mineurs (deprecated) → OK, continuer.
-
-## Étape 6 — Demander accord explicite pour commit + push
-
-Affiche un résumé :
-- Version : X.Y.Z
-- Fichiers modifiés (git status)
-- Résultats de la checklist qualité
-- Résultat verifyPlugin
-
-Puis demande : **"Je publie la version X.Y.Z sur le Marketplace ?"**
-Attendre confirmation explicite ("oui", "go", "ok", etc.) avant de continuer.
-
-## Étape 7 — Commit + push
+## Étape 6 — Commit + push + publish
 
 ```bash
-git add build.gradle.kts
-git commit -m "X.Y.Z — <description courte des changements>"
+git add -A
+git commit -m "X.Y.Z — <description courte>"
 git push
-```
-
-## Étape 8 — Publication
-
-```bash
 ./gradlew publishPlugin
 ```
 
-Vérifie que la sortie contient `BUILD SUCCESSFUL` et l'URL de la release sur le Marketplace.
+## Étape 7 — Résumé final
 
-## Étape 9 — Résumé final
-
-Affiche :
-- ✅ Version publiée : X.Y.Z
-- Lien vers le plugin sur le Marketplace (si disponible dans la sortie Gradle)
+```
+✅ Version X.Y.Z publiée sur le Marketplace
+```

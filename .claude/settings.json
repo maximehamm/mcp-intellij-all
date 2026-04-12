@@ -5,8 +5,9 @@
         "matcher": "Bash",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Check tool_input.command. If it does NOT contain 'git commit', immediately output ALLOW. If it DOES contain 'git commit', verify the user has explicitly asked to commit in their recent messages (e.g. 'commit', 'go ahead', 'yes', 'ok commit', 'push'). If they have, output ALLOW. If not, output DENY and ask them to confirm the commit explicitly in the chat."
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command // \"\"'); echo \"$CMD\" | grep -qE 'git commit' || exit 0; echo '{\"systemMessage\": \"Commit en cours - accord utilisateur requis.\"}'",
+            "timeout": 5
           },
           {
             "type": "command",

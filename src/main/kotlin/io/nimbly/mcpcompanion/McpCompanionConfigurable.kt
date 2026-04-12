@@ -287,8 +287,36 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
 
     // ── Descriptions via reflection on @McpDescription ───────────────────────
 
+    private val toolsetClasses: List<Class<*>> by lazy {
+        val pkg = McpCompanionConfigurable::class.java.packageName
+        val classLoader = McpCompanionConfigurable::class.java.classLoader
+        runCatching {
+            classLoader.getResources(pkg.replace('.', '/'))
+                .asSequence()
+                .flatMap { url ->
+                    when (url.protocol) {
+                        "jar" -> (url.openConnection() as java.net.JarURLConnection).jarFile
+                            .entries().asSequence()
+                            .filter { !it.isDirectory && it.name.endsWith(".class") && '$' !in it.name }
+                            .mapNotNull { runCatching { classLoader.loadClass(it.name.removeSuffix(".class").replace('/', '.')) }.getOrNull() }
+                        "file" -> {
+                            val dir = java.io.File(url.toURI())
+                            dir.walkTopDown()
+                                .filter { it.isFile && it.extension == "class" && '$' !in it.name }
+                                .mapNotNull { f ->
+                                    val relative = f.relativeTo(dir).path.removeSuffix(".class").replace(java.io.File.separatorChar, '.')
+                                    runCatching { classLoader.loadClass("$pkg.$relative") }.getOrNull()
+                                }
+                        }
+                        else -> emptySequence()
+                    }
+                }
+                .filter { com.intellij.mcpserver.McpToolset::class.java.isAssignableFrom(it) && !it.isInterface }
+                .toList()
+        }.getOrElse { emptyList() }
+    }
+
     private fun rawDescription(toolName: String): String? = try {
-        val toolsetClasses = listOf(McpCompanionToolset::class.java, McpCompanionEditorToolset::class.java, McpCompanionBuildToolset::class.java, McpCompanionDebugToolset::class.java, McpCompanionDiagnosticToolset::class.java, McpCompanionCodeAnalysisToolset::class.java, McpCompanionDatabaseToolset::class.java)
         toolsetClasses.firstNotNullOfOrNull { cls ->
             cls.methods
                 .find { it.getAnnotation(McpTool::class.java)?.name == toolName }
