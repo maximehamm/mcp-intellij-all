@@ -10,7 +10,6 @@ import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.util.Key
-import com.intellij.openapi.vfs.LocalFileSystem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -83,10 +82,9 @@ class McpCompanionEditorToolset : McpToolset {
         disabledMessage("navigate_to")?.let { return it }
         val project = coroutineContext.project
         return runOnEdt {
-            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
-            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                ?: return@runOnEdt "File not found: $filePath"
-            com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, line - 1, (column - 1).coerceAtLeast(0))
+            val (vFile, err) = resolveFilePathOrError(project, filePath)
+            if (err != null) return@runOnEdt err
+            com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile!!, line - 1, (column - 1).coerceAtLeast(0))
                 .navigate(true)
             "Navigated to $filePath:$line:$column"
         }
@@ -107,12 +105,11 @@ class McpCompanionEditorToolset : McpToolset {
         disabledMessage("select_text")?.let { return it }
         val project = coroutineContext.project
         return runOnEdt {
-            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
-            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                ?: return@runOnEdt "File not found: $filePath"
+            val (vFile, err) = resolveFilePathOrError(project, filePath)
+            if (err != null) return@runOnEdt err
             // Open the file, bring it to the foreground and place the caret at the start of the range
             val editor = FileEditorManager.getInstance(project)
-                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, startLine - 1, (startColumn - 1).coerceAtLeast(0)), true)
+                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile!!, startLine - 1, (startColumn - 1).coerceAtLeast(0)), true)
                 ?: return@runOnEdt "Could not open editor"
             val doc = editor.document
             val startOffset = (doc.getLineStartOffset(startLine - 1) + (startColumn - 1)).coerceAtMost(doc.textLength)
@@ -144,10 +141,8 @@ class McpCompanionEditorToolset : McpToolset {
         disabledMessage("highlight_text")?.let { return it }
         val project = coroutineContext.project
         return runOnEdt {
-            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
-            val normalizedPath = filePath.replace('\\', '/')
-            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/$normalizedPath")
-                ?: return@runOnEdt "File not found: $filePath"
+            val (vFile, err) = resolveFilePathOrError(project, filePath)
+            if (err != null) return@runOnEdt err
             // Parse ranges first so we can navigate to the first one when opening the file
             data class ParsedRange(val startLine: Int, val startCol: Int, val endLine: Int, val endCol: Int)
             val parsed = ranges.split(",").mapNotNull { range ->
@@ -165,7 +160,7 @@ class McpCompanionEditorToolset : McpToolset {
             val navLine = firstRange?.startLine ?: 0
             val navCol  = firstRange?.startCol  ?: 0
             val editor = FileEditorManager.getInstance(project)
-                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, navLine, navCol), true)
+                .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile!!, navLine, navCol), true)
                 ?: return@runOnEdt "Could not open editor"
             val doc = editor.document
             val attrs = EditorColorsManager.getInstance().globalScheme
@@ -212,10 +207,9 @@ class McpCompanionEditorToolset : McpToolset {
                     .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
                     .map { it.editor }
             } else {
-                val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
-                val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                    ?: return@runOnEdt "File not found: $filePath"
-                FileEditorManager.getInstance(project).getEditors(vFile)
+                val (vFile, err) = resolveFilePathOrError(project, filePath)
+                if (err != null) return@runOnEdt err
+                FileEditorManager.getInstance(project).getEditors(vFile!!)
                     .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
                     .map { it.editor }
             }

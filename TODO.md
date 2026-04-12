@@ -2,7 +2,7 @@
 
 ## High priority
 
-- **get_local_history** — IntelliJ local history for a file (even without git)
+- **apply_quick_fix** — Apply a specific quick fix on a file/line
 - **get_available_inspections**, **run_inspection**
 
 ## New tools
@@ -16,7 +16,6 @@
 - **get_bookmarks** — List all bookmarks in the project
 - **navigate_to_bookmark** — Navigate to a bookmark by name/mnemonic
 - 
-- **apply_quick_fix** — Apply a specific quick fix on a file/line
 - **get_implementations** — Find implementations of an interface or abstract class
 - **get_gradle_tasks** — List available Gradle tasks for the project
 - **run_gradle_task** — Execute a specific Gradle task

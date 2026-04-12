@@ -95,17 +95,15 @@ class McpCompanionDebugToolset : McpToolset {
         disabledMessage("add_conditional_breakpoint")?.let { return it }
         val project = coroutineContext.project
         return runOnEdt {
-            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
+            val (file, err) = resolveFilePathOrError(project, filePath)
+            if (err != null) return@runOnEdt err
             val normalizedPath = filePath.replace('\\', '/')
-            val file = com.intellij.openapi.vfs.LocalFileSystem.getInstance()
-                .findFileByPath("$basePath/$normalizedPath")
-                ?: return@runOnEdt "File not found: $filePath"
             val manager = XDebuggerManager.getInstance(project).breakpointManager
             val existing = manager.allBreakpoints
                 .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
                 .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(normalizedPath) }
             if (existing == null) {
-                com.intellij.xdebugger.XDebuggerUtil.getInstance().toggleLineBreakpoint(project, file, line - 1, false)
+                com.intellij.xdebugger.XDebuggerUtil.getInstance().toggleLineBreakpoint(project, file!!, line - 1, false)
             }
             val bp = existing ?: run {
                 var found: com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>? = null

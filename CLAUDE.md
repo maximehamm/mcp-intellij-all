@@ -31,18 +31,15 @@
 
 ## Tester via MCP SSE (curl)
 
-Le sandbox IntelliJ (lancé par `runIde`) expose le MCP sur un port dédié — trouver avec :
-```bash
-lsof -nP -iTCP -sTCP:LISTEN | grep java   # repérer le port du processus sandbox
-```
+Le sandbox IntelliJ (lancé par `runIde`) expose le MCP sur le **port fixe `64343`** — ne pas le chercher avec `lsof`.
 
 Appel d'un outil :
 ```bash
-curl -s -N --max-time 20 http://127.0.0.1:<PORT>/sse > /tmp/sse.txt &
+curl -s -N --max-time 20 http://127.0.0.1:64343/sse > /tmp/sse.txt &
 sleep 2
 # ⚠️ Toujours stripper le \r (CRLF dans le stream SSE)
 SESSION=$(grep -o 'sessionId=[^"& \r]*' /tmp/sse.txt | head -1 | cut -d= -f2 | tr -d '\r\n')
-curl -s -X POST "http://127.0.0.1:<PORT>/message?sessionId=$SESSION" \
+curl -s -X POST "http://127.0.0.1:64343/message?sessionId=$SESSION" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"<TOOL>","arguments":{}}}'
 sleep 5

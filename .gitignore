@@ -7,12 +7,10 @@ build/
 *.iml
 .intellijPlatform/
 
-# Claude Code
-.claude/
-
 # Secrets
 secrets.properties
 
 # OS
 .DS_Store
 /META-INF/
+/.claude/settings.local.json

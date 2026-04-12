@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check tool_input.command. If it does NOT contain 'git commit', immediately output ALLOW. If it DOES contain 'git commit', verify the user has explicitly asked to commit in their recent messages (e.g. 'commit', 'go ahead', 'yes', 'ok commit', 'push'). If they have, output ALLOW. If not, output DENY and ask them to confirm the commit explicitly in the chat."
+          },
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command // \"\"'); echo \"$CMD\" | grep -qE 'git commit' || exit 0; STAGED=$(git -C /Users/maxime/Development/mcp-intellij-all diff --cached --name-only 2>/dev/null); if echo \"$STAGED\" | grep -q 'Toolset\\.kt' && ! echo \"$STAGED\" | grep -q 'ReflectionApiTest'; then echo '{\"systemMessage\": \"⚠️ Des fichiers *Toolset.kt sont stagés mais ReflectionApiTest.kt na pas été modifié — pensez à ajouter des tests de réflexion pour les nouvelles APIs.\"}'; fi",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command // \"\"'); echo \"$CMD\" | grep -qE 'git commit' || exit 0; cd /Users/maxime/Development/mcp-intellij-all && if ./gradlew test > /tmp/mcp-companion-test.log 2>&1; then exit 0; else echo '{\"continue\": false, \"stopReason\": \"❌ Tests échoués — commit bloqué. Consultez /tmp/mcp-companion-test.log pour les détails.\"}'; fi",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

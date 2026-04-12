@@ -7,7 +7,6 @@ import com.intellij.mcpserver.project
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.util.ui.UIUtil
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -112,6 +111,7 @@ class McpCompanionToolset : McpToolset {
 - get_vcs_branch() — current branch + local/remote branches (Git)
 - get_vcs_log(maxCount=20, file="", branch="") — recent commits with hash, author, date, subject, files changed (Git)
 - get_vcs_blame(filePath, startLine=1, endLine=MAX) — line-by-line annotation: author, date, revision per line
+- get_local_history(scope="file"|"directory"|"project", path="") — local history of a file, directory, or entire project (IntelliJ Local History, not Git)
 
 ### General
 - get_mcp_companion_overview → this overview
@@ -166,11 +166,10 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
     suspend fun replace_text_undoable(pathInProject: String, oldText: String, newText: String): String {
         disabledMessage("replace_text_undoable")?.let { return it }
         val project = coroutineContext.project
-        val projectPath = project.basePath ?: return "error: no project base path"
-        val virtualFile = LocalFileSystem.getInstance().findFileByPath("$projectPath/$pathInProject")
-            ?: return "error: file not found: $pathInProject"
+        val (virtualFile, err) = resolveFilePathOrError(project, pathInProject)
+        if (err != null) return "error: $err"
         val document = runOnEdt {
-            FileDocumentManager.getInstance().getDocument(virtualFile)
+            FileDocumentManager.getInstance().getDocument(virtualFile!!)
         } ?: return "error: cannot open document for: $pathInProject"
         val offset = document.text.indexOf(oldText)
         if (offset == -1) return "error: text not found in file"
@@ -286,11 +285,10 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         disabledMessage("delete_file")?.let { return it }
         val project = coroutineContext.project
         return runOnEdt {
-            val basePath = project.basePath ?: return@runOnEdt "Project base path not found"
-            val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/${filePath.replace('\\', '/')}")
-                ?: return@runOnEdt "File not found: $filePath"
+            val (vFile, err) = resolveFilePathOrError(project, filePath)
+            if (err != null) return@runOnEdt err
             WriteCommandAction.runWriteCommandAction(project) {
-                vFile.delete(this)
+                vFile!!.delete(this)
             }
             "Deleted: $filePath"
         }

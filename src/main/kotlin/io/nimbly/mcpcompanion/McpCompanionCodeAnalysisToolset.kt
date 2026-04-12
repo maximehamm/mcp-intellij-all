@@ -18,7 +18,6 @@ import com.intellij.openapi.module.ModuleType
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectRootManager
-import com.intellij.openapi.vfs.LocalFileSystem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.intellij.openapi.application.EDT
@@ -70,8 +69,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
 
         val files = runOnEdt {
             if (filePath != null) {
-                val basePath = project.basePath ?: return@runOnEdt emptyList()
-                val vFile = LocalFileSystem.getInstance().findFileByPath("$basePath/$filePath")
+                val vFile = resolveFilePath(project, filePath)
                     ?: return@runOnEdt emptyList()
                 listOf(filePath to vFile)
             } else {
@@ -126,9 +124,8 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         val project = coroutineContext.project
         val basePath = project.basePath ?: return "Cannot determine project base path"
 
-        val vFile = runOnEdt {
-            LocalFileSystem.getInstance().findFileByPath("$basePath/$filePath")
-        } ?: return "File not found: $filePath"
+        val vFile = runOnEdt { resolveFilePath(project, filePath) }
+            ?: return "File not found: $filePath\nTried relative to: ${project.basePath}"
 
         val isAlreadyOpen = runOnEdt {
             FileEditorManager.getInstance(project).openFiles.any { it.path == vFile.path }
