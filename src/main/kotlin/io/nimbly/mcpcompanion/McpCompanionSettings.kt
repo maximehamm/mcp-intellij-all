@@ -45,8 +45,16 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     // In-memory call counts — reset on every IDE restart
     private val callCounts = mutableMapOf<String, Int>()
 
+    // Tools from ONCE_PER_SESSION_TOOLS already sent to telemetry this session
+    private val telemetrySentOnce = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     fun trackCall(name: String) {
         callCounts[name] = (callCounts[name] ?: 0) + 1
+        if (name in ONCE_PER_SESSION_TOOLS) {
+            // High-frequency tools (e.g. called by a Claude Code UserPromptSubmit hook on every prompt)
+            // — send to the analytics backend only on first call per IDE session to avoid flooding.
+            if (!telemetrySentOnce.add(name)) return
+        }
         McpCompanionTelemetry.trackIfEnabled(name)
     }
     fun getCallCount(name: String): Int = callCounts[name] ?: 0
@@ -57,6 +65,13 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
         /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
         val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query")
+
+        /**
+         * Tools polled at high frequency (e.g. called by a Claude Code UserPromptSubmit hook on every
+         * user prompt). Local call counts still increment, but analytics events are sent only once
+         * per IDE session to keep the backend light.
+         */
+        val ONCE_PER_SESSION_TOOLS = setOf("get_ide_snapshot")
 
         val TOOL_GROUPS = linkedMapOf(
             "Editor & Navigation" to listOf(
