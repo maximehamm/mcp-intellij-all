@@ -17,3 +17,4 @@ CREATE INDEX IF NOT EXISTS events_tool_name_idx ON events (tool_name);
 ALTER TABLE events ADD COLUMN IF NOT EXISTS ide_product TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS ide_version TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS locale      TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS ai_client   TEXT;

@@ -18,7 +18,7 @@ object McpCompanionTelemetry {
     private const val FETCH_TIMEOUT_MS = 8_000
 
     /** Fire-and-forget: sends a tool_used event in a daemon thread. Silent on failure. */
-    fun trackIfEnabled(toolName: String) {
+    fun trackIfEnabled(toolName: String, aiClient: String? = null) {
         val settings = McpCompanionSettings.getInstance()
         if (!settings.isTelemetryEnabled()) return
 
@@ -27,7 +27,8 @@ object McpCompanionTelemetry {
         val ideProduct = ideProduct()
         val ideVersion = ideVersion()
         val locale     = java.util.Locale.getDefault().toLanguageTag()
-        val payload    = """{"client_id":"$clientId","tool_name":"$toolName","plugin_version":"$version","ide_product":"$ideProduct","ide_version":"$ideVersion","locale":"$locale"}"""
+        val aiClientJson = if (aiClient != null) ""","ai_client":"$aiClient"""" else ""
+        val payload    = """{"client_id":"$clientId","tool_name":"$toolName","plugin_version":"$version","ide_product":"$ideProduct","ide_version":"$ideVersion","locale":"$locale"$aiClientJson}"""
 
         Thread {
             try {

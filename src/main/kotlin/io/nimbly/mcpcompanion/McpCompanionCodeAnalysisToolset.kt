@@ -7,6 +7,7 @@ import com.intellij.openapi.editor.impl.DocumentMarkupModel
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
+import com.intellij.mcpserver.clientInfo
 import com.intellij.mcpserver.project
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.application.ApplicationManager
@@ -30,14 +31,14 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
 
     override fun isEnabled(): Boolean = true
 
-    private fun disabledMessage(toolName: String): String? {
+    private suspend fun disabledMessage(toolName: String): String? {
         if (!McpCompanionSettings.getInstance().isEnabled(toolName)) {
             val extra = if (toolName in McpCompanionSettings.DISABLED_BY_DEFAULT)
                 " This tool is disabled by default for safety reasons. Ask the user to enable it first."
             else ""
             return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
         }
-        McpCompanionSettings.getInstance().trackCall(toolName)
+        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name }.getOrNull())
         return null
     }
 

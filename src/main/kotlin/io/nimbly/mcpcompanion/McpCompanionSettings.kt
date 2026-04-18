@@ -48,14 +48,14 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     // Tools from ONCE_PER_SESSION_TOOLS already sent to telemetry this session
     private val telemetrySentOnce = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-    fun trackCall(name: String) {
+    fun trackCall(name: String, aiClient: String? = null) {
         callCounts[name] = (callCounts[name] ?: 0) + 1
         if (name in ONCE_PER_SESSION_TOOLS) {
             // High-frequency tools (e.g. called by a Claude Code UserPromptSubmit hook on every prompt)
             // — send to the analytics backend only on first call per IDE session to avoid flooding.
             if (!telemetrySentOnce.add(name)) return
         }
-        McpCompanionTelemetry.trackIfEnabled(name)
+        McpCompanionTelemetry.trackIfEnabled(name, aiClient)
     }
     fun getCallCount(name: String): Int = callCounts[name] ?: 0
     fun getAllCallCounts(): Map<String, Int> = callCounts.toMap()

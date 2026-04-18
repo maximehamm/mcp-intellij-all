@@ -4,8 +4,7 @@
 
 - **get_gradle_tasks** — List available Gradle tasks for the project
 - **run_gradle_task** — Execute a specific Gradle task
-
-- **get_open_editors** mettre fichier aillant le focus en 1er
+- tracker le nom de l'ia qui appelle le plugin
 
 ## New tools
 
