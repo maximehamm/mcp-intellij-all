@@ -29,7 +29,7 @@ class McpCompanionVcsToolset : McpToolset {
         if (!McpCompanionSettings.getInstance().isEnabled(toolName)) {
             return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
         }
-        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name }.getOrNull())
+        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name?.takeIf { it != "Unknown MCP client" } }.getOrNull())
         return null
     }
 

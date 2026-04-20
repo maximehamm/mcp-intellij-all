@@ -27,7 +27,7 @@ class McpCompanionToolset : McpToolset {
             else ""
             return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
         }
-        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name }.getOrNull())
+        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name?.takeIf { it != "Unknown MCP client" } }.getOrNull())
         return null
     }
 
@@ -188,12 +188,20 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         } ?: return "error: cannot open document for: $pathInProject"
         val offset = document.text.indexOf(oldText)
         if (offset == -1) return "error: text not found in file"
-        runOnEdt {
+        // Write actions must run from a write-safe context. invokeLater posts to the EDT
+        // event queue (write-safe), unlike invokeAndWait(ModalityState.any()) which is write-unsafe.
+        val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        ApplicationManager.getApplication().invokeLater {
             WriteCommandAction.runWriteCommandAction(project, "MCP Replace", null, {
                 document.replaceString(offset, offset + oldText.length, newText)
             })
+            done.set(true)
         }
-        return "ok"
+        val deadline = System.currentTimeMillis() + 5000
+        while (!done.get() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50)
+        }
+        return if (done.get()) "ok" else "error: write action timed out"
     }
 
     // ── execute_ide_action ───────────────────────────────────────────────────
@@ -303,13 +311,19 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
     suspend fun delete_file(filePath: String, projectPath: String? = null): String {
         disabledMessage("delete_file")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
-            val (vFile, err) = resolveFilePathOrError(project, filePath)
-            if (err != null) return@runOnEdt err
+        val (vFile, err) = resolveFilePathOrError(project, filePath)
+        if (err != null) return err
+        val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        ApplicationManager.getApplication().invokeLater {
             WriteCommandAction.runWriteCommandAction(project) {
                 vFile!!.delete(this)
             }
-            "Deleted: $filePath"
+            done.set(true)
         }
+        val deadline = System.currentTimeMillis() + 5000
+        while (!done.get() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50)
+        }
+        return if (done.get()) "Deleted: $filePath" else "error: delete timed out"
     }
 }

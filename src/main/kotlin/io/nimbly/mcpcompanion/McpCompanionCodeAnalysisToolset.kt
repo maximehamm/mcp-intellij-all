@@ -38,7 +38,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
             else ""
             return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
         }
-        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name }.getOrNull())
+        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name?.takeIf { it != "Unknown MCP client" } }.getOrNull())
         return null
     }
 
