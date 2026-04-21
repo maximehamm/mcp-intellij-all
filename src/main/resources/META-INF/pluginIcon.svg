@@ -1,12 +1,10 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g clip-path="url(#clip0_19_13)">
-<path d="M18 84.8528L85.8822 16.9706C95.2548 7.59798 110.451 7.59798 119.823 16.9706C129.196 26.3431 129.196 41.5391 119.823 50.9117L68.5581 102.177" stroke="#6B57FF" stroke-width="12" stroke-linecap="round"/>
-<path d="M69.2652 101.47L119.823 50.9117C129.196 41.5391 144.392 41.5391 153.765 50.9117L154.118 51.2652C163.491 60.6378 163.491 75.8338 154.118 85.2063L92.7248 146.6C89.6006 149.724 89.6006 154.789 92.7248 157.913L105.331 170.52" stroke="#6B57FF" stroke-width="12" stroke-linecap="round"/>
-<path d="M102.853 33.9411L52.6482 84.1457C43.2756 93.5183 43.2756 108.714 52.6482 118.087C62.0208 127.459 77.2167 127.459 86.5893 118.087L136.794 67.8822" stroke="#6B57FF" stroke-width="12" stroke-linecap="round"/>
-</g>
-<defs>
-<clipPath id="clip0_19_13">
-<rect width="180" height="180" fill="white"/>
-</clipPath>
-</defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24">
+  <!-- Carré IDE (bleu clair) — trait part de son bord droit -->
+  <rect x="4" y="4" width="6" height="6" rx="1" fill="#60A5FA"/>
+  <!-- Carré IA (bleu foncé) — trait part de son bord gauche -->
+  <rect x="14" y="14" width="6" height="6" rx="1" fill="#1E40AF"/>
+  <!-- Arc bleu clair : part du bord droit du carré bleu clair, s'arrête avant le carré bleu foncé -->
+  <path d="M10 7h7a2 2 0 0 1 2 2v3" stroke="#60A5FA" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Arc bleu foncé : part du bord gauche du carré bleu foncé, s'arrête avant le carré bleu clair -->
+  <path d="M14 17H7a2 2 0 0 1-2-2v-3" stroke="#1E40AF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
 </svg>
