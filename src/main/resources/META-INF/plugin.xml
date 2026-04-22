@@ -8,6 +8,7 @@
 
         <p>
         <b>More than 50 tools — give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, stash, blame…), VCS changes, database schema and data, and much more.</b>
+        <p>Works with any MCP-compatible AI client: <b>Claude</b> (Anthropic), <b>GitHub Copilot</b>, <b>Codex</b>, <b>Cursor</b>, <b>Windsurf</b>, and any other assistant that supports the Model Context Protocol.</p>
         </p>
 
         <h4>Editor &amp; Navigation</h4>
