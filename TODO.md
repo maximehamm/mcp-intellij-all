@@ -28,8 +28,8 @@
 - ~~**vcs_push**~~ ✅ 2.12.0
 - ~~**vcs_pull**~~ ✅ 2.12.0
 - ~~**vcs_stash**~~ ✅ 2.12.0
-- **vcs_create_branch** — créer et switcher sur une nouvelle branche
-- **vcs_checkout_branch** — switcher de branche
+- ~~**vcs_create_branch**~~ ✅ 2.13.0
+- ~~**vcs_checkout_branch**~~ ✅ 2.13.0
 
 ### Merge / Rebase
 - **vcs_merge_branch** — merger une branche dans la courante (via API IntelliJ)
