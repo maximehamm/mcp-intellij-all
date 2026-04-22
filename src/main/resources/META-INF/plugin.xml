@@ -63,6 +63,13 @@
             <li><b>get_vcs_log</b> — Recent commit history: hash, author, date, subject, and changed files. Filter by file or branch.</li>
             <li><b>get_vcs_blame</b> — Line-by-line blame annotation: who last modified each line, when, and in which commit (any VCS).</li>
             <li><b>get_local_history</b> — IntelliJ Local History for a file or directory: revision list with timestamps, labels (e.g. "Before: Rename"), and optional diffs (unified diff for files, added/modified/deleted paths for directories). Without a path, returns recent project-wide change events.</li>
+            <li><b>vcs_stage_files</b> — Stage or unstage files in the Git index (<code>action="stage"</code> / <code>"unstage"</code>).</li>
+            <li><b>vcs_commit</b> — Create a Git commit from staged changes; warns if IntelliJ-tracked files are not staged; pass <code>force=true</code> to skip the check.</li>
+            <li><b>vcs_push</b> — Push the current branch to its remote tracking branch (<code>git push</code>).</li>
+            <li><b>vcs_pull</b> — Pull from the remote tracking branch; pass <code>rebase=true</code> for <code>--rebase</code>.</li>
+            <li><b>vcs_stash</b> — Manage Git stashes: <code>action="push"</code> / <code>"pop"</code> / <code>"apply"</code> / <code>"drop"</code> / <code>"list"</code>.</li>
+            <li><b>vcs_create_branch</b> — Creates a new Git branch; pass <code>checkout=true</code> (default) to switch to it immediately, and <code>from</code> to specify the base.</li>
+            <li><b>vcs_checkout_branch</b> — Switches the working tree to an existing branch (<code>git checkout &lt;branch&gt;</code>).</li>
         </ul>
 
         <h4>General</h4>

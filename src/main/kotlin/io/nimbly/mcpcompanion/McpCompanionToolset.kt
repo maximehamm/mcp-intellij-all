@@ -127,10 +127,12 @@ class McpCompanionToolset : McpToolset {
 - get_vcs_blame(filePath, startLine=1, endLine=MAX) — line-by-line annotation: author, date, revision per line
 - get_local_history(scope="file"|"directory"|"project", path="") — local history of a file, directory, or entire project (IntelliJ Local History, not Git)
 - vcs_stage_files(action="stage"|"unstage", files=[]) — stage or unstage files (git add / git reset HEAD)
-- vcs_commit(message, amend=false) — create a commit from staged changes
+- vcs_commit(message, amend=false, force=false) — create a commit from staged changes; warns if IntelliJ-tracked files are not staged; force=true skips the check
 - vcs_push(remote="", branch="", setUpstream=false) — push current branch to remote
 - vcs_pull(rebase=false, remote="", branch="") — pull from remote tracking branch
 - vcs_stash(action="list"|"push"|"pop"|"apply"|"drop", message="", ref="stash@{0}") — manage stashes
+- vcs_create_branch(name, checkout=true, from="") — create a new branch; checkout=true (default) also switches to it
+- vcs_checkout_branch(name) — switch to an existing branch (git checkout <branch>)
 
 ### General
 - get_mcp_companion_overview → this overview

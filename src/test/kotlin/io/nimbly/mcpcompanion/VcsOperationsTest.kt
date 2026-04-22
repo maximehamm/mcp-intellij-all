@@ -388,6 +388,86 @@ class VcsOperationsTest : BasePlatformTestCase() {
         assertTrue("Status should be empty on clean working tree", out.isBlank())
     }
 
+    // ── vcs_create_branch ─────────────────────────────────────────────────────
+
+    fun `test vcs_create_branch - creates branch without checkout`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        exec("BRANCH", "feature/new-tool")
+
+        val branches = git(repoDir, "branch")
+        println("  git branch = '$branches'")
+        assertTrue("New branch should exist", branches.contains("feature/new-tool"))
+
+        val current = git(repoDir, "branch", "--show-current")
+        println("  current branch = '$current'")
+        assertEquals("Should still be on 'main' (no checkout)", "main", current.trim())
+    }
+
+    fun `test vcs_create_branch - creates and switches to new branch`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        exec("CHECKOUT", "-b", "feature/switched")
+
+        val current = git(repoDir, "branch", "--show-current")
+        println("  current branch after checkout -b = '$current'")
+        assertEquals("Should be on the new branch", "feature/switched", current.trim())
+
+        val branches = git(repoDir, "branch")
+        assertTrue("New branch should appear in branch list", branches.contains("feature/switched"))
+    }
+
+    fun `test vcs_create_branch - creates branch from specific base`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Make a second commit so HEAD~1 is the initial commit
+        File(repoDir, "Extra.java").writeText("class Extra {}")
+        git(repoDir, "add", "Extra.java")
+        git(repoDir, "commit", "-m", "add Extra.java")
+
+        // Create a branch rooted at HEAD~1 (the initial commit), without switching
+        exec("BRANCH", "based-on-initial", "HEAD~1")
+
+        // Verify the new branch points to the initial commit (Extra.java shouldn't be there)
+        val logOnBranch = git(repoDir, "log", "--oneline", "based-on-initial")
+        println("  log on based-on-initial = '$logOnBranch'")
+        assertFalse("Extra.java commit should NOT be in the based-on-initial branch",
+            logOnBranch.contains("add Extra.java"))
+        assertTrue("Initial commit should be in the based-on-initial branch",
+            logOnBranch.contains("initial commit"))
+    }
+
+    // ── vcs_checkout_branch ───────────────────────────────────────────────────
+
+    fun `test vcs_checkout_branch - switches to existing branch`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Create the target branch with raw git (no switch)
+        git(repoDir, "branch", "target-branch")
+
+        exec("CHECKOUT", "target-branch")
+
+        val current = git(repoDir, "branch", "--show-current")
+        println("  current branch after checkout = '$current'")
+        assertEquals("Should now be on 'target-branch'", "target-branch", current.trim())
+    }
+
+    fun `test vcs_checkout_branch - switches back to main`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Start on a feature branch
+        git(repoDir, "checkout", "-b", "feature/temp")
+        val onFeature = git(repoDir, "branch", "--show-current")
+        assertEquals("Should be on feature/temp", "feature/temp", onFeature.trim())
+
+        // Switch back to main via the tool
+        exec("CHECKOUT", "main")
+
+        val current = git(repoDir, "branch", "--show-current")
+        println("  current branch after checkout main = '$current'")
+        assertEquals("Should be back on 'main'", "main", current.trim())
+    }
+
     fun `test get_vcs_changes - after multiple commits only unstaged changes appear`() {
         if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
 

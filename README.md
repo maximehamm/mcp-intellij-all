@@ -84,6 +84,8 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `vcs_push` | Push the current branch to its remote tracking branch (`git push`) |
 | `vcs_pull` | Pull from the remote tracking branch; pass `rebase=true` for `--rebase` |
 | `vcs_stash` | Manage Git stashes: `action="push"` / `"pop"` / `"apply"` / `"drop"` / `"list"` |
+| `vcs_create_branch` | Create a new Git branch; pass `checkout=true` (default) to switch to it immediately |
+| `vcs_checkout_branch` | Switch the working tree to an existing branch (`git checkout <branch>`) |
 
 ### General
 | Tool | Description |

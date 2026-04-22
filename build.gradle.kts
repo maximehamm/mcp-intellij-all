@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "2.12.0"
+version = "2.13.0"
 
 repositories {
     mavenCentral()
@@ -47,6 +47,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>2.13.0</b> — New VCS branch tools: <code>vcs_create_branch</code> (create and optionally switch to a new branch) and <code>vcs_checkout_branch</code> (switch to an existing branch).</li>
                 <li><b>2.12.0</b> — New VCS write tools: <code>vcs_stage_files</code>, <code>vcs_commit</code>, <code>vcs_push</code>, <code>vcs_pull</code>, <code>vcs_stash</code> — stage/unstage files, commit, push, pull, and manage stashes directly from your AI client.</li>
                 <li><b>2.11.2</b> — Multi-project support: <code>get_ide_snapshot</code>, <code>get_running_processes</code> and <code>get_intellij_diagnostic</code> now return one entry per open project (a single JVM can host several project windows). All other project-scoped tools accept an optional <code>projectPath</code> parameter to target a specific project.</li>
                 <li><b>2.11.0</b> — New tool: <code>get_ide_snapshot</code> — compact snapshot of the current IDE context (active file + caret, selection, open files, runs, debug paused location, indexing, background tasks, recently-finished tasks) designed for frequent polling by a Claude Code <code>UserPromptSubmit</code> hook.</li>

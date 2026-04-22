@@ -620,13 +620,18 @@ class McpCompanionVcsToolset : McpToolset {
     @McpTool(name = "vcs_commit")
     @McpDescription(description = """
         Creates a Git commit with the given message (commits all staged changes).
+        Before committing, checks whether any files modified in IntelliJ are NOT staged — if so,
+        returns a warning listing the unstaged files so you can decide whether to stage them first.
+        Pass force=true to commit only the staged files and skip the check.
         - message: commit message (required)
         - amend: if true, amends the previous commit instead of creating a new one (default: false)
+        - force: if true, skips the unstaged-files check and commits whatever is staged (default: false)
         - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
     """)
     suspend fun vcs_commit(
         message: String,
         amend: Boolean = false,
+        force: Boolean = false,
         projectPath: String? = null
     ): String {
         disabledMessage("vcs_commit")?.let { return it }
@@ -637,12 +642,132 @@ class McpCompanionVcsToolset : McpToolset {
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
                 val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
                     ?: return@withContext "Cannot get repository root."
+
+                // ── Unstaged-files check ──────────────────────────────────────
+                if (!force && !amend) {
+                    val base = (project.basePath ?: "").toLinuxPath()
+                    val unstagedWarning = buildUnstagedWarning(cl, project, root, base)
+                    if (unstagedWarning != null) return@withContext unstagedWarning
+                }
+
                 val params = buildList {
                     add("-m"); add(message)
                     if (amend) add("--amend")
                 }
                 val (ok, out) = gitExec(cl, project, root, "COMMIT", *params.toTypedArray())
                 if (ok) { vfsRefresh(project); "Committed: \"$message\"" }
+                else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    /**
+     * Compares IntelliJ's tracked modifications (ChangeListManager) with the git staging area.
+     * Returns a warning message if modified files exist that are not staged, null otherwise.
+     */
+    private fun buildUnstagedWarning(
+        cl: ClassLoader,
+        project: com.intellij.openapi.project.Project,
+        root: com.intellij.openapi.vfs.VirtualFile,
+        base: String
+    ): String? {
+        // 1. Files currently staged (git diff --cached --name-only)
+        val (ok, cachedOut) = gitExec(cl, project, root, "DIFF", "--cached", "--name-only")
+        val stagedFiles = if (ok) cachedOut.lines().filter { it.isNotBlank() }.toSet() else emptySet()
+
+        // 2. Files modified in IntelliJ's ChangeListManager (unstaged working-tree changes)
+        val clm = com.intellij.openapi.vcs.changes.ChangeListManager.getInstance(project)
+        val unstagedModified = clm.allChanges
+            .mapNotNull { change ->
+                val path = (change.afterRevision ?: change.beforeRevision)?.file?.path
+                    ?: return@mapNotNull null
+                path.toLinuxPath().relativeTo(base)
+            }
+            .filter { it.isNotBlank() && it !in stagedFiles }
+
+        if (unstagedModified.isEmpty()) return null
+
+        return buildString {
+            appendLine("⚠ Warning: ${unstagedModified.size} file(s) are modified in IntelliJ but NOT staged and will be excluded from the commit:")
+            unstagedModified.forEach { appendLine("  - $it") }
+            appendLine()
+            appendLine("Options:")
+            appendLine("  • Stage them first: vcs_stage_files(files=[...])")
+            append("  • Commit only what's already staged: vcs_commit(message=\"...\", force=true)")
+        }
+    }
+
+    // ── vcs_create_branch ─────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_create_branch")
+    @McpDescription(description = """
+        Creates a new Git branch, optionally switching to it immediately.
+        - name: name of the new branch (required)
+        - checkout: if true (default), also switch to the new branch after creating it
+        - from: base commit, tag, or branch name to create the branch from (default: current HEAD)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_create_branch(
+        name: String,
+        checkout: Boolean = true,
+        from: String = "",
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_create_branch")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+
+                val (ok, out) = if (checkout) {
+                    // git checkout -b <name> [<from>]
+                    val params = buildList {
+                        add("-b"); add(name)
+                        if (from.isNotBlank()) add(from)
+                    }
+                    gitExec(cl, project, root, "CHECKOUT", *params.toTypedArray())
+                } else {
+                    // git branch <name> [<from>]
+                    val params = buildList {
+                        add(name)
+                        if (from.isNotBlank()) add(from)
+                    }
+                    gitExec(cl, project, root, "BRANCH", *params.toTypedArray())
+                }
+                if (ok) {
+                    vfsRefresh(project)
+                    if (checkout) "Created and switched to branch '$name'"
+                    else "Created branch '$name' (still on current branch)"
+                } else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── vcs_checkout_branch ───────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_checkout_branch")
+    @McpDescription(description = """
+        Switches the working tree to an existing branch (git checkout <branch>).
+        - name: name of the branch to switch to (required)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_checkout_branch(
+        name: String,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_checkout_branch")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val (ok, out) = gitExec(cl, project, root, "CHECKOUT", name)
+                if (ok) { vfsRefresh(project); "Switched to branch '$name'" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
         }

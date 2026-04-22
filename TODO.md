@@ -4,7 +4,6 @@
 
 - **get_gradle_tasks** — List available Gradle tasks for the project
 - **run_gradle_task** — Execute a specific Gradle task
-- tracker le nom de l'ia qui appelle le plugin
 
 ## New tools
 
@@ -35,10 +34,11 @@
 ### Merge / Rebase
 - **vcs_merge_branch** — merger une branche dans la courante (via API IntelliJ)
 - **get_vcs_conflicts** — lister les fichiers en conflit de merge avec leur contenu
+- rebase ?
 
 ### Diff enrichi
-- **get_vcs_diff_between_branches** — diff entre deux branches ou deux commits
 - **get_vcs_file_history** — historique des commits qui ont touché un fichier précis
+- **get_vcs_diff_between_branches** — diff entre deux branches ou deux commits
 - **vcs_show_commit** — contenu complet d'un commit (message + diff de tous les fichiers)
 
 ### Pull Requests (GitHub / GitLab)
