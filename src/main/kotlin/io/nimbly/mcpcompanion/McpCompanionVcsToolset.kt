@@ -592,11 +592,13 @@ class McpCompanionVcsToolset : McpToolset {
         return withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
-                val base = project.basePath ?: ""
+                val base = (project.basePath ?: "").toLinuxPath()
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
                 val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
                     ?: return@withContext "Cannot get repository root."
-                val absPaths = files.map { if (it.startsWith("/")) it else "$base/$it" }
+                val absPaths = files.map { f ->
+                    (if (f.startsWith("/")) f else "$base/$f").toLinuxPath()
+                }
                 val (ok, out) = when (action.lowercase()) {
                     "stage"   -> if (absPaths.isEmpty()) gitExec(cl, project, root, "ADD", "-A")
                                  else gitExec(cl, project, root, "ADD", "--", *absPaths.toTypedArray())
@@ -1062,6 +1064,17 @@ class McpCompanionVcsToolset : McpToolset {
 
     private fun String.relativeTo(base: String): String =
         if (base.isNotBlank() && startsWith(base)) removePrefix(base).removePrefix("/") else this
+
+    /**
+     * Converts a Windows WSL UNC path to its Linux equivalent.
+     * //wsl.localhost/Ubuntu-22.04/home/user/...  →  /home/user/...
+     * //wsl$/Ubuntu/home/user/...                 →  /home/user/...
+     * Regular paths are returned unchanged.
+     */
+    private fun String.toLinuxPath(): String =
+        Regex("^//wsl(?:2)?\\.localhost/[^/]+|^//wsl\\$/[^/]+")
+            .replace(this, "")
+            .ifEmpty { this }
 }
 
 // ── Data classes ──────────────────────────────────────────────────────────────
