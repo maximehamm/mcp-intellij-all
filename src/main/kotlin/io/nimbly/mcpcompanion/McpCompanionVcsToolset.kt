@@ -697,6 +697,207 @@ class McpCompanionVcsToolset : McpToolset {
         }
     }
 
+    // ── vcs_fetch ─────────────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_fetch")
+    @McpDescription(description = """
+        Fetches from one or all remotes, updating remote-tracking refs without merging (git fetch).
+        - remote: remote name to fetch from (default: "" = all configured remotes)
+        - prune: if true, removes remote-tracking refs for branches deleted on the remote (default: false)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_fetch(
+        remote: String = "",
+        prune: Boolean = false,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_fetch")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val params = buildList {
+                    if (prune) add("--prune")
+                    if (remote.isNotBlank()) add(remote)
+                }
+                val (ok, out) = gitExec(cl, project, root, "FETCH", *params.toTypedArray())
+                if (ok) { vfsRefresh(project); "Fetch successful${if (out.isNotBlank()) ": $out" else ""}" }
+                else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── vcs_merge_branch ──────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_merge_branch")
+    @McpDescription(description = """
+        Merges a branch into the current branch (git merge).
+        - branch: name of the branch to merge into the current one (required)
+        - noFf: if true, forces a merge commit even when a fast-forward is possible (default: false)
+        - message: optional commit message for the merge commit
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_merge_branch(
+        branch: String,
+        noFf: Boolean = false,
+        message: String = "",
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_merge_branch")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val params = buildList {
+                    if (noFf) add("--no-ff")
+                    if (message.isNotBlank()) { add("-m"); add(message) }
+                    add(branch)
+                }
+                val (ok, out) = gitExec(cl, project, root, "MERGE", *params.toTypedArray())
+                if (ok) { vfsRefresh(project); "Merged '$branch' into current branch${if (out.isNotBlank()) ": $out" else ""}" }
+                else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── vcs_rebase ────────────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_rebase")
+    @McpDescription(description = """
+        Rebases the current branch onto another branch (git rebase).
+        - branch: branch to rebase onto (required unless using abort or continueRebase)
+        - abort: if true, aborts an in-progress rebase (git rebase --abort)
+        - continueRebase: if true, continues after resolving conflicts (git rebase --continue)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_rebase(
+        branch: String = "",
+        abort: Boolean = false,
+        continueRebase: Boolean = false,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_rebase")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val params = when {
+                    abort           -> arrayOf("--abort")
+                    continueRebase  -> arrayOf("--continue")
+                    branch.isNotBlank() -> arrayOf(branch)
+                    else -> return@withContext "Specify a branch to rebase onto, or use abort=true / continueRebase=true."
+                }
+                val (ok, out) = gitExec(cl, project, root, "REBASE", *params)
+                if (ok) { vfsRefresh(project); "Rebase successful${if (out.isNotBlank()) ": $out" else ""}" }
+                else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── get_vcs_conflicts ─────────────────────────────────────────────────────
+
+    @McpTool(name = "get_vcs_conflicts")
+    @McpDescription(description = """
+        Lists all files currently in conflict state (after a failed merge or rebase).
+        For each conflicted file, returns the conflict type and optionally the full file content
+        with conflict markers (<<<<<<<, =======, >>>>>>>).
+        - showContent: if true, includes the file content with conflict markers (default: false)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun get_vcs_conflicts(
+        showContent: Boolean = false,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("get_vcs_conflicts")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val base = (project.basePath ?: root.path).toLinuxPath()
+
+                // git status --porcelain lists conflicts with XY codes:
+                // UU = both modified, AA = both added, DD = both deleted,
+                // AU/UA = added by one side, DU/UD = deleted by one side
+                val (ok, out) = gitExec(cl, project, root, "STATUS", "--porcelain")
+                if (!ok) return@withContext "Error running git status: $out"
+
+                val conflictCodes = setOf("UU", "AA", "DD", "AU", "UA", "DU", "UD")
+                val conflictLines = out.lines().filter { line ->
+                    line.length >= 3 && line.substring(0, 2) in conflictCodes
+                }
+
+                if (conflictLines.isEmpty())
+                    return@withContext "No conflicts — working tree is clean or no merge in progress."
+
+                val conflicts = conflictLines.map { line ->
+                    val code = line.substring(0, 2)
+                    val path = line.substring(3).trim()
+                    val conflictType = when (code) {
+                        "UU" -> "both_modified"
+                        "AA" -> "both_added"
+                        "DD" -> "both_deleted"
+                        "AU" -> "added_by_us"
+                        "UA" -> "added_by_them"
+                        "DU" -> "deleted_by_us"
+                        "UD" -> "deleted_by_them"
+                        else -> code
+                    }
+                    val content: String? = if (showContent && code != "DD") {
+                        runCatching {
+                            java.io.File("$base/$path").takeIf { it.exists() }?.readText()
+                        }.getOrNull()
+                    } else null
+
+                    VcsConflict(path = path, conflictType = conflictType, content = content)
+                }
+                Json.encodeToString(VcsConflicts(count = conflicts.size, conflicts = conflicts))
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── vcs_open_merge_tool ───────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_open_merge_tool")
+    @McpDescription(description = """
+        Opens IntelliJ's built-in three-way merge tool for all conflicted files (equivalent to
+        VCS → Git → Resolve Conflicts… in the IDE menu). Use this after a failed merge or rebase
+        to let the developer resolve conflicts interactively in the IDE.
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_open_merge_tool(projectPath: String? = null): String {
+        disabledMessage("vcs_open_merge_tool")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                com.intellij.openapi.application.ApplicationManager.getApplication()
+                    .invokeAndWait({
+                        val actionManager = com.intellij.openapi.actionSystem.ActionManager.getInstance()
+                        val action = actionManager.getAction("Git.ResolveConflicts")
+                            ?: run { return@invokeAndWait }
+                        val dataContext = com.intellij.openapi.actionSystem.impl.SimpleDataContext
+                            .getProjectContext(project)
+                        val event = com.intellij.openapi.actionSystem.AnActionEvent.createFromDataContext(
+                            "MCP", null, dataContext
+                        )
+                        action.actionPerformed(event)
+                    }, com.intellij.openapi.application.ModalityState.any())
+                "Opened IntelliJ merge tool (Resolve Conflicts dialog)"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
     // ── vcs_create_branch ─────────────────────────────────────────────────────
 
     @McpTool(name = "vcs_create_branch")
@@ -1258,3 +1459,9 @@ class McpCompanionVcsToolset : McpToolset {
     val affectedPaths: List<String>? = null
 )
 @Serializable data class LocalHistoryRecent(val changes: List<LocalHistoryRecentChange>)
+@Serializable data class VcsConflict(
+    val path: String,
+    val conflictType: String,
+    val content: String? = null
+)
+@Serializable data class VcsConflicts(val count: Int, val conflicts: List<VcsConflict>)

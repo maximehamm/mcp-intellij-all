@@ -133,6 +133,11 @@ class McpCompanionToolset : McpToolset {
 - vcs_stash(action="list"|"push"|"pop"|"apply"|"drop", message="", ref="stash@{0}") — manage stashes
 - vcs_create_branch(name, checkout=true, from="") — create a new branch; checkout=true (default) also switches to it
 - vcs_checkout_branch(name) — switch to an existing branch (git checkout <branch>)
+- vcs_fetch(remote="", prune=false) — fetch from one or all remotes without merging (git fetch)
+- vcs_merge_branch(branch, noFf=false, message="") — merge a branch into the current one (git merge)
+- vcs_rebase(branch="", abort=false, continueRebase=false) — rebase current branch onto another; supports abort and continue
+- get_vcs_conflicts(showContent=false) — list conflicted files after a failed merge/rebase, with conflict type and optional content
+- vcs_open_merge_tool() — opens IntelliJ's three-way merge tool (Resolve Conflicts dialog) for all conflicted files
 
 ### General
 - get_mcp_companion_overview → this overview

@@ -100,7 +100,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             "VCS" to listOf(
                 "get_vcs_changes", "get_vcs_branch", "get_vcs_log", "get_vcs_blame", "get_local_history",
                 "vcs_stage_files", "vcs_commit", "vcs_push", "vcs_pull", "vcs_stash",
-                "vcs_create_branch", "vcs_checkout_branch"
+                "vcs_create_branch", "vcs_checkout_branch",
+                "vcs_fetch", "vcs_merge_branch", "vcs_rebase", "get_vcs_conflicts", "vcs_open_merge_tool"
             ),
             "General" to listOf(
                 "get_mcp_companion_overview", "execute_ide_action", "replace_text_undoable", "delete_file"

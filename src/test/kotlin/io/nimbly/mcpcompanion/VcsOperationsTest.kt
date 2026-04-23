@@ -468,6 +468,173 @@ class VcsOperationsTest : BasePlatformTestCase() {
         assertEquals("Should be back on 'main'", "main", current.trim())
     }
 
+    // ── vcs_fetch ─────────────────────────────────────────────────────────────
+
+    fun `test vcs_fetch - updates remote tracking refs`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Push a new commit from a clone to the bare remote
+        val cloneDir = createTempDir("vcs-test-fetch-clone")
+        try {
+            git(cloneDir, "clone", "file://${bareDir.absolutePath}", ".")
+            git(cloneDir, "config", "user.email", "test@test.com")
+            git(cloneDir, "config", "user.name", "Test User")
+            git(cloneDir, "config", "commit.gpgsign", "false")
+            File(cloneDir, "FetchMe.java").writeText("class FetchMe {}")
+            git(cloneDir, "add", "FetchMe.java")
+            git(cloneDir, "commit", "-m", "add FetchMe.java")
+            git(cloneDir, "push", "origin", "main")
+        } finally {
+            cloneDir.deleteRecursively()
+        }
+
+        // Before fetch, origin/main is behind
+        val logBefore = git(repoDir, "log", "--oneline", "origin/main", allowFailure = true)
+        assertFalse("FetchMe commit should not be in origin/main yet", logBefore.contains("add FetchMe.java"))
+
+        exec("FETCH", "origin")
+
+        // After fetch, origin/main should know about the new commit
+        val logAfter = git(repoDir, "log", "--oneline", "origin/main")
+        println("  origin/main after fetch = '$logAfter'")
+        assertTrue("FetchMe commit should appear in origin/main after fetch", logAfter.contains("add FetchMe.java"))
+        // Working tree should be untouched (no merge)
+        assertFalse("FetchMe.java should NOT exist in working tree (fetch only)", File(repoDir, "FetchMe.java").exists())
+    }
+
+    fun `test vcs_fetch with prune - removes deleted remote branch refs`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Create and push a branch to the bare remote
+        git(repoDir, "checkout", "-b", "to-be-deleted")
+        git(repoDir, "push", "origin", "to-be-deleted")
+        exec("FETCH")
+        val branchesBefore = exec("BRANCH", "-r")
+        println("  remote branches before delete = '$branchesBefore'")
+        assertTrue("Remote branch should exist before delete", branchesBefore.contains("to-be-deleted"))
+
+        // Delete it on the remote (bare repo)
+        git(bareDir, "branch", "-D", "to-be-deleted")
+        git(repoDir, "checkout", "main")
+
+        // Fetch with prune
+        exec("FETCH", "--prune", "origin")
+
+        val branchesAfter = exec("BRANCH", "-r")
+        println("  remote branches after prune = '$branchesAfter'")
+        assertFalse("Deleted remote branch should be pruned", branchesAfter.contains("to-be-deleted"))
+    }
+
+    // ── vcs_merge_branch ──────────────────────────────────────────────────────
+
+    fun `test vcs_merge_branch - fast-forward merge`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Create feature branch with a new file
+        git(repoDir, "checkout", "-b", "feature/merge-test")
+        File(repoDir, "Merged.java").writeText("class Merged {}")
+        git(repoDir, "add", "Merged.java")
+        git(repoDir, "commit", "-m", "add Merged.java")
+        git(repoDir, "checkout", "main")
+
+        exec("MERGE", "feature/merge-test")
+
+        val log = git(repoDir, "log", "--oneline", "-2")
+        println("  log after merge = '$log'")
+        assertTrue("Merge commit should appear in log", log.contains("add Merged.java"))
+        assertTrue("Merged.java should exist after merge", File(repoDir, "Merged.java").exists())
+    }
+
+    fun `test vcs_merge_branch - no-ff creates a merge commit`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        git(repoDir, "checkout", "-b", "feature/no-ff")
+        File(repoDir, "NoFf.java").writeText("class NoFf {}")
+        git(repoDir, "add", "NoFf.java")
+        git(repoDir, "commit", "-m", "add NoFf.java")
+        git(repoDir, "checkout", "main")
+
+        exec("MERGE", "--no-ff", "-m", "Merge feature/no-ff", "feature/no-ff")
+
+        val log = git(repoDir, "log", "--oneline", "-3")
+        println("  log after no-ff merge = '$log'")
+        assertTrue("Merge commit message should appear", log.contains("Merge feature/no-ff"))
+        assertTrue("Feature commit should also appear", log.contains("add NoFf.java"))
+    }
+
+    // ── vcs_rebase ────────────────────────────────────────────────────────────
+
+    fun `test vcs_rebase - rebases feature branch onto main`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Add a commit on main after the feature branch diverged
+        git(repoDir, "checkout", "-b", "feature/rebase-test")
+        File(repoDir, "Feature.java").writeText("class Feature {}")
+        git(repoDir, "add", "Feature.java")
+        git(repoDir, "commit", "-m", "add Feature.java")
+
+        // Add a commit on main too (so rebase has something to do)
+        git(repoDir, "checkout", "main")
+        File(repoDir, "Main2.java").writeText("class Main2 {}")
+        git(repoDir, "add", "Main2.java")
+        git(repoDir, "commit", "-m", "add Main2.java")
+
+        // Switch back to feature and rebase
+        git(repoDir, "checkout", "feature/rebase-test")
+
+        exec("REBASE", "main")
+
+        val log = git(repoDir, "log", "--oneline", "-3")
+        println("  log after rebase = '$log'")
+        // After rebase, feature commit should be on top of main's new commit
+        assertTrue("Feature commit should be in log", log.contains("add Feature.java"))
+        assertTrue("Main2 commit should be in log (rebase base)", log.contains("add Main2.java"))
+        // Feature commit should appear BEFORE Main2 in the log (it's on top)
+        assertTrue("Feature commit should be more recent than Main2",
+            log.indexOf("add Feature.java") < log.indexOf("add Main2.java"))
+    }
+
+    // ── get_vcs_conflicts ─────────────────────────────────────────────────────
+
+    fun `test get_vcs_conflicts - detects conflicts after failed merge`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Create conflicting changes on two branches
+        File(repoDir, "Conflict.java").writeText("class Conflict { int x = 1; }")
+        git(repoDir, "add", "Conflict.java")
+        git(repoDir, "commit", "-m", "add Conflict.java")
+
+        git(repoDir, "checkout", "-b", "feature/conflict")
+        File(repoDir, "Conflict.java").writeText("class Conflict { int x = 99; }")
+        git(repoDir, "add", "Conflict.java")
+        git(repoDir, "commit", "-m", "change x to 99")
+
+        git(repoDir, "checkout", "main")
+        File(repoDir, "Conflict.java").writeText("class Conflict { int x = 42; }")
+        git(repoDir, "add", "Conflict.java")
+        git(repoDir, "commit", "-m", "change x to 42")
+
+        // Attempt merge — will fail with conflict
+        git(repoDir, "merge", "feature/conflict", allowFailure = true)
+
+        val (ok, out) = execPair("STATUS", "--porcelain")
+        println("  git status after conflict = '$out'")
+        assertTrue("STATUS should succeed", ok)
+        assertTrue("Conflict.java should appear as UU", out.contains("UU") && out.contains("Conflict.java"))
+    }
+
+    fun `test get_vcs_conflicts - no conflicts on clean working tree`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        val (ok, out) = execPair("STATUS", "--porcelain")
+        println("  git status (clean) = '$out'")
+        assertTrue("STATUS should succeed", ok)
+        // No UU/AA/DD lines on clean tree
+        val conflictCodes = setOf("UU", "AA", "DD", "AU", "UA", "DU", "UD")
+        val hasConflicts = out.lines().any { it.length >= 2 && it.substring(0, 2) in conflictCodes }
+        assertFalse("Should be no conflicts on clean tree", hasConflicts)
+    }
+
     fun `test get_vcs_changes - after multiple commits only unstaged changes appear`() {
         if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
 

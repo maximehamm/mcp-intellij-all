@@ -86,6 +86,11 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `vcs_stash` | Manage Git stashes: `action="push"` / `"pop"` / `"apply"` / `"drop"` / `"list"` |
 | `vcs_create_branch` | Create a new Git branch; pass `checkout=true` (default) to switch to it immediately |
 | `vcs_checkout_branch` | Switch the working tree to an existing branch (`git checkout <branch>`) |
+| `vcs_fetch` | Fetch from one or all remotes without merging (`git fetch`); pass `prune=true` to remove deleted remote branches |
+| `vcs_merge_branch` | Merge a branch into the current one (`git merge`); pass `noFf=true` to force a merge commit |
+| `vcs_rebase` | Rebase the current branch onto another (`git rebase`); supports `abort=true` and `continueRebase=true` |
+| `get_vcs_conflicts` | List all conflicted files after a failed merge or rebase, with conflict type and optional file content |
+| `vcs_open_merge_tool` | Opens IntelliJ's built-in three-way merge tool for all conflicted files (Resolve Conflicts… dialog) |
 
 ### General
 | Tool | Description |

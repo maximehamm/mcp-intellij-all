@@ -1,10 +1,11 @@
 # TODO
 
-
 ## High priority
 
 - show_diff — Open IntelliJ's diff viewer to compare current content with proposed changes
 - create_scratch_file — Create a scratch file with any extension and content
+
+- **show_diff** — Open IntelliJ's diff viewer to compare current content with proposed changes
 
 - **get_gradle_tasks** — List available Gradle tasks for the project
 - **run_gradle_task** — Execute a specific Gradle task
@@ -17,9 +18,7 @@
 - **get_todo_items** — List TODO/FIXME comments across the project
 
 - **undo / redo**
-  mark_directory — Mark a directory as source root, test root, resources, excluded, or generated
-
-
+- **mark_directory** — Mark a directory as source root, test root, resources, excluded, or generated
 
 - **add_bookmark** — Add a bookmark on a file/line
 - **get_bookmarks** — List all bookmarks in the project
@@ -37,18 +36,17 @@
 - ~~**vcs_stash**~~ ✅ 2.12.0
 - ~~**vcs_create_branch**~~ ✅ 2.13.0
 - ~~**vcs_checkout_branch**~~ ✅ 2.13.0
-- 
+
 - **vcs_fetch** — mettre à jour les refs distantes sans merger (`git fetch`)
+- **vcs_merge_branch** — merger une branche dans la courante (via API IntelliJ)
+- **vcs_rebase** — rebaser la branche courante sur une autre (`git rebase <branch>`)
+- **get_vcs_conflicts** — lister les fichiers en conflit de merge avec leur contenu
+
 - **vcs_reset** — reculer la branche sur un commit précédent (`--soft` / `--mixed` / `--hard`)
 - **vcs_revert** — créer un commit qui annule un commit existant (`git revert <hash>`)
 - **vcs_cherry_pick** — appliquer un commit spécifique sur la branche courante (`git cherry-pick <hash>`)
 
-- **vcs_delete_branch** — supprimer une branche locale ou distante (`git branch -d` / `git push origin --delete`)
-
-### Merge / Rebase
-- **vcs_merge_branch** — merger une branche dans la courante (via API IntelliJ)
-- **vcs_rebase** — rebaser la branche courante sur une autre (`git rebase <branch>`)
-- **get_vcs_conflicts** — lister les fichiers en conflit de merge avec leur contenu
+- **vcs_delete_branch** — supprimer une branche locale ou distante - desactivé par défaut (`git branch -d` / `git push origin --delete`)
 
 ### Diff enrichi
 - **get_vcs_file_history** — historique des commits qui ont touché un fichier précis
