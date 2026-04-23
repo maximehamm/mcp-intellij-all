@@ -23,11 +23,14 @@ class McpCompanionStartupActivity : ProjectActivity {
         // Eagerly start background-process polling so get_ide_snapshot reflects live activity.
         ProcessTracker.getInstance(project)
 
-        // Register Escape key listener on all current and future editors
+        // Register Escape key listener on all current and future editors.
+        // Guard with ESCAPE_LISTENER_KEY to prevent double-registration when multiple projects open.
+        // editorReleased removes the listener so editors don't accumulate listeners after being closed.
         ApplicationManager.getApplication().invokeLater {
             EditorFactory.getInstance().allEditors.forEach { addEscapeListener(it) }
             EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
                 override fun editorCreated(event: EditorFactoryEvent) = addEscapeListener(event.editor)
+                override fun editorReleased(event: EditorFactoryEvent) = removeEscapeListener(event.editor)
             }, project)
         }
 
@@ -89,7 +92,9 @@ class McpCompanionStartupActivity : ProjectActivity {
     }
 
     private fun addEscapeListener(editor: Editor) {
-        editor.contentComponent.addKeyListener(object : KeyAdapter() {
+        // Prevent double-registration: if this editor already has our listener, skip.
+        if (editor.getUserData(ESCAPE_LISTENER_KEY) != null) return
+        val listener = object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
                 if (e.keyCode == KeyEvent.VK_ESCAPE) {
                     val toRemove = editor.markupModel.allHighlighters
@@ -100,6 +105,19 @@ class McpCompanionStartupActivity : ProjectActivity {
                     }
                 }
             }
-        })
+        }
+        editor.contentComponent.addKeyListener(listener)
+        editor.putUserData(ESCAPE_LISTENER_KEY, listener)
+    }
+
+    private fun removeEscapeListener(editor: Editor) {
+        val listener = editor.getUserData(ESCAPE_LISTENER_KEY) ?: return
+        editor.contentComponent.removeKeyListener(listener)
+        editor.putUserData(ESCAPE_LISTENER_KEY, null)
+    }
+
+    companion object {
+        private val ESCAPE_LISTENER_KEY =
+            com.intellij.openapi.util.Key.create<KeyAdapter>("mcp.companion.escape.listener")
     }
 }

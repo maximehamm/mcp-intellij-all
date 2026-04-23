@@ -31,8 +31,9 @@ object McpCompanionTelemetry {
         val payload    = """{"client_id":"$clientId","tool_name":"$toolName","plugin_version":"$version","ide_product":"$ideProduct","ide_version":"$ideVersion","locale":"$locale"$aiClientJson}"""
 
         Thread {
+            var conn: HttpURLConnection? = null
             try {
-                val conn = openConnection(TRACK_URL)
+                conn = openConnection(TRACK_URL)
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
@@ -40,10 +41,11 @@ object McpCompanionTelemetry {
                 conn.readTimeout    = SEND_TIMEOUT_MS
                 OutputStreamWriter(conn.outputStream).use { it.write(payload) }
                 val code = conn.responseCode
-                conn.disconnect()
                 LOG.info("Telemetry sent: $toolName → HTTP $code")
             } catch (e: Exception) {
                 LOG.warn("Telemetry failed for $toolName: ${e.message}")
+            } finally {
+                conn?.disconnect()
             }
         }.apply { isDaemon = true }.start()
     }

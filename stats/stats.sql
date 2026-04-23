@@ -2,7 +2,17 @@ select
     coalesce(tool_name, 'ALL') as tool_name,
     count(*) as total,
     count(distinct client_id) as users,
-    string_agg(distinct nullif(split_part(locale, '-', 2), ''), ', ' order by nullif(split_part(locale, '-', 2), '')) as locales,
+    string_agg(distinct nullif(case
+        when locale like '%-%' then split_part(locale, '-', 2)
+        when locale = 'fr'    then 'FR'
+        when locale = 'en'    then 'GB'
+        else upper(locale)
+    end, ''), ', ' order by nullif(case
+        when locale like '%-%' then split_part(locale, '-', 2)
+        when locale = 'fr'    then 'FR'
+        when locale = 'en'    then 'GB'
+        else upper(locale)
+    end, '')) as locales,
     string_agg(distinct ai_client, ', ' order by ai_client) filter (where ai_client != 'Unknown MCP client') as ai_clients,
     string_agg(distinct plugin_version, ', ' order by plugin_version desc) as plugin_version,
     string_agg(distinct ide_product || ' ' || ide_version, ', '
@@ -53,7 +63,12 @@ select
         from (
                  select tool_name, count(*) as cnt
                  from events e2
-                 where split_part(e2.locale, '-', 2) = s.country
+                 where (case
+                     when e2.locale like '%-%' then split_part(e2.locale, '-', 2)
+                     when e2.locale = 'fr'     then 'FR'
+                     when e2.locale = 'en'     then 'GB'
+                     else upper(e2.locale)
+                 end) = s.country
                  group by tool_name
                  order by cnt desc
                  limit 3
@@ -61,16 +76,25 @@ select
     ) as top5_tools
 from (
          select
-             split_part(locale, '-', 2)                as country,
-             count(*)                                   as calls,
-             count(distinct client_id)                  as users,
+             (case
+                 when locale like '%-%' then split_part(locale, '-', 2)
+                 when locale = 'fr'     then 'FR'
+                 when locale = 'en'     then 'GB'
+                 else upper(locale)
+             end)                                      as country,
+             count(*)                                  as calls,
+             count(distinct client_id)                 as users,
              string_agg(distinct ai_client, ', ')
              filter (where ai_client != 'Unknown MCP client'
-                 and ai_client is not null)         as ai_clients
+                 and ai_client is not null)            as ai_clients
          from events
          where locale is not null
-           and locale like '%-%'
-           and split_part(locale, '-', 2) != ''
-         group by split_part(locale, '-', 2)
+           and locale != ''
+         group by (case
+             when locale like '%-%' then split_part(locale, '-', 2)
+             when locale = 'fr'     then 'FR'
+             when locale = 'en'     then 'GB'
+             else upper(locale)
+         end)
      ) s
 order by calls desc;
