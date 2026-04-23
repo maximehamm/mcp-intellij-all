@@ -1090,6 +1090,325 @@ class McpCompanionVcsToolset : McpToolset {
         }
     }
 
+    // ── get_vcs_file_history ──────────────────────────────────────────────────
+
+    @McpTool(name = "get_vcs_file_history")
+    @McpDescription(description = """
+        Returns the Git commit history for a single file (commits that touched the file).
+        Optionally follows renames (--follow) so the history extends across previous file paths.
+        Requires the Git plugin (bundled in IntelliJ IDEA).
+
+        Parameters:
+        - filePath: file path relative to the project root, or absolute (required)
+        - maxCount: maximum number of commits to return (default: 20)
+        - follow: if true, follows renames so the history continues past renames (default: true)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun get_vcs_file_history(
+        filePath: String,
+        maxCount: Int = 20,
+        follow: Boolean = true,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("get_vcs_file_history")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val base = (project.basePath ?: root.path).toLinuxPath()
+                val absPath = if (filePath.startsWith("/")) filePath else "$base/$filePath"
+
+                // Custom format: <hash>\u0001<author>\u0001<email>\u0001<dateISO>\u0001<subject>
+                // Using \u0001 (SOH) avoids collisions with subject content.
+                val params = buildList {
+                    add("--max-count=$maxCount")
+                    if (follow) add("--follow")
+                    add("--pretty=format:%H\u0001%an\u0001%ae\u0001%aI\u0001%s")
+                    add("--")
+                    add(absPath)
+                }.toTypedArray()
+
+                val (ok, out) = gitExec(cl, project, root, "LOG", *params)
+                if (!ok) return@withContext "Error: $out"
+                if (out.isBlank()) return@withContext "No history found for: $filePath"
+
+                val commits = out.lines().mapNotNull { line ->
+                    if (line.isBlank()) return@mapNotNull null
+                    val parts = line.split('\u0001', limit = 5)
+                    if (parts.size < 5) return@mapNotNull null
+                    VcsFileHistoryEntry(
+                        hash        = parts[0].take(12),
+                        author      = parts[1],
+                        authorEmail = parts[2],
+                        date        = parts[3],
+                        subject     = parts[4]
+                    )
+                }
+                Json.encodeToString(VcsFileHistory(file = filePath, count = commits.size, commits = commits))
+            } catch (e: Exception) {
+                "Error: ${e.javaClass.simpleName}: ${e.message}"
+            }
+        }
+    }
+
+    // ── get_vcs_diff_between_branches ─────────────────────────────────────────
+
+    @McpTool(name = "get_vcs_diff_between_branches")
+    @McpDescription(description = """
+        Returns the Git diff between two branches, tags, or commits.
+        Equivalent to `git diff <ref1>..<ref2>` (changes that <ref2> has but <ref1> doesn't).
+        Requires the Git plugin.
+
+        Parameters:
+        - ref1: base ref (branch, tag, or commit hash) — required
+        - ref2: target ref to compare against ref1 — required
+        - statOnly: if true, returns only `--stat` summary (filenames + insertions/deletions); if false, returns the full unified diff (default: false)
+        - file: optional file path to restrict the diff to a single file (relative to project root or absolute)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun get_vcs_diff_between_branches(
+        ref1: String,
+        ref2: String,
+        statOnly: Boolean = false,
+        file: String = "",
+        projectPath: String? = null
+    ): String {
+        disabledMessage("get_vcs_diff_between_branches")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val base = (project.basePath ?: root.path).toLinuxPath()
+
+                val params = buildList {
+                    if (statOnly) add("--stat") else add("--no-color")
+                    add("$ref1..$ref2")
+                    if (file.isNotBlank()) {
+                        add("--")
+                        add(if (file.startsWith("/")) file else "$base/$file")
+                    }
+                }.toTypedArray()
+
+                val (ok, out) = gitExec(cl, project, root, "DIFF", *params)
+                if (!ok) return@withContext "Error: $out"
+                if (out.isBlank()) return@withContext "No differences between '$ref1' and '$ref2'."
+                out
+            } catch (e: Exception) {
+                "Error: ${e.javaClass.simpleName}: ${e.message}"
+            }
+        }
+    }
+
+    // ── vcs_show_commit ───────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_show_commit")
+    @McpDescription(description = """
+        Returns the full content of a Git commit: metadata (author, date), commit message, and unified diff
+        of all files changed by that commit. Equivalent to `git show <hash>`.
+        Requires the Git plugin.
+
+        Parameters:
+        - hash: commit hash, branch name, tag, or any valid git ref (required)
+        - statOnly: if true, returns only `--stat` summary instead of the full diff (default: false)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_show_commit(
+        hash: String,
+        statOnly: Boolean = false,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_show_commit")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+
+                val params = buildList {
+                    add("--no-color")
+                    if (statOnly) add("--stat")
+                    add(hash)
+                }.toTypedArray()
+
+                val (ok, out) = gitExec(cl, project, root, "SHOW", *params)
+                if (!ok) return@withContext "Error: $out"
+                if (out.isBlank()) return@withContext "Commit '$hash' returned no content."
+                out
+            } catch (e: Exception) {
+                "Error: ${e.javaClass.simpleName}: ${e.message}"
+            }
+        }
+    }
+
+    // ── vcs_reset ─────────────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_reset")
+    @McpDescription(description = """
+        Resets the current branch to a previous commit (git reset).
+        ⚠ With mode="hard" the working tree is overwritten — uncommitted changes are LOST.
+
+        Parameters:
+        - ref: target commit, branch, or ref to reset to (required, e.g. "HEAD~1", "abc123", "origin/main")
+        - mode: "soft" (keep index + working tree), "mixed" (default — reset index, keep working tree), or "hard" (reset everything; DESTRUCTIVE)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_reset(
+        ref: String,
+        mode: String = "mixed",
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_reset")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val flag = when (mode.lowercase()) {
+                    "soft"  -> "--soft"
+                    "mixed" -> "--mixed"
+                    "hard"  -> "--hard"
+                    else    -> return@withContext "Unknown mode '$mode'. Use 'soft', 'mixed', or 'hard'."
+                }
+                val (ok, out) = gitExec(cl, project, root, "RESET", flag, ref)
+                if (ok) { vfsRefresh(project); "Reset $flag to '$ref' successful${if (out.isNotBlank()) ": $out" else ""}" }
+                else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── vcs_revert ────────────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_revert")
+    @McpDescription(description = """
+        Creates a new commit that reverses (undoes) the changes introduced by a previous commit.
+        Equivalent to `git revert <hash>`. Safe — does not rewrite history.
+
+        Parameters:
+        - hash: commit hash to revert (required)
+        - noCommit: if true, applies the inverse changes to the working tree without creating a commit (`--no-commit`); default false (auto-commits)
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_revert(
+        hash: String,
+        noCommit: Boolean = false,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_revert")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val params = buildList {
+                    if (noCommit) add("--no-commit")
+                    add(hash)
+                }.toTypedArray()
+                val (ok, out) = gitExec(cl, project, root, "REVERT", *params)
+                if (ok) { vfsRefresh(project); "Reverted '$hash'${if (noCommit) " (changes staged, not committed)" else ""}${if (out.isNotBlank()) ": $out" else ""}" }
+                else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── vcs_cherry_pick ───────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_cherry_pick")
+    @McpDescription(description = """
+        Applies the changes from a specific commit on top of the current branch (git cherry-pick <hash>).
+
+        Parameters:
+        - hash: commit hash to cherry-pick (required)
+        - noCommit: if true, applies the changes to the working tree/index without committing (`--no-commit`); default false
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_cherry_pick(
+        hash: String,
+        noCommit: Boolean = false,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_cherry_pick")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+                val params = buildList {
+                    if (noCommit) add("--no-commit")
+                    add(hash)
+                }.toTypedArray()
+                val (ok, out) = gitExec(cl, project, root, "CHERRY_PICK", *params)
+                if (ok) { vfsRefresh(project); "Cherry-picked '$hash'${if (noCommit) " (changes staged, not committed)" else ""}${if (out.isNotBlank()) ": $out" else ""}" }
+                else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    // ── vcs_delete_branch ─────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_delete_branch")
+    @McpDescription(description = """
+        Deletes a Git branch — locally, remotely, or both. Disabled by default in Settings (destructive).
+        Local: `git branch -d <name>` (or `-D` if force=true). Remote: `git push <remote> --delete <name>`.
+
+        Parameters:
+        - name: branch name to delete (required)
+        - remote: remote to delete the branch from (default: "" = local only). Set to e.g. "origin" to delete the remote branch only.
+        - both: if true, deletes both the local and the remote branch (uses `remote` if set, otherwise "origin"); default false
+        - force: if true, allows deleting unmerged local branches (`-D` instead of `-d`); default false
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_delete_branch(
+        name: String,
+        remote: String = "",
+        both: Boolean = false,
+        force: Boolean = false,
+        projectPath: String? = null
+    ): String {
+        disabledMessage("vcs_delete_branch")?.let { return it }
+        val project = resolveProject(projectPath)
+        return withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+
+                val results = mutableListOf<String>()
+                val deleteLocal  = both || remote.isBlank()
+                val deleteRemote = both || remote.isNotBlank()
+                val effectiveRemote = remote.ifBlank { "origin" }
+
+                if (deleteLocal) {
+                    val flag = if (force) "-D" else "-d"
+                    val (ok, out) = gitExec(cl, project, root, "BRANCH", flag, name)
+                    results += if (ok) "Local branch '$name' deleted"
+                               else "Local delete failed: $out"
+                }
+                if (deleteRemote) {
+                    val (ok, out) = gitExec(cl, project, root, "PUSH", effectiveRemote, "--delete", name)
+                    results += if (ok) "Remote branch '$effectiveRemote/$name' deleted"
+                               else "Remote delete failed: $out"
+                }
+                vfsRefresh(project)
+                results.joinToString("\n")
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     internal fun git4ideaLoader(): ClassLoader? =
@@ -1465,3 +1784,15 @@ class McpCompanionVcsToolset : McpToolset {
     val content: String? = null
 )
 @Serializable data class VcsConflicts(val count: Int, val conflicts: List<VcsConflict>)
+@Serializable data class VcsFileHistoryEntry(
+    val hash: String,
+    val author: String,
+    val authorEmail: String,
+    val date: String,
+    val subject: String
+)
+@Serializable data class VcsFileHistory(
+    val file: String,
+    val count: Int,
+    val commits: List<VcsFileHistoryEntry>
+)

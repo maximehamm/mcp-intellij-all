@@ -7,7 +7,7 @@
     <description><![CDATA[
 
         <p>
-        <b>More than 50 tools — give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, stash, blame…), VCS changes, database schema and data, and much more.</b>
+        <b>66 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
         <p>Works with any MCP-compatible AI client: <b>Claude</b> (Anthropic), <b>GitHub Copilot</b>, <b>Codex</b>, <b>Cursor</b>, <b>Windsurf</b>, and any other assistant that supports the Model Context Protocol.</p>
         </p>
 
@@ -20,6 +20,7 @@
             <li><b>select_text</b> — Opens a file and selects a text range (ready to copy with Cmd+C).</li>
             <li><b>highlight_text</b> — Highlights multiple zones in a file using the IDE's search-result color (theme-aware). Press Escape to clear.</li>
             <li><b>clear_highlights</b> — Removes all highlights added by <code>highlight_text</code>.</li>
+            <li><b>show_diff</b> — Opens IntelliJ's built-in diff viewer to visually compare the current content of a file with proposed new content (read-only — does not modify the file).</li>
         </ul>
 
         <h4>Build &amp; Tests</h4>
@@ -63,6 +64,9 @@
             <li><b>get_vcs_branch</b> — Current Git branch and all local/remote branches for each repository.</li>
             <li><b>get_vcs_log</b> — Recent Git commit history: hash, author, date, subject, and changed files. Filter by file or branch.</li>
             <li><b>get_vcs_blame</b> — Line-by-line Git blame annotation: who last modified each line, when, and in which commit.</li>
+            <li><b>get_vcs_file_history</b> — Commit history for a single file, with optional <code>--follow</code> to track renames across history.</li>
+            <li><b>get_vcs_diff_between_branches</b> — Unified diff (or <code>--stat</code> summary) between two branches, tags, or commits.</li>
+            <li><b>vcs_show_commit</b> — Full content of a Git commit: metadata, message, and unified diff of all changed files (<code>git show</code>).</li>
             <li><b>get_local_history</b> — IntelliJ Local History for a file or directory: revision list with timestamps, labels (e.g. "Before: Rename"), and optional diffs. Without a path, returns recent project-wide change events.</li>
             <li><b>vcs_stage_files</b> — Stage or unstage files in the Git index (<code>git add</code> / <code>git reset HEAD</code>).</li>
             <li><b>vcs_commit</b> — Create a Git commit from staged changes; warns if IntelliJ-tracked files are not staged; pass <code>force=true</code> to skip the check.</li>
@@ -71,6 +75,10 @@
             <li><b>vcs_stash</b> — Manage Git stashes: <code>action="push"</code> / <code>"pop"</code> / <code>"apply"</code> / <code>"drop"</code> / <code>"list"</code>.</li>
             <li><b>vcs_create_branch</b> — Creates a new Git branch; pass <code>checkout=true</code> (default) to switch to it immediately, and <code>from</code> to specify the base.</li>
             <li><b>vcs_checkout_branch</b> — Switches the Git working tree to an existing branch (<code>git checkout &lt;branch&gt;</code>).</li>
+            <li><b>vcs_delete_branch</b> — Deletes a Git branch locally, remotely, or both. ⚠ Disabled by default — destructive.</li>
+            <li><b>vcs_reset</b> — Resets the current branch to a previous commit (<code>--soft</code> / <code>--mixed</code> / <code>--hard</code>). ⚠ <code>--hard</code> overwrites the working tree.</li>
+            <li><b>vcs_revert</b> — Creates a new commit that reverses the changes of a previous commit (<code>git revert</code>). Safe — does not rewrite history.</li>
+            <li><b>vcs_cherry_pick</b> — Applies the changes from a specific commit on top of the current branch (<code>git cherry-pick</code>).</li>
             <li><b>vcs_fetch</b> — Fetches from one or all remotes without merging (<code>git fetch</code>); pass <code>prune=true</code> to remove deleted remote branches.</li>
             <li><b>vcs_merge_branch</b> — Merges a branch into the current one (<code>git merge</code>); pass <code>noFf=true</code> to force a merge commit.</li>
             <li><b>vcs_rebase</b> — Rebases the current branch onto another (<code>git rebase</code>); supports <code>abort=true</code> and <code>continueRebase=true</code>.</li>
@@ -98,6 +106,8 @@
             <li><i>"Stage all modified files, write a commit message based on the changes, and push to origin."</i></li>
             <li><i>"Show me the Git log for the last 10 commits and summarize what changed."</i></li>
             <li><i>"Create a feature branch from main, apply my changes, and push it."</i></li>
+            <li><i>"Show me the diff between main and feature/refactor — what would be merged?"</i></li>
+            <li><i>"Open the diff viewer to compare the current Util.java with this proposed refactor before I apply it."</i></li>
         </ul>
 
         <h3>Settings</h3>

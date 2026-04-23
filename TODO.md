@@ -2,10 +2,8 @@
 
 ## High priority
 
-- show_diff — Open IntelliJ's diff viewer to compare current content with proposed changes
+- ~~**show_diff**~~ ✅ 2.15.0 — Open IntelliJ's diff viewer to compare current content with proposed changes
 - create_scratch_file — Create a scratch file with any extension and content
-
-- **show_diff** — Open IntelliJ's diff viewer to compare current content with proposed changes
 
 - **get_gradle_tasks** — List available Gradle tasks for the project
 - **run_gradle_task** — Execute a specific Gradle task
@@ -42,15 +40,15 @@
 - ~~**vcs_rebase**~~ ✅ 2.14.0
 - ~~**get_vcs_conflicts**~~ ✅ 2.14.0
 
-- **get_vcs_file_history** — historique des commits qui ont touché un fichier précis
-- **get_vcs_diff_between_branches** — diff entre deux branches ou deux commits
-- **vcs_show_commit** — contenu complet d'un commit (message + diff de tous les fichiers)
+- ~~**get_vcs_file_history**~~ ✅ 2.15.0
+- ~~**get_vcs_diff_between_branches**~~ ✅ 2.15.0
+- ~~**vcs_show_commit**~~ ✅ 2.15.0
 
-- **vcs_reset** — reculer la branche sur un commit précédent (`--soft` / `--mixed` / `--hard`)
-- **vcs_revert** — créer un commit qui annule un commit existant (`git revert <hash>`)
-- **vcs_cherry_pick** — appliquer un commit spécifique sur la branche courante (`git cherry-pick <hash>`)
+- ~~**vcs_reset**~~ ✅ 2.15.0
+- ~~**vcs_revert**~~ ✅ 2.15.0
+- ~~**vcs_cherry_pick**~~ ✅ 2.15.0
 
-- **vcs_delete_branch** — supprimer une branche locale ou distante - desactivé par défaut (`git branch -d` / `git push origin --delete`)
+- ~~**vcs_delete_branch**~~ ✅ 2.15.0 — désactivé par défaut
 
 ### Pull Requests (GitHub / GitLab)
 - **list_pull_requests** — PR ouvertes sur la branche (via plugin GitHub/GitLab si installé)

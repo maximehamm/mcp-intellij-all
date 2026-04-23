@@ -18,6 +18,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `select_text` | Opens a file and selects a text range |
 | `highlight_text` | Highlights multiple zones in a file using the IDE's search-result color |
 | `clear_highlights` | Removes all highlights added by `highlight_text` |
+| `show_diff` | Opens IntelliJ's built-in diff viewer to visually compare current file content with proposed content (read-only) |
 
 ### Build & Tests
 | Tool | Description |
@@ -79,6 +80,9 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_vcs_log` | Recent commit history: hash, author, date, subject, and changed files. Filter by file or branch (Git) |
 | `get_vcs_blame` | Line-by-line blame annotation: who last modified each line, when, and in which commit (any VCS) |
 | `get_local_history` | IntelliJ Local History for a file, directory, or the whole project. Returns timestamped revisions with optional unified diffs |
+| `get_vcs_file_history` | Commit history for a single file with optional `--follow` to track renames across commits |
+| `get_vcs_diff_between_branches` | Unified diff (or `--stat` summary) between two branches, tags, or commits |
+| `vcs_show_commit` | Full content of a commit: metadata, message, and unified diff of all changed files |
 | `vcs_stage_files` | Stage or unstage files in the Git index (`action="stage"` / `"unstage"`) |
 | `vcs_commit` | Create a Git commit from staged changes; pass `amend=true` to amend the last commit |
 | `vcs_push` | Push the current branch to its remote tracking branch (`git push`) |
@@ -86,11 +90,15 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `vcs_stash` | Manage Git stashes: `action="push"` / `"pop"` / `"apply"` / `"drop"` / `"list"` |
 | `vcs_create_branch` | Create a new Git branch; pass `checkout=true` (default) to switch to it immediately |
 | `vcs_checkout_branch` | Switch the working tree to an existing branch (`git checkout <branch>`) |
+| `vcs_delete_branch` 🔒 | Delete a Git branch locally, remotely, or both |
 | `vcs_fetch` | Fetch from one or all remotes without merging (`git fetch`); pass `prune=true` to remove deleted remote branches |
 | `vcs_merge_branch` | Merge a branch into the current one (`git merge`); pass `noFf=true` to force a merge commit |
 | `vcs_rebase` | Rebase the current branch onto another (`git rebase`); supports `abort=true` and `continueRebase=true` |
 | `get_vcs_conflicts` | List all conflicted files after a failed merge or rebase, with conflict type and optional file content |
 | `vcs_open_merge_tool` | Opens IntelliJ's built-in three-way merge tool for all conflicted files (Resolve Conflicts… dialog) |
+| `vcs_reset` | Reset the current branch to a previous commit (`--soft`/`--mixed`/`--hard`) |
+| `vcs_revert` | Create a new commit that undoes a previous commit (safe — no history rewrite) |
+| `vcs_cherry_pick` | Apply the changes from a specific commit on top of the current branch |
 
 ### General
 | Tool | Description |

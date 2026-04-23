@@ -635,6 +635,238 @@ class VcsOperationsTest : BasePlatformTestCase() {
         assertFalse("Should be no conflicts on clean tree", hasConflicts)
     }
 
+    // ── get_vcs_file_history ──────────────────────────────────────────────────
+
+    fun `test get_vcs_file_history - lists commits that touched a file`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Two commits touching MyClass.java, one commit touching another file
+        File(repoDir, "MyClass.java").writeText("class MyClass {}")
+        git(repoDir, "add", "MyClass.java")
+        git(repoDir, "commit", "-m", "create MyClass")
+
+        File(repoDir, "Other.java").writeText("class Other {}")
+        git(repoDir, "add", "Other.java")
+        git(repoDir, "commit", "-m", "add Other (unrelated)")
+
+        File(repoDir, "MyClass.java").writeText("class MyClass { int x; }")
+        git(repoDir, "add", "MyClass.java")
+        git(repoDir, "commit", "-m", "add field x to MyClass")
+
+        // Use the same args the get_vcs_file_history tool sends to LOG
+        val (ok, out) = execPair("LOG",
+            "--max-count=20",
+            "--follow",
+            "--pretty=format:%H\u0001%an\u0001%ae\u0001%aI\u0001%s",
+            "--",
+            "${repoDir.absolutePath}/MyClass.java")
+        println("  log --follow MyClass.java =\n$out")
+        assertTrue("LOG should succeed", ok)
+        val lines = out.lines().filter { it.isNotBlank() }
+        assertEquals("Should be exactly 2 commits touching MyClass.java", 2, lines.size)
+        assertTrue("Most recent should mention 'add field x'", lines[0].contains("add field x to MyClass"))
+        assertTrue("Oldest should mention 'create MyClass'",   lines[1].contains("create MyClass"))
+        // Other.java should NOT show up
+        assertFalse("Unrelated commit should not appear", out.contains("add Other"))
+    }
+
+    // ── get_vcs_diff_between_branches ─────────────────────────────────────────
+
+    fun `test get_vcs_diff_between_branches - diff between main and feature branch`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Create a feature branch with a unique change
+        git(repoDir, "checkout", "-b", "feature/diff-test")
+        File(repoDir, "DiffMe.java").writeText("class DiffMe { int x = 1; }")
+        git(repoDir, "add", "DiffMe.java")
+        git(repoDir, "commit", "-m", "add DiffMe")
+
+        val (ok, out) = execPair("DIFF", "--no-color", "main..feature/diff-test")
+        println("  diff main..feature =\n$out")
+        assertTrue("DIFF should succeed", ok)
+        assertTrue("Diff should show new file DiffMe.java", out.contains("DiffMe.java"))
+        assertTrue("Diff should show added line 'class DiffMe'", out.contains("+class DiffMe"))
+    }
+
+    fun `test get_vcs_diff_between_branches - stat only summary`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+        git(repoDir, "checkout", "-b", "feature/stat-test")
+        File(repoDir, "Stat.java").writeText("class Stat {}\n")
+        git(repoDir, "add", "Stat.java")
+        git(repoDir, "commit", "-m", "add Stat")
+
+        val (ok, out) = execPair("DIFF", "--stat", "main..feature/stat-test")
+        println("  diff --stat = '$out'")
+        assertTrue("DIFF --stat should succeed", ok)
+        assertTrue("Stat output should mention Stat.java", out.contains("Stat.java"))
+        // --stat does NOT contain a real diff body
+        assertFalse("Stat output should not contain a unified diff", out.contains("+class Stat"))
+    }
+
+    // ── vcs_show_commit ───────────────────────────────────────────────────────
+
+    fun `test vcs_show_commit - returns commit message and diff`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        File(repoDir, "Showme.java").writeText("class Showme { int v = 7; }\n")
+        git(repoDir, "add", "Showme.java")
+        git(repoDir, "commit", "-m", "Add Showme demo")
+        val hash = git(repoDir, "rev-parse", "HEAD").trim()
+
+        val (ok, out) = execPair("SHOW", "--no-color", hash)
+        println("  show $hash =\n$out")
+        assertTrue("SHOW should succeed", ok)
+        assertTrue("Output should contain the commit message", out.contains("Add Showme demo"))
+        assertTrue("Output should contain the file name", out.contains("Showme.java"))
+        assertTrue("Output should contain the added line", out.contains("+class Showme"))
+    }
+
+    // ── vcs_reset ─────────────────────────────────────────────────────────────
+
+    fun `test vcs_reset - soft keeps working tree and index`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        File(repoDir, "ToReset.java").writeText("class ToReset {}")
+        git(repoDir, "add", "ToReset.java")
+        git(repoDir, "commit", "-m", "to be reset")
+        val before = git(repoDir, "log", "--oneline", "-1")
+        assertTrue("Commit must exist before reset", before.contains("to be reset"))
+
+        exec("RESET", "--soft", "HEAD~1")
+
+        // After --soft, ToReset.java should still exist on disk and still be staged
+        assertTrue("Working tree file should still exist after --soft", File(repoDir, "ToReset.java").exists())
+        val status = git(repoDir, "status", "--short")
+        println("  status after soft reset = '$status'")
+        assertTrue("File should still be staged (A) after --soft", status.contains("A") && status.contains("ToReset.java"))
+
+        // The commit itself should be gone
+        val log = git(repoDir, "log", "--oneline", "-1")
+        assertFalse("Latest commit should no longer be 'to be reset'", log.contains("to be reset"))
+    }
+
+    fun `test vcs_reset - hard discards changes`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        File(repoDir, "Hard.java").writeText("class Hard {}")
+        git(repoDir, "add", "Hard.java")
+        git(repoDir, "commit", "-m", "hard reset target")
+
+        exec("RESET", "--hard", "HEAD~1")
+
+        // After --hard, the file should be gone from the working tree AND not in any index
+        assertFalse("Working tree file should NOT exist after --hard reset", File(repoDir, "Hard.java").exists())
+        val status = git(repoDir, "status", "--short")
+        println("  status after hard reset = '$status'")
+        assertTrue("Working tree should be clean after --hard reset", status.isBlank())
+    }
+
+    // ── vcs_revert ────────────────────────────────────────────────────────────
+
+    fun `test vcs_revert - creates a commit that undoes the target commit`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        File(repoDir, "Revertable.java").writeText("class Revertable { int v = 1; }")
+        git(repoDir, "add", "Revertable.java")
+        git(repoDir, "commit", "-m", "feature to revert")
+        val toRevert = git(repoDir, "rev-parse", "HEAD").trim()
+
+        val (ok, out) = execPair("REVERT", "--no-edit", toRevert)
+        println("  revert result ok=$ok out='$out'")
+        assertTrue("REVERT should succeed", ok)
+
+        // The file should be gone (since the commit added it, reverting deletes it)
+        assertFalse("Reverted file should be gone from working tree", File(repoDir, "Revertable.java").exists())
+
+        // A new revert commit should appear at the top of the log
+        val log = git(repoDir, "log", "--oneline", "-2")
+        println("  log after revert =\n$log")
+        assertTrue("Top commit should be a Revert", log.lines().first().contains("Revert"))
+    }
+
+    // ── vcs_cherry_pick ───────────────────────────────────────────────────────
+
+    fun `test vcs_cherry_pick - applies a commit from another branch`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Make a commit on a feature branch
+        git(repoDir, "checkout", "-b", "feature/cp-source")
+        File(repoDir, "Picked.java").writeText("class Picked {}")
+        git(repoDir, "add", "Picked.java")
+        git(repoDir, "commit", "-m", "add Picked.java on feature")
+        val pickHash = git(repoDir, "rev-parse", "HEAD").trim()
+
+        // Switch back to main — Picked.java does not exist here yet
+        git(repoDir, "checkout", "main")
+        assertFalse("Picked.java should not exist on main yet", File(repoDir, "Picked.java").exists())
+
+        val (ok, out) = execPair("CHERRY_PICK", pickHash)
+        println("  cherry-pick result ok=$ok out='$out'")
+        assertTrue("CHERRY_PICK should succeed", ok)
+
+        // Picked.java should now exist on main
+        assertTrue("Picked.java should exist on main after cherry-pick", File(repoDir, "Picked.java").exists())
+        val log = git(repoDir, "log", "--oneline", "-1")
+        assertTrue("Top commit on main should mention Picked.java", log.contains("add Picked.java on feature"))
+    }
+
+    // ── vcs_delete_branch ─────────────────────────────────────────────────────
+
+    fun `test vcs_delete_branch - deletes a local branch`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Create a branch, commit on it, then merge it back so it can be deleted with -d
+        git(repoDir, "checkout", "-b", "to-delete")
+        File(repoDir, "Del.java").writeText("class Del {}")
+        git(repoDir, "add", "Del.java")
+        git(repoDir, "commit", "-m", "add Del.java")
+        git(repoDir, "checkout", "main")
+        git(repoDir, "merge", "--ff-only", "to-delete")
+
+        val branchesBefore = git(repoDir, "branch")
+        assertTrue("Branch should exist before delete", branchesBefore.contains("to-delete"))
+
+        exec("BRANCH", "-d", "to-delete")
+
+        val branchesAfter = git(repoDir, "branch")
+        println("  branches after delete = '$branchesAfter'")
+        assertFalse("Deleted branch should be gone", branchesAfter.contains("to-delete"))
+    }
+
+    fun `test vcs_delete_branch - force-deletes an unmerged branch`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        git(repoDir, "checkout", "-b", "force-delete")
+        File(repoDir, "Force.java").writeText("class Force {}")
+        git(repoDir, "add", "Force.java")
+        git(repoDir, "commit", "-m", "unmerged commit")
+        git(repoDir, "checkout", "main")
+
+        // -d would refuse (unmerged), -D should succeed
+        val (ok, _) = execPair("BRANCH", "-D", "force-delete")
+        assertTrue("Force delete should succeed", ok)
+        val branches = git(repoDir, "branch")
+        assertFalse("Branch should be gone after -D", branches.contains("force-delete"))
+    }
+
+    fun `test vcs_delete_branch - deletes a remote branch via push --delete`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+
+        // Push a branch to the bare remote, then delete it via PUSH --delete
+        git(repoDir, "checkout", "-b", "remote-to-delete")
+        git(repoDir, "push", "origin", "remote-to-delete")
+        git(repoDir, "checkout", "main")
+
+        val refsBefore = git(bareDir, "branch")
+        assertTrue("Bare repo should have the branch before delete", refsBefore.contains("remote-to-delete"))
+
+        exec("PUSH", "origin", "--delete", "remote-to-delete")
+
+        val refsAfter = git(bareDir, "branch")
+        println("  bare branches after delete = '$refsAfter'")
+        assertFalse("Bare repo should NOT have the branch after delete", refsAfter.contains("remote-to-delete"))
+    }
+
     fun `test get_vcs_changes - after multiple commits only unstaged changes appear`() {
         if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
 

@@ -64,7 +64,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     companion object {
 
         /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
-        val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query")
+        val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query", "vcs_delete_branch")
 
         /**
          * Tools polled at high frequency (e.g. called by a Claude Code UserPromptSubmit hook on every
@@ -75,7 +75,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
         val TOOL_GROUPS = linkedMapOf(
             "Editor & Navigation" to listOf(
-                "get_open_editors", "navigate_to", "select_text", "highlight_text", "clear_highlights"
+                "get_open_editors", "navigate_to", "select_text", "highlight_text", "clear_highlights", "show_diff"
             ),
             "Build & Tests" to listOf(
                 "get_build_output", "get_console_output", "get_services_output", "get_test_results", "get_terminal_output", "send_to_terminal"
@@ -99,9 +99,11 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             ),
             "VCS" to listOf(
                 "get_vcs_changes", "get_vcs_branch", "get_vcs_log", "get_vcs_blame", "get_local_history",
+                "get_vcs_file_history", "get_vcs_diff_between_branches", "vcs_show_commit",
                 "vcs_stage_files", "vcs_commit", "vcs_push", "vcs_pull", "vcs_stash",
-                "vcs_create_branch", "vcs_checkout_branch",
-                "vcs_fetch", "vcs_merge_branch", "vcs_rebase", "get_vcs_conflicts", "vcs_open_merge_tool"
+                "vcs_create_branch", "vcs_checkout_branch", "vcs_delete_branch",
+                "vcs_fetch", "vcs_merge_branch", "vcs_rebase", "get_vcs_conflicts", "vcs_open_merge_tool",
+                "vcs_reset", "vcs_revert", "vcs_cherry_pick"
             ),
             "General" to listOf(
                 "get_mcp_companion_overview", "execute_ide_action", "replace_text_undoable", "delete_file"

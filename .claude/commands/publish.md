@@ -20,6 +20,7 @@ Lis la version actuelle dans `build.gradle.kts`.
 - README : tous les tools de `McpCompanionSettings.TOOL_GROUPS` présents dans `README.md` ?
 - Overview : tous les tools mentionnés dans `get_mcp_companion_overview` de `McpCompanionToolset.kt` ?
 - Settings : nouveau tool présent dans `McpCompanionSettings.TOOL_GROUPS` ?
+- **Compteur d'outils dans `plugin.xml`** : compter exactement les outils dans `McpCompanionSettings.TOOL_GROUPS` (somme de tous les groupes) et vérifier que le nombre indiqué dans la balise `<description>` de `plugin.xml` (ligne `<b>NN tools — give your AI assistant…</b>`) correspond. Si différent → corriger automatiquement avant de présenter le plan.
 
 ## Étape 1 — Présentation du plan et confirmation unique
 
@@ -36,6 +37,7 @@ Checklist :
   ✅/❌ README à jour
   ✅/❌ Overview à jour
   ✅/❌ Settings à jour
+  ✅/❌ Compteur d'outils dans plugin.xml (NN tools)
 
 Fichiers modifiés : <liste git diff main --name-only>
 ```

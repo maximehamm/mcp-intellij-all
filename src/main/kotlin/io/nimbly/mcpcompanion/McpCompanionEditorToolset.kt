@@ -233,6 +233,57 @@ class McpCompanionEditorToolset : McpToolset {
             "$count highlight(s) cleared"
         }
     }
+
+    // ── show_diff ─────────────────────────────────────────────────────────────
+
+    @McpTool(name = "show_diff")
+    @McpDescription(description = """
+        Opens IntelliJ's built-in diff viewer to visually compare the current content of a file
+        with proposed new content. Use this BEFORE applying a multi-line change so the user can
+        review and approve the change in IntelliJ's familiar diff UI (left = current, right = proposed).
+        The viewer is read-only — this tool does not modify the file.
+
+        Parameters:
+        - filePath: file path (relative to project root, or absolute) — required. Used as the LEFT (current) side.
+        - newContent: proposed new file content — required. Shown on the RIGHT (proposed) side.
+        - title: optional dialog title (default: "MCP — proposed changes for <filename>")
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun show_diff(
+        filePath: String,
+        newContent: String,
+        title: String = "",
+        projectPath: String? = null
+    ): String {
+        disabledMessage("show_diff")?.let { return it }
+        val project = resolveProject(projectPath)
+        return runOnEdt {
+            try {
+                val (vFile, err) = resolveFilePathOrError(project, filePath)
+                if (err != null) return@runOnEdt err
+                val file = vFile!!
+                val currentContent = runReadAction {
+                    com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(file)?.text
+                        ?: String(file.contentsToByteArray(), file.charset)
+                }
+                val factory = com.intellij.diff.DiffContentFactory.getInstance()
+                val left  = factory.create(project, currentContent, file.fileType)
+                val right = factory.create(project, newContent, file.fileType)
+                val dialogTitle = title.ifBlank { "MCP — proposed changes for ${file.name}" }
+                val request = com.intellij.diff.requests.SimpleDiffRequest(
+                    dialogTitle,
+                    left,
+                    right,
+                    "Current — ${file.name}",
+                    "Proposed"
+                )
+                com.intellij.diff.DiffManager.getInstance().showDiff(project, request)
+                "Diff viewer opened for: $filePath"
+            } catch (e: Exception) {
+                "Error: ${e.javaClass.simpleName}: ${e.message}"
+            }
+        }
+    }
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────

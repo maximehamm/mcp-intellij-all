@@ -58,6 +58,8 @@ class McpCompanionToolset : McpToolset {
 - highlight_text         → highlight multiple zones at once (declaration + all usages)
                            ranges format: "startLine:startCol:endLine:endCol" comma-separated, endCol INCLUSIVE
 - clear_highlights       → remove all highlights (user can also press Escape)
+- show_diff              → open IntelliJ's built-in diff viewer to compare current file content with proposed content (read-only)
+                           use this to SHOW the user a refactor or proposed change BEFORE applying it (vs. replace_text_undoable, which applies the change directly)
 
 ### Build & Tests
 - get_build_output       → read compiler errors before answering a build question
@@ -126,6 +128,9 @@ class McpCompanionToolset : McpToolset {
 - get_vcs_log(maxCount=20, file="", branch="") — recent commits with hash, author, date, subject, files changed (Git)
 - get_vcs_blame(filePath, startLine=1, endLine=MAX) — line-by-line annotation: author, date, revision per line
 - get_local_history(scope="file"|"directory"|"project", path="") — local history of a file, directory, or entire project (IntelliJ Local History, not Git)
+- get_vcs_file_history(filePath, maxCount=20, follow=true) — commit history for a single file; follow=true tracks renames
+- get_vcs_diff_between_branches(ref1, ref2, file="", statOnly=false) — diff between two branches/tags/commits; statOnly=true returns only the summary
+- vcs_show_commit(hash) — full content of a commit: metadata, message, and unified diff of all changed files
 - vcs_stage_files(action="stage"|"unstage", files=[]) — stage or unstage files (git add / git reset HEAD)
 - vcs_commit(message, amend=false, force=false) — create a commit from staged changes; warns if IntelliJ-tracked files are not staged; force=true skips the check
 - vcs_push(remote="", branch="", setUpstream=false) — push current branch to remote
@@ -133,11 +138,17 @@ class McpCompanionToolset : McpToolset {
 - vcs_stash(action="list"|"push"|"pop"|"apply"|"drop", message="", ref="stash@{0}") — manage stashes
 - vcs_create_branch(name, checkout=true, from="") — create a new branch; checkout=true (default) also switches to it
 - vcs_checkout_branch(name) — switch to an existing branch (git checkout <branch>)
+- vcs_delete_branch(name, scope="local"|"remote"|"both", force=false, remote="origin") — delete a branch locally, remotely, or both
+                                ⚠ disabled by default — destructive action
 - vcs_fetch(remote="", prune=false) — fetch from one or all remotes without merging (git fetch)
 - vcs_merge_branch(branch, noFf=false, message="") — merge a branch into the current one (git merge)
 - vcs_rebase(branch="", abort=false, continueRebase=false) — rebase current branch onto another; supports abort and continue
 - get_vcs_conflicts(showContent=false) — list conflicted files after a failed merge/rebase, with conflict type and optional content
 - vcs_open_merge_tool() — opens IntelliJ's three-way merge tool (Resolve Conflicts dialog) for all conflicted files
+- vcs_reset(ref, mode="mixed"|"soft"|"hard") — reset the current branch to a previous commit
+                                ⚠ "hard" discards all local changes; "soft" keeps index + working tree; "mixed" (default) keeps working tree only
+- vcs_revert(hash, noCommit=false) — create a new commit that undoes a previous commit (safe — no history rewrite)
+- vcs_cherry_pick(hash, noCommit=false) — apply the changes from a specific commit on top of the current branch
 
 ### General
 - get_mcp_companion_overview → this overview
