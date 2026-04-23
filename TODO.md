@@ -37,10 +37,10 @@
 - ~~**vcs_create_branch**~~ ✅ 2.13.0
 - ~~**vcs_checkout_branch**~~ ✅ 2.13.0
 
-- **vcs_fetch** — mettre à jour les refs distantes sans merger (`git fetch`)
-- **vcs_merge_branch** — merger une branche dans la courante (via API IntelliJ)
-- **vcs_rebase** — rebaser la branche courante sur une autre (`git rebase <branch>`)
-- **get_vcs_conflicts** — lister les fichiers en conflit de merge avec leur contenu
+- ~~**vcs_fetch**~~ ✅ 2.14.0
+- ~~**vcs_merge_branch**~~ ✅ 2.14.0
+- ~~**vcs_rebase**~~ ✅ 2.14.0
+- ~~**get_vcs_conflicts**~~ ✅ 2.14.0
 
 - **vcs_reset** — reculer la branche sur un commit précédent (`--soft` / `--mixed` / `--hard`)
 - **vcs_revert** — créer un commit qui annule un commit existant (`git revert <hash>`)
