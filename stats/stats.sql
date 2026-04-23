@@ -2,7 +2,7 @@ select
     coalesce(tool_name, 'ALL') as tool_name,
     count(*) as total,
     count(distinct client_id) as users,
-    string_agg(distinct split_part(locale, '-', 2), ', ' order by split_part(locale, '-', 2)) as locales,
+    string_agg(distinct nullif(split_part(locale, '-', 2), ''), ', ' order by nullif(split_part(locale, '-', 2), '')) as locales,
     string_agg(distinct ai_client, ', ' order by ai_client) filter (where ai_client != 'Unknown MCP client') as ai_clients,
     string_agg(distinct plugin_version, ', ' order by plugin_version desc) as plugin_version,
     string_agg(distinct ide_product || ' ' || ide_version, ', '
@@ -70,6 +70,7 @@ from (
          from events
          where locale is not null
            and locale like '%-%'
+           and split_part(locale, '-', 2) != ''
          group by split_part(locale, '-', 2)
      ) s
 order by calls desc;
