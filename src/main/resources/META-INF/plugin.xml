@@ -7,7 +7,7 @@
     <description><![CDATA[
 
         <p>
-        <b>66 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
+        <b>72 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
         <p>Works with any MCP-compatible AI client: <b>Claude</b> (Anthropic), <b>GitHub Copilot</b>, <b>Codex</b>, <b>Cursor</b>, <b>Windsurf</b>, and any other assistant that supports the Model Context Protocol.</p>
         </p>
 
@@ -56,6 +56,17 @@
             <li><b>list_database_sources</b> — Lists all data sources configured in the Database tool window (name, URL, driver, user, DBMS type).</li>
             <li><b>get_database_schema</b> — Returns the schema tree already introspected by IntelliJ: namespaces → tables/views with keys, foreign keys, indexes, and optionally columns.</li>
             <li><b>execute_database_query</b> — Executes a SQL query on a configured data source and returns the results as JSON. ⚠ Disabled by default — can execute UPDATE, DELETE, DROP.</li>
+        </ul>
+
+        <h4>Gradle</h4>
+        <p><em>Requires the Gradle plugin (bundled in IntelliJ IDEA Community/Ultimate and Android Studio).</em></p>
+        <ul>
+            <li><b>run_gradle_task</b> — Executes one or more Gradle tasks and returns a structured result (status, duration, gradleProjectPath).</li>
+            <li><b>get_gradle_tasks</b> — Lists Gradle tasks discovered by IntelliJ, grouped by category (build, verification, help, …).</li>
+            <li><b>refresh_gradle_project</b> — Forces a Gradle re-sync (equivalent of the 🔄 button in the Gradle tool window).</li>
+            <li><b>get_gradle_dependencies</b> — Imported dependency tree per module with resolved versions and scopes.</li>
+            <li><b>stop_gradle_task</b> — Cancels all currently-running Gradle tasks.</li>
+            <li><b>get_gradle_project_info</b> — Wrapper version, JDK used, list of subprojects with paths and source sets — useful for monorepo reasoning.</li>
         </ul>
 
         <h4>Git &amp; VCS</h4>
@@ -123,6 +134,11 @@
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.mcpServer</depends>
+
+    <!-- Optional: Gradle tools are loaded only when the Gradle plugin is present
+         (bundled in IntelliJ IDEA Community/Ultimate and Android Studio, not in
+         PyCharm/WebStorm/etc.). The plugin still loads on those IDEs without Gradle. -->
+    <depends optional="true" config-file="mcp-companion-gradle.xml">com.intellij.gradle</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="io.nimbly.mcpcompanion.McpCompanionSettings"/>

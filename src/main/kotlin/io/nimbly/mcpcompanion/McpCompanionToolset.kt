@@ -122,6 +122,18 @@ class McpCompanionToolset : McpToolset {
                             dataSource="" → auto-selected if only one source exists
                             maxRows=100 (default) → limit result rows
 
+### Gradle (requires the Gradle plugin — bundled in IntelliJ IDEA Community/Ultimate and Android Studio)
+- get_gradle_tasks         → list available Gradle tasks grouped by category (build, verification, help, …)
+                             call this first to discover task names; results come from the IDE's imported model
+- run_gradle_task          → execute one or more Gradle tasks (e.g. tasks=["clean","build"], args=["--info"])
+                             returns structured result with status (success/failure/timeout), duration, gradleProjectPath
+- refresh_gradle_project   → force a Gradle re-sync (🔄 button equivalent)
+                             call this after editing build.gradle/build.gradle.kts/settings.gradle
+- get_gradle_dependencies  → imported dependency tree per module with resolved versions and scopes
+                             scope="compile|test|runtime|…" to filter; ⚠ reflects the imported model — refresh first if needed
+- stop_gradle_task         → cancel all currently-running Gradle tasks
+- get_gradle_project_info  → wrapper version, JDK, subprojects with paths, source sets — for monorepo reasoning
+
 ### VCS
 - get_vcs_changes(includeDiff=false) — modified/added/deleted/moved files; includeDiff=true adds unified diff per file
 - get_vcs_branch() — current branch + local/remote branches (Git)

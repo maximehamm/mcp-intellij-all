@@ -1,0 +1,6 @@
+<idea-plugin>
+    <!-- Loaded only when com.intellij.gradle is installed (see plugin.xml optional depends). -->
+    <extensions defaultExtensionNs="com.intellij.mcpServer">
+        <mcpToolset implementation="io.nimbly.mcpcompanion.McpCompanionGradleToolset"/>
+    </extensions>
+</idea-plugin>

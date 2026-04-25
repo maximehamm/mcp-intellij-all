@@ -72,6 +72,16 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_database_schema` | Schema tree already introspected by IntelliJ: namespaces → tables/views with keys, FK, indexes, and optionally columns |
 | `execute_database_query` 🔒 | Executes a SQL query on a data source, returns JSON with columns + rows (or affected row count for DML) |
 
+### Gradle *(requires the Gradle plugin — bundled in IntelliJ IDEA Community/Ultimate and Android Studio)*
+| Tool | Description |
+|------|-------------|
+| `run_gradle_task` | Executes one or more Gradle tasks and returns a structured result (status, duration, gradleProjectPath) |
+| `get_gradle_tasks` | Lists Gradle tasks discovered by IntelliJ, grouped by category (build, verification, help, …) |
+| `refresh_gradle_project` | Forces a Gradle re-sync (equivalent of the 🔄 button in the Gradle tool window) |
+| `get_gradle_dependencies` | Imported dependency tree per module with resolved versions and scopes |
+| `stop_gradle_task` | Cancels all currently-running Gradle tasks |
+| `get_gradle_project_info` | Wrapper version, JDK used, list of subprojects with paths, source sets — for monorepo reasoning |
+
 ### VCS
 | Tool | Description |
 |------|-------------|

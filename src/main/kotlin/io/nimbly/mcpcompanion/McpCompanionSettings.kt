@@ -97,6 +97,10 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             "Database" to listOf(
                 "list_database_sources", "get_database_schema", "execute_database_query"
             ),
+            "Gradle" to listOf(
+                "run_gradle_task", "get_gradle_tasks", "refresh_gradle_project",
+                "get_gradle_dependencies", "stop_gradle_task", "get_gradle_project_info"
+            ),
             "VCS" to listOf(
                 "get_vcs_changes", "get_vcs_branch", "get_vcs_log", "get_vcs_blame", "get_local_history",
                 "get_vcs_file_history", "get_vcs_diff_between_branches", "vcs_show_commit",
@@ -115,9 +119,15 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
          * Used by the Settings UI to grey out tools when their required plugin is not installed.
          */
         val TOOL_REQUIRED_PLUGIN: Map<String, String> = mapOf(
-            "list_database_sources"   to "com.intellij.database",
-            "get_database_schema"     to "com.intellij.database",
-            "execute_database_query"  to "com.intellij.database"
+            "list_database_sources"     to "com.intellij.database",
+            "get_database_schema"       to "com.intellij.database",
+            "execute_database_query"    to "com.intellij.database",
+            "run_gradle_task"           to "com.intellij.gradle",
+            "get_gradle_tasks"          to "com.intellij.gradle",
+            "refresh_gradle_project"    to "com.intellij.gradle",
+            "get_gradle_dependencies"   to "com.intellij.gradle",
+            "stop_gradle_task"          to "com.intellij.gradle",
+            "get_gradle_project_info"   to "com.intellij.gradle"
         )
 
         /** Returns true if the optional plugin required by this tool is installed and enabled. */
