@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- All gray wireframe — used for idle state and as 'pause' frame in active animation -->
+  <rect x="2" y="2" width="4" height="4" rx="0.5" fill="none" stroke="#6B7280" stroke-width="1"/>
+  <rect x="10" y="10" width="4" height="4" rx="0.5" fill="none" stroke="#6B7280" stroke-width="1"/>
+  <!-- Top horizontal + corner -->
+  <path d="M6 4h5a1 1 0 0 1 1 1" stroke="#6B7280" stroke-width="1" fill="none" stroke-linecap="round"/>
+  <!-- Right vertical -->
+  <path d="M12 5v5" stroke="#6B7280" stroke-width="1" fill="none" stroke-linecap="round"/>
+  <!-- Bottom horizontal + corner -->
+  <path d="M10 12H5a1 1 0 0 1-1-1" stroke="#6B7280" stroke-width="1" fill="none" stroke-linecap="round"/>
+  <!-- Left vertical -->
+  <path d="M4 11V6" stroke="#6B7280" stroke-width="1" fill="none" stroke-linecap="round"/>
+</svg>

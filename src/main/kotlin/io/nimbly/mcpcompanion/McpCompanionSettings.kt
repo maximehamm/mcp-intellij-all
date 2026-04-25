@@ -61,7 +61,83 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     fun getAllCallCounts(): Map<String, Int> = callCounts.toMap()
     fun maxCallCount(): Int = callCounts.values.maxOrNull() ?: 0
 
+    // ── Active call tracking (powers the status bar widget) ──────────────────
+    /**
+     * Snapshot of a tool invocation visible in the status bar widget.
+     * [endNanos] is null while the call is running; once set, the displayed elapsed time
+     * stops ticking (the entry is held visible for [MIN_VISIBLE_MS] but the value is frozen).
+     */
+    data class ActiveCall(val id: Long, val name: String, val startNanos: Long, val endNanos: Long? = null)
+
+    /** A finished tool invocation, recorded for the recent-calls history. */
+    data class CompletedCall(val name: String, val durationMs: Long, val finishedAtMillis: Long)
+
+    private val activeCalls = java.util.concurrent.ConcurrentHashMap<Long, ActiveCall>()
+    private val activeCallSeq = java.util.concurrent.atomic.AtomicLong(0)
+
+    /** Most recent completed calls, newest first. Capped at [MAX_RECENT]. */
+    private val recentCalls = ArrayDeque<CompletedCall>()
+    private val recentCallsLock = Any()
+
+    /**
+     * Registers the start of a tool invocation and schedules automatic cleanup when
+     * the calling coroutine completes (success, failure, or cancellation). The widget
+     * polls [getActiveCalls] every 200 ms — no need to call any "end" method explicitly.
+     *
+     * Sub-[MIN_VISIBLE_MS] calls are artificially held visible in [activeCalls] so the
+     * status bar's ⚡ indicator is perceptible even for ultra-fast calls (a few ms).
+     * The [CompletedCall.durationMs] recorded in the history is always the *real* duration.
+     *
+     * Pass `coroutineContext[Job]` from the calling suspend function as [job].
+     * If [job] is null (defensive), the entry will linger in memory — kept simple to
+     * avoid the cost of a global timeout sweeper for the unusual case.
+     */
+    fun beginActiveCall(name: String, job: kotlinx.coroutines.Job?) {
+        val id = activeCallSeq.incrementAndGet()
+        val startNanos = System.nanoTime()
+        activeCalls[id] = ActiveCall(id, name, startNanos)
+        job?.invokeOnCompletion {
+            val endNanos = System.nanoTime()
+            val realDurationMs = (endNanos - startNanos) / 1_000_000
+            val holdMs = (MIN_VISIBLE_MS - realDurationMs).coerceAtLeast(0L)
+
+            // Freeze the displayed elapsed time at the real duration (no ticking past it).
+            activeCalls[id] = ActiveCall(id, name, startNanos, endNanos = endNanos)
+
+            val finalize = Runnable {
+                activeCalls.remove(id)
+                synchronized(recentCallsLock) {
+                    recentCalls.addFirst(CompletedCall(name, realDurationMs, System.currentTimeMillis()))
+                    while (recentCalls.size > MAX_RECENT) recentCalls.removeLast()
+                }
+            }
+            if (holdMs == 0L) {
+                finalize.run()
+            } else {
+                com.intellij.util.concurrency.AppExecutorUtil.getAppScheduledExecutorService()
+                    .schedule(finalize, holdMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            }
+        }
+    }
+
+    /** Returns a snapshot of the currently-running tool invocations. Safe to call from EDT. */
+    fun getActiveCalls(): List<ActiveCall> = activeCalls.values.toList()
+
+    /** Returns the [MAX_RECENT] most recent completed calls, newest first. */
+    fun getRecentCalls(): List<CompletedCall> = synchronized(recentCallsLock) { recentCalls.toList() }
+
     companion object {
+
+        /** Number of recent completed calls kept for the status bar widget tooltip. */
+        const val MAX_RECENT = 5
+
+        /**
+         * Minimum visible duration (ms) of an active call in the status bar widget.
+         * Set to one full animation cycle (8 frames × 100 ms = 800 ms) so that even
+         * ultra-short calls always show at least one complete rotation. As a side effect,
+         * once the last call ends, the widget keeps animating at most one cycle.
+         */
+        const val MIN_VISIBLE_MS = 800L
 
         /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
         val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query", "vcs_delete_branch")

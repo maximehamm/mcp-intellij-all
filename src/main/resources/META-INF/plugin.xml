@@ -149,6 +149,10 @@
             displayName="MCP Server Companion"/>
         <postStartupActivity implementation="io.nimbly.mcpcompanion.McpCompanionStartupActivity"/>
         <notificationGroup id="MCP Server Companion" displayType="BALLOON"/>
+        <statusBarWidgetFactory
+            id="io.nimbly.mcpcompanion.activityWidget"
+            implementation="io.nimbly.mcpcompanion.McpCompanionStatusBarWidgetFactory"
+            order="last"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij.mcpServer">

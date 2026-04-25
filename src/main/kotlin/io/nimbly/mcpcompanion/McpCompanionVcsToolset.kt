@@ -30,6 +30,7 @@ class McpCompanionVcsToolset : McpToolset {
             return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion."
         }
         McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name?.takeIf { it != "Unknown MCP client" } }.getOrNull())
+        McpCompanionSettings.getInstance().beginActiveCall(toolName, coroutineContext[kotlinx.coroutines.Job])
         return null
     }
 

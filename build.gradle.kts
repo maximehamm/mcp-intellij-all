@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "2.16.0"
+version = "2.17.0"
 
 repositories {
     mavenCentral()
@@ -48,6 +48,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>2.17.0</b> — New status bar widget showing live MCP activity: animated icon during tool calls, tooltip with the currently-running tools and the 5 most recent completed (with durations), and click to open the plugin settings.</li>
                 <li><b>2.16.0</b> — New Gradle tools: <code>run_gradle_task</code>, <code>get_gradle_tasks</code>, <code>refresh_gradle_project</code>, <code>get_gradle_dependencies</code>, <code>stop_gradle_task</code>, and <code>get_gradle_project_info</code> — full Gradle integration from your AI client (run/list/cancel tasks, inspect imported dependencies, wrapper version, subprojects).</li>
                 <li><b>2.15.1</b> — Fix: <code>get_debug_variables</code> now works with non-JVM debuggers (JavaScript/TypeScript/Node, Python, Ruby, PHP). Variables exposed in scope groups (<code>Local</code>, <code>Closure</code>, <code>Global</code>, …) are returned with a dotted prefix. Thanks to @simontong for the report (issue #1).</li>
                 <li><b>2.15.0</b> — New VCS tools: <code>get_vcs_file_history</code>, <code>get_vcs_diff_between_branches</code>, <code>vcs_show_commit</code>, <code>vcs_reset</code>, <code>vcs_revert</code>, <code>vcs_cherry_pick</code>, and <code>vcs_delete_branch</code> (disabled by default). Plus a new editor tool <code>show_diff</code> to open IntelliJ's built-in diff viewer for previewing proposed changes before applying them.</li>
