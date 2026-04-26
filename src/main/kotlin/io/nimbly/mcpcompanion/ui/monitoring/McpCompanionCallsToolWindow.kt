@@ -118,7 +118,9 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
     }
 
     /** Stored as a field so [updateDetailsPanel] can hide the whole lower section when nothing is selected. */
-    private val detailsSplitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.detailsSplitter", 0.5f).apply {
+    // Default 30/20/50 split target → outer = 0.30 (list/details), inner = 20/(20+50) ≈ 0.286 (params/response).
+    // Splitter IDs include `.v2` so the new defaults apply for users who had the older 0.55/0.5 layout.
+    private val detailsSplitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.detailsSplitter.v2", 0.286f).apply {
         firstComponent = parametersTabbedPane
         secondComponent = responseErrorsTabbedPane
     }
@@ -126,7 +128,7 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
     init {
         background = UIUtil.getListBackground()
         // Outer split: list on top, details below.
-        val splitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.splitter", 0.55f).apply {
+        val splitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.splitter.v2", 0.30f).apply {
             firstComponent = JBScrollPane(list).apply {
                 border = JBUI.Borders.empty()
                 viewportBorder = JBUI.Borders.empty()

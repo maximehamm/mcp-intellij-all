@@ -12,7 +12,7 @@
         </p>
 
         <h4>MCP Companion Monitoring tool window</h4>
-        <p>See every MCP tool call your AI assistant makes — with timestamps, durations, full JSON parameters and captured responses (with syntax highlighting). Calls from other MCP plugins are also shown (in gray) for full visibility.</p>
+        <p>See every MCP tool call your AI assistant makes — with timestamps, durations, full JSON parameters and captured responses. Calls from other MCP plugins are also shown (in gray) for full visibility.</p>
         <p><img src="https://raw.githubusercontent.com/maximehamm/mcp-intellij-all/main/docs/screenshots/monitoring.png" alt="MCP Companion Monitoring tool window" width="640"/></p>
 
         <h4>Editor &amp; Navigation</h4>
