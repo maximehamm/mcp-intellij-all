@@ -51,7 +51,7 @@ class McpCompanionEditorToolset : McpToolset {
         disabledMessage("get_open_editors")?.let { return it }
         val project = resolveProject(projectPath)
         val state = runReadAction { buildEditorState(project) }
-        return Json.encodeToString(state)
+        return captureResponse(Json.encodeToString(state))
     }
 
     internal fun buildEditorState(project: com.intellij.openapi.project.Project): EditorState {
@@ -90,13 +90,13 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun navigate_to(filePath: String, line: Int, column: Int = 1, projectPath: String? = null): String {
         disabledMessage("navigate_to")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val (vFile, err) = resolveFilePathOrError(project, filePath)
             if (err != null) return@runOnEdt err
             com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile!!, line - 1, (column - 1).coerceAtLeast(0))
                 .navigate(true)
             "Navigated to $filePath:$line:$column"
-        }
+        })
     }
 
     // ── select_text ───────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun select_text(filePath: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, projectPath: String? = null): String {
         disabledMessage("select_text")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val (vFile, err) = resolveFilePathOrError(project, filePath)
             if (err != null) return@runOnEdt err
             // Open the file, bring it to the foreground and place the caret at the start of the range
@@ -130,7 +130,7 @@ class McpCompanionEditorToolset : McpToolset {
             editor.caretModel.moveToOffset(startOffset)
             editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
             "Selected $filePath:$startLine:$startColumn → $endLine:$endColumn"
-        }
+        })
     }
 
     // ── highlight_text ────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun highlight_text(filePath: String, ranges: String, projectPath: String? = null): String {
         disabledMessage("highlight_text")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val (vFile, err) = resolveFilePathOrError(project, filePath)
             if (err != null) return@runOnEdt err
             // Parse ranges first so we can navigate to the first one when opening the file
@@ -200,7 +200,7 @@ class McpCompanionEditorToolset : McpToolset {
                 editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
             }
             "$count zone(s) highlighted in $filePath"
-        }
+        })
     }
 
     // ── clear_highlights ──────────────────────────────────────────────────────
@@ -215,7 +215,7 @@ class McpCompanionEditorToolset : McpToolset {
     suspend fun clear_highlights(filePath: String = "", projectPath: String? = null): String {
         disabledMessage("clear_highlights")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             var count = 0
             val editors = if (filePath.isEmpty()) {
                 FileEditorManager.getInstance(project).allEditors
@@ -235,7 +235,7 @@ class McpCompanionEditorToolset : McpToolset {
                 toRemove.forEach { editor.markupModel.removeHighlighter(it); count++ }
             }
             "$count highlight(s) cleared"
-        }
+        })
     }
 
     // ── show_diff ─────────────────────────────────────────────────────────────
@@ -261,7 +261,7 @@ class McpCompanionEditorToolset : McpToolset {
     ): String {
         disabledMessage("show_diff")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             try {
                 val (vFile, err) = resolveFilePathOrError(project, filePath)
                 if (err != null) return@runOnEdt err
@@ -286,7 +286,7 @@ class McpCompanionEditorToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 }
 

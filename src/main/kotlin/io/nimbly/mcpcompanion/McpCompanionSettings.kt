@@ -64,18 +64,19 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
     // ── Unified call tracking (powers widget + MCP Calls tool window) ──────
     /**
-     * Detailed record of one MCP tool call. The same record is used for:
+     * Lightweight record of one MCP tool call kept in memory. Heavy fields (parameters, response)
+     * are persisted to disk via [io.nimbly.mcpcompanion.util.CallPayloadStorage] and lazy-loaded
+     * when the user selects the row in the Monitoring tool window — keeps the upper list
+     * instantly responsive even with large payloads.
+     *
+     * Same record drives:
      * - widget icon (active animation while [endedNanos] is null OR `now < forceVisibleUntilNanos`)
      * - widget tooltip (last [MAX_RECENT] entries)
-     * - MCP Calls tool window (last [MAX_CALL_RECORDS] entries with full param JSON)
-     *
-     * Note: the response payload is NOT captured — `ToolCallListener.afterMcpToolCall` in the
-     * current IntelliJ MCP API does not expose the return value of the tool function.
+     * - MCP Calls tool window upper list (last [MAX_CALL_RECORDS] entries — no payload in RAM)
      */
     data class CallRecord(
         val callId: Int,
         val toolName: String,
-        val parametersJson: String,
         val client: String?,
         val isOwnTool: Boolean,
         val startedAtMillis: Long,
@@ -84,7 +85,6 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         @Volatile var forceVisibleUntilNanos: Long = 0L,
         @Volatile var status: Status = Status.RUNNING,
         @Volatile var errorMessage: String? = null,
-        @Volatile var response: String? = null,
     ) {
         enum class Status { RUNNING, SUCCESS, ERROR }
 
@@ -107,10 +107,11 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
     /** Called by [McpCompanionToolCallListener] BEFORE each tool invocation. */
     fun recordCallStart(callId: Int, toolName: String, parametersJson: String, client: String?) {
+        // Persist the (untruncated) parameters to disk; the in-memory CallRecord stays lightweight.
+        io.nimbly.mcpcompanion.util.CallPayloadStorage.save(callId, parameters = parametersJson, response = null)
         val record = CallRecord(
             callId = callId,
             toolName = toolName,
-            parametersJson = cap(parametersJson),
             client = client,
             isOwnTool = isOwnTool(toolName),
             startedAtMillis = System.currentTimeMillis(),
@@ -174,19 +175,6 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
         /** Maximum number of detailed call records kept in memory for the MCP Calls tool window. */
         const val MAX_CALL_RECORDS = 50
-
-        /**
-         * Per-record cap on JSON payload size (parameters or response).
-         * Anything larger is truncated and a marker is appended. Protects against memory
-         * pressure when a single call carries a huge payload (base64 images, big query results, …).
-         * 64 KB is enough for any reasonable parameter set and still readable in the dialog.
-         */
-        const val MAX_PAYLOAD_CHARS = 64 * 1024
-
-        /** Truncates [s] to [MAX_PAYLOAD_CHARS] and appends a "(truncated, N more)" marker if needed. */
-        fun cap(s: String): String =
-            if (s.length <= MAX_PAYLOAD_CHARS) s
-            else s.take(MAX_PAYLOAD_CHARS) + "\n… (truncated, ${s.length - MAX_PAYLOAD_CHARS} more characters)"
 
         /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
         val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query", "vcs_delete_branch")

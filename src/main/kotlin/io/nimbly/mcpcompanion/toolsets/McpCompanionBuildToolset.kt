@@ -56,7 +56,7 @@ class McpCompanionBuildToolset : McpToolset {
         disabledMessage("get_build_output")?.let { return it }
         val project = resolveProject(projectPath)
         val tabs = runOnEdt { extractBuildTabs(project) }
-        return Json.encodeToString(BuildOutput(tabs))
+        return captureResponse(Json.encodeToString(BuildOutput(tabs)))
     }
 
     internal fun extractBuildTabs(project: com.intellij.openapi.project.Project): List<BuildTab> {
@@ -188,7 +188,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_services_output(projectPath: String? = null): String {
         disabledMessage("get_services_output")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Services")
                 ?: return@runOnEdt Json.encodeToString(
                     ServicesOutput(sessions = listOf(ServiceSession(name = "error", output = "Services tool window not found"))))
@@ -386,7 +386,7 @@ class McpCompanionBuildToolset : McpToolset {
                 Json.encodeToString(ServicesOutput(sessions = listOf(ServiceSession(name = "info", output = "No service sessions found"))))
             else
                 Json.encodeToString(ServicesOutput(sessions))
-        }
+        })
     }
 
     // ── get_console_output ───────────────────────────────────────────────────
@@ -405,7 +405,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_console_output(projectPath: String? = null): String {
         disabledMessage("get_console_output")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt { Json.encodeToString(extractConsoleOutput(project)) }
+        return captureResponse(runOnEdt { Json.encodeToString(extractConsoleOutput(project)) })
     }
 
     internal fun extractConsoleOutput(project: com.intellij.openapi.project.Project): ConsoleOutput {
@@ -476,7 +476,7 @@ class McpCompanionBuildToolset : McpToolset {
         disabledMessage("get_test_results")?.let { return it }
         val project = resolveProject(projectPath)
         val output = runOnEdt { extractTestResults(project) }
-        return Json.encodeToString(output)
+        return captureResponse(Json.encodeToString(output))
     }
 
     internal fun extractTestResults(project: com.intellij.openapi.project.Project): TestRunOutput {
@@ -529,7 +529,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_terminal_output(projectPath: String? = null): String {
         disabledMessage("get_terminal_output")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt { extractTerminalTabs(project) }
+        return captureResponse(runOnEdt { extractTerminalTabs(project) })
     }
 
     internal fun extractTerminalTabs(project: com.intellij.openapi.project.Project): String {
@@ -562,7 +562,7 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun send_to_terminal(command: String, tab: String? = null, projectPath: String? = null): String {
         disabledMessage("send_to_terminal")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt { sendToTerminalImpl(project, command, tab) }
+        return captureResponse(runOnEdt { sendToTerminalImpl(project, command, tab) })
     }
 
     internal fun sendToTerminalImpl(project: com.intellij.openapi.project.Project, command: String, tab: String?): String {

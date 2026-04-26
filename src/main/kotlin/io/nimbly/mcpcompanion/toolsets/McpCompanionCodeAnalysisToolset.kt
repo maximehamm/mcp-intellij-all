@@ -134,7 +134,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
 
         if (problems.isEmpty()) return "No problems (severity >= ${minSeverity.name})"
-        return Json.encodeToString(problems)
+        return captureResponse(Json.encodeToString(problems))
     }
 
     // ── get_quick_fixes ───────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
 
         if (groups.isEmpty()) return "No quick fixes found in $filePath" + if (line > 0) " at line $line" else ""
-        return Json.encodeToString(groups)
+        return captureResponse(Json.encodeToString(groups))
     }
 
     // ── apply_quick_fix ───────────────────────────────────────────────────────
@@ -354,7 +354,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
 
         if (applied) {
             val loc = if (line > 0) "$filePath:$line" else filePath
-            return "Quick fix applied: \"$fixText\" in $loc"
+            return captureResponse("Quick fix applied: \"$fixText\" in $loc")
         }
 
         // Fallback: the fix may come from a batch-only inspection not visible in the daemon.
@@ -416,8 +416,10 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         } else false
 
         val loc = if (line > 0) "$filePath:$line" else filePath
-        return if (appliedViaInspection) "Quick fix applied (batch inspection): \"$fixText\" in $loc"
-               else "Fix not found: \"$fixText\"${if (line > 0) " at line $line" else ""}. Use get_quick_fixes or run_inspections to list available fixes."
+        return captureResponse(
+            if (appliedViaInspection) "Quick fix applied (batch inspection): \"$fixText\" in $loc"
+            else "Fix not found: \"$fixText\"${if (line > 0) " at line $line" else ""}. Use get_quick_fixes or run_inspections to list available fixes."
+        )
     }
 
     // ── list_inspections ─────────────────────────────────────────────────────
@@ -487,7 +489,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
 
         if (infos.isEmpty()) return "No inspections found"
-        return "${infos.size} inspections:\n" + Json.encodeToString(infos)
+        return captureResponse("${infos.size} inspections:\n" + Json.encodeToString(infos))
     }
 
     // ── run_inspections ───────────────────────────────────────────────────────
@@ -653,7 +655,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
 
         val allProblems = (problems + daemonProblems).sortedWith(compareBy({ it.file }, { it.line }))
         if (allProblems.isEmpty()) return "No problems found" + if (path != null) " in $path" else ""
-        return "${allProblems.size} problems found:\n" + Json.encodeToString(allProblems)
+        return captureResponse("${allProblems.size} problems found:\n" + Json.encodeToString(allProblems))
     }
 
     // ── refresh_project ───────────────────────────────────────────────────────
@@ -678,7 +680,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         val hasMaven = "pom.xml" in rootFiles
 
         if (!hasGradle && !hasMaven)
-            return "No Gradle or Maven build files found in project root ($basePath)"
+            return captureResponse("No Gradle or Maven build files found in project root ($basePath)")
 
         val results = mutableListOf<String>()
 
@@ -705,7 +707,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         if (hasGradle) triggerAction("ExternalSystem.RefreshAllProjects", "Gradle")
         if (hasMaven)  triggerAction("Maven.Reimport", "Maven")
 
-        return results.joinToString("\n")
+        return captureResponse(results.joinToString("\n"))
     }
 
     // ── get_project_structure ─────────────────────────────────────────────────
@@ -726,7 +728,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
     suspend fun get_project_structure(projectPath: String? = null): String {
         disabledMessage("get_project_structure")?.let { return it }
         val project = resolveProject(projectPath)
-        return runReadAction {
+        return captureResponse(runReadAction {
             val basePath = project.basePath ?: ""
             val sdk = ProjectRootManager.getInstance(project).projectSdk?.let { sdk ->
                 SdkInfo(name = sdk.name, type = sdk.sdkType.name, version = sdk.versionString, homePath = sdk.homePath)
@@ -775,7 +777,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
                 availableSdks = availableSdks,
                 modules = modules
             ))
-        }
+        })
     }
 }
 

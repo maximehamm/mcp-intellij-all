@@ -45,7 +45,7 @@ class McpCompanionToolset : McpToolset {
     """)
     suspend fun get_mcp_companion_overview(): String {
         disabledMessage("get_mcp_companion_overview")?.let { return it }
-        return """
+        return captureResponse("""
 # MCP Server Companion — Usage Guide
 
 ## Golden rules
@@ -201,7 +201,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
   1. add_conditional_breakpoint — set breakpoint with condition
   2. debug_run_configuration — start debug session
   3. get_debug_variables — inspect variables once paused
-        """.trimIndent()
+        """.trimIndent())
     }
 
     // ── replace_text_undoable ─────────────────────────────────────────────────
@@ -231,7 +231,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         // Using runOnEdt (invokeAndWait + ModalityState.any()) — same approach as navigate_to,
         // select_text, highlight_text. This eliminates any race condition where a timeout causes
         // the AI to retry and apply the replacement twice.
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             try {
                 WriteCommandAction.runWriteCommandAction(project, "MCP Replace", null, Runnable {
                     document.replaceString(offset, offset + oldText.length, newText)
@@ -240,7 +240,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
             } catch (e: Exception) {
                 "error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── execute_ide_action ───────────────────────────────────────────────────
@@ -260,7 +260,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         disabledMessage("execute_ide_action")?.let { return it }
         val project = resolveProject(projectPath)
         val am = com.intellij.openapi.actionSystem.ActionManager.getInstance()
-        return when {
+        return captureResponse(when {
             configurable != null -> {
                 val lower = configurable.lowercase()
                 val isProjectStructurePage = lower in setOf("sdks", "modules", "libraries", "artifacts", "facets", "project", "problems", "global libraries")
@@ -334,7 +334,7 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
                 }
             }
             else -> "Provide 'actionId' to execute an action, or 'search' to find action IDs by keyword."
-        }
+        })
     }
 
     // ── delete_file ───────────────────────────────────────────────────────────
@@ -363,6 +363,6 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         while (!done.get() && System.currentTimeMillis() < deadline) {
             Thread.sleep(50)
         }
-        return if (done.get()) "Deleted: $filePath" else "error: delete timed out"
+        return captureResponse(if (done.get()) "Deleted: $filePath" else "error: delete timed out")
     }
 }

@@ -76,7 +76,7 @@ class McpCompanionDebugToolset : McpToolset {
 
         val variables = mutableListOf<DebugVariable>()
         collectFrameVariables(frame, prefix = "", out = variables, depth = 0)
-        return Json.encodeToString(DebugVariablesOutput(session = session.sessionName, variables = variables))
+        return captureResponse(Json.encodeToString(DebugVariablesOutput(session = session.sessionName, variables = variables)))
     }
 
     /**
@@ -185,7 +185,7 @@ class McpCompanionDebugToolset : McpToolset {
     suspend fun add_conditional_breakpoint(filePath: String, line: Int, condition: String = "", projectPath: String? = null): String {
         disabledMessage("add_conditional_breakpoint")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val (file, err) = resolveFilePathOrError(project, filePath)
             if (err != null) return@runOnEdt err
             val normalizedPath = filePath.replace('\\', '/')
@@ -214,7 +214,7 @@ class McpCompanionDebugToolset : McpToolset {
             val action = if (existing != null) "updated" else "added"
             if (condition.isNotBlank()) "Breakpoint $action at $filePath:$line with condition: $condition"
             else "Breakpoint $action at $filePath:$line"
-        }
+        })
     }
 
     // ── get_breakpoints ───────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ class McpCompanionDebugToolset : McpToolset {
                 }
         }
         if (breakpoints.isEmpty()) return "No line breakpoints found"
-        return Json.encodeToString(breakpoints)
+        return captureResponse(Json.encodeToString(breakpoints))
     }
 
     // ── mute_breakpoints ──────────────────────────────────────────────────────
@@ -265,7 +265,7 @@ class McpCompanionDebugToolset : McpToolset {
             breakpoints.forEach { it.isEnabled = !muted }
             breakpoints.size
         }
-        return if (muted) "$count breakpoints disabled" else "$count breakpoints enabled"
+        return captureResponse(if (muted) "$count breakpoints disabled" else "$count breakpoints enabled")
     }
 
     // ── set_breakpoint_condition ───────────────────────────────────────────────
@@ -283,7 +283,7 @@ class McpCompanionDebugToolset : McpToolset {
     suspend fun set_breakpoint_condition(filePath: String, line: Int, condition: String, projectPath: String? = null): String {
         disabledMessage("set_breakpoint_condition")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val manager = XDebuggerManager.getInstance(project).breakpointManager
             val bp = manager.allBreakpoints
                 .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
@@ -299,7 +299,7 @@ class McpCompanionDebugToolset : McpToolset {
                 bp.conditionExpression = expr
                 "Condition set on breakpoint at $filePath:$line: $condition"
             }
-        }
+        })
     }
 
     // ── get_run_configuration_xml ─────────────────────────────────────────────
@@ -317,7 +317,7 @@ class McpCompanionDebugToolset : McpToolset {
         disabledMessage("get_run_configuration_xml")?.let { return it }
         val project = resolveProject(projectPath)
 
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val settings = RunManager.getInstance(project).findConfigurationByName(configurationName)
                 ?: return@runOnEdt "Run configuration '$configurationName' not found. Use list_run_configurations to see available configurations."
 
@@ -328,7 +328,7 @@ class McpCompanionDebugToolset : McpToolset {
             element.setAttribute("type", settings.type.id)
             element.setAttribute("factoryName", settings.factory.name)
             org.jdom.output.XMLOutputter(org.jdom.output.Format.getPrettyFormat()).outputString(element)
-        }
+        })
     }
 
     // ── create_run_configuration_from_xml ─────────────────────────────────────
@@ -350,7 +350,7 @@ class McpCompanionDebugToolset : McpToolset {
         disabledMessage("create_run_configuration_from_xml")?.let { return it }
         val project = resolveProject(projectPath)
 
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val runManager = RunManager.getInstance(project)
 
             if (runManager.findConfigurationByName(name) != null)
@@ -392,7 +392,7 @@ class McpCompanionDebugToolset : McpToolset {
             runManager.selectedConfiguration = settings
 
             "Run configuration '$name' created (type: ${configType.displayName}). Use start_run_configuration to launch it."
-        }
+        })
     }
 
     // ── list_run_configurations ───────────────────────────────────────────────
@@ -430,7 +430,7 @@ class McpCompanionDebugToolset : McpToolset {
         }
 
         if (configs.isEmpty()) return "No run configurations found in this project"
-        return Json.encodeToString(configs)
+        return captureResponse(Json.encodeToString(configs))
     }
 
     // ── start_run_configuration ───────────────────────────────────────────────
@@ -459,7 +459,7 @@ class McpCompanionDebugToolset : McpToolset {
             ProgramRunnerUtil.executeConfiguration(project, settings, executor)
         }
 
-        return "Run configuration '$configurationName' started in $mode mode. Use get_console_output to follow output."
+        return captureResponse("Run configuration '$configurationName' started in $mode mode. Use get_console_output to follow output.")
     }
 
     // ── modify_run_configuration ──────────────────────────────────────────────
@@ -488,7 +488,7 @@ class McpCompanionDebugToolset : McpToolset {
         disabledMessage("modify_run_configuration")?.let { return it }
         val project = resolveProject(projectPath)
 
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val runManager = RunManager.getInstance(project)
             val settings = runManager.findConfigurationByName(configurationName)
                 ?: return@runOnEdt "Run configuration '$configurationName' not found. Use list_run_configurations to see available configurations."
@@ -531,7 +531,7 @@ class McpCompanionDebugToolset : McpToolset {
                 "No parameters were modified (configuration type may not support them)"
             else
                 "Run configuration '$configurationName' updated: ${changed.joinToString(", ")}. Use start_run_configuration to launch it."
-        }
+        })
     }
 
     // ── debug_run_configuration ───────────────────────────────────────────────
@@ -557,7 +557,7 @@ class McpCompanionDebugToolset : McpToolset {
             ProgramRunnerUtil.executeConfiguration(project, settings, DefaultDebugExecutor.getDebugExecutorInstance())
         }
 
-        return "Debug session started for '$configurationName'. Use get_debug_variables to inspect variables if stopped at a breakpoint."
+        return captureResponse("Debug session started for '$configurationName'. Use get_debug_variables to inspect variables if stopped at a breakpoint.")
     }
 
     internal fun resolveDebugVariable(name: String, xValue: XValue): DebugVariable {

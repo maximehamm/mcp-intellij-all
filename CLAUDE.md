@@ -91,3 +91,17 @@ Tout appel par réflexion (`Class.forName`, `getDeclaredField`, `getMethod`, etc
 9. Avant de publier : `./gradlew verifyPlugin` — doit être **BUILD SUCCESSFUL** (vérifie compatibility + internal API usages). Ne pas publier si des `INTERNAL_API_USAGES` ou `COMPATIBILITY_PROBLEMS` sont détectés.
 
 > ⚠️ Ne jamais faire `./gradlew clean buildPlugin` entre deux tests : ça force un rechargement du plugin dans le sandbox ce qui est perturbant. Ne rebuilder que si l'utilisateur le demande explicitement.
+
+## Tests d'intégration profonde
+
+Pour valider l'ensemble des 72 tools après un gros changement (refactor, nouvelle version IntelliJ, modification d'un toolset) :
+
+- **Slash command** : `/test-deep` — mode opératoire détaillé dans `.claude/commands/test-deep.md`
+- **Script** : `scripts/deep-test-all-tools.py` — pour chaque tool :
+  - Appelle avec les **noms de paramètres exacts** (vérifiés contre les signatures Kotlin)
+  - Vérifie `isError == false`, réponse non vide, et un pattern attendu (clé JSON, mot-clé, etc.)
+  - Imprime un rapport ✓/✗ avec `reason` et `preview` pour chaque échec
+
+Quand on ajoute un nouveau tool :
+- Ajouter une entrée `check(...)` dans `scripts/deep-test-all-tools.py`
+- Avec un validator approprié (`has(...)`, `is_json_with_keys(...)`, `any_of(...)`, ou un lambda custom)

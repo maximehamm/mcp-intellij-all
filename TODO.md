@@ -1,5 +1,12 @@
 # TODO
 
+- Open into terminal 
+- Open in Finder.Explorer
+- Open in Associated App
+
+- CTRl-C sur haut de la vue Monitoring : doit copier le nom du tool dans le presse-papier
+- 
+
 ## MCP Calls tool window — follow-ups
 
 The `MCP Calls` tool window introduced in 2.18.0 has three known limitations to address:

@@ -78,8 +78,14 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
     // Errors are usually long single-line stack traces — enable soft wrap so the user can read them.
     private val errorsEditor: Editor = createJsonViewer(errorsDocument, project, softWrap = true)
 
-    private val tabbedPane = com.intellij.ui.components.JBTabbedPane().apply {
+    /** Top tab in the lower section: just "Parameters". A single-tab JBTabbedPane gives a header
+     *  that visually mirrors the lower (Response/Errors) tabs for consistency. */
+    private val parametersTabbedPane = com.intellij.ui.components.JBTabbedPane().apply {
         addTab("Parameters", parametersEditor.component)
+    }
+
+    /** Bottom tabs in the lower section: Response + Errors. */
+    private val responseErrorsTabbedPane = com.intellij.ui.components.JBTabbedPane().apply {
         addTab("Response", responseEditor.component)
         addTab("Errors", errorsEditor.component)
     }
@@ -93,14 +99,33 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
             }
         })
         addListSelectionListener { updateDetailsPanel() }
+        // Cmd/Ctrl + C → copy the selected tool name to the system clipboard.
+        addKeyListener(object : java.awt.event.KeyAdapter() {
+            override fun keyPressed(e: java.awt.event.KeyEvent) {
+                val isCopy = e.keyCode == java.awt.event.KeyEvent.VK_C &&
+                    (e.isMetaDown || e.isControlDown)
+                if (!isCopy) return
+                val name = selectedValue?.toolName ?: return
+                java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                    .setContents(java.awt.datatransfer.StringSelection(name), null)
+                e.consume()
+            }
+        })
     }
 
     private val refreshListener: () -> Unit = {
         ApplicationManager.getApplication().invokeLater(::refreshFromSettings)
     }
 
+    /** Stored as a field so [updateDetailsPanel] can hide the whole lower section when nothing is selected. */
+    private val detailsSplitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.detailsSplitter", 0.5f).apply {
+        firstComponent = parametersTabbedPane
+        secondComponent = responseErrorsTabbedPane
+    }
+
     init {
         background = UIUtil.getListBackground()
+        // Outer split: list on top, details below.
         val splitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.splitter", 0.55f).apply {
             firstComponent = JBScrollPane(list).apply {
                 border = JBUI.Borders.empty()
@@ -108,11 +133,11 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
                 viewport.background = UIUtil.getListBackground()
                 background = UIUtil.getListBackground()
             }
-            secondComponent = tabbedPane
+            secondComponent = detailsSplitter
             background = UIUtil.getListBackground()
         }
         add(splitter, BorderLayout.CENTER)
-        preferredSize = Dimension(600, 400)
+        preferredSize = Dimension(600, 500)
         refreshFromSettings()
         McpCompanionSettings.getInstance().addCallRecordListener(refreshListener)
     }
@@ -133,23 +158,68 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
         if (rememberedCallId != null) {
             val newIndex = records.indexOfFirst { it.callId == rememberedCallId }
             if (newIndex >= 0) list.selectedIndex = newIndex
+        } else if (records.isNotEmpty()) {
+            // First record arriving while nothing was selected — auto-select it so the user
+            // sees the details panel populate immediately (instead of staying blank).
+            list.selectedIndex = 0
         }
         updateDetailsPanel()
     }
 
     private fun updateDetailsPanel() {
         val r = list.selectedValue
-        val params = r?.parametersJson ?: ""
-        val response = if (r == null) ""
-            else r.response ?: "(not captured — current IntelliJ MCP API does not expose tool return values via ToolCallListener)"
+        // Hide the entire lower section (Parameters + Response/Errors) when nothing is selected
+        // (e.g. on first open before any call has been recorded).
+        val showDetails = r != null
+        if (detailsSplitter.isVisible != showDetails) {
+            detailsSplitter.isVisible = showDetails
+            detailsSplitter.parent?.revalidate()
+            detailsSplitter.parent?.repaint()
+        }
+        if (!showDetails) return
+
+        // Lazy-load the heavy payload from disk only when the user selects a row.
+        val payload = r?.callId?.let { io.nimbly.mcpcompanion.util.CallPayloadStorage.load(it) }
+        val params = payload?.parameters ?: ""
+        val response = payload?.response ?: ""
         val errors = r?.errorMessage ?: ""
         setDocumentText(parametersDocument, params)
         setDocumentText(responseDocument, response)
         setDocumentText(errorsDocument, errors)
-        // Auto-switch to the Errors tab when an error record is selected, otherwise default to Parameters.
-        if (r != null) {
-            tabbedPane.selectedIndex = if (errors.isNotEmpty()) 2 else 0
+        applyHighlighter(responseEditor as EditorEx, fileTypeFor(response))
+        applyHighlighter(parametersEditor as EditorEx, fileTypeFor(params))
+
+        // Hide the Response/Errors panel for tools from other plugins — we don't capture
+        // their responses (no captureResponse() hook) and the framework's error path differs,
+        // so showing two empty tabs is misleading.
+        val showResponseErrors = r != null && r.isOwnTool
+        if (responseErrorsTabbedPane.isVisible != showResponseErrors) {
+            responseErrorsTabbedPane.isVisible = showResponseErrors
+            responseErrorsTabbedPane.parent?.revalidate()
+            responseErrorsTabbedPane.parent?.repaint()
         }
+        // Auto-switch to Errors tab when an error record is selected, else show Response.
+        if (showResponseErrors) {
+            responseErrorsTabbedPane.selectedIndex = if (errors.isNotEmpty()) 1 else 0
+        }
+    }
+
+    /** Returns "JSON" if [text] looks like a JSON object/array and parses, else PlainText. */
+    private fun fileTypeFor(text: String): com.intellij.openapi.fileTypes.FileType {
+        val trimmed = text.trim()
+        val first = trimmed.firstOrNull()
+        if (first == '{' || first == '[') {
+            val ok = runCatching {
+                kotlinx.serialization.json.Json.parseToJsonElement(trimmed); true
+            }.getOrDefault(false)
+            if (ok) return FileTypeManager.getInstance().findFileTypeByName("JSON")
+                ?: PlainTextFileType.INSTANCE
+        }
+        return PlainTextFileType.INSTANCE
+    }
+
+    private fun applyHighlighter(editor: EditorEx, fileType: com.intellij.openapi.fileTypes.FileType) {
+        editor.highlighter = EditorHighlighterFactory.getInstance().createEditorHighlighter(project, fileType)
     }
 
     private fun setDocumentText(doc: Document, text: String) {
@@ -285,11 +355,12 @@ private class CallDetailsDialog(
         record.client?.let { sb.appendLine("Client: $it") }
         record.errorMessage?.let { sb.appendLine("Error: $it") }
         sb.appendLine()
+        val payload = io.nimbly.mcpcompanion.util.CallPayloadStorage.load(record.callId)
         sb.appendLine("─── Parameters (raw JSON) ───")
-        sb.appendLine(record.parametersJson)
+        sb.appendLine(payload?.parameters ?: "(not on disk)")
         sb.appendLine()
         sb.appendLine("─── Response ───")
-        sb.appendLine(record.response ?: "(not captured — current IntelliJ MCP API does not expose tool return values via ToolCallListener)")
+        sb.appendLine(payload?.response ?: "(not captured — own tools capture via captureResponse(); other plugins do not)")
 
         val textArea = JTextArea(sb.toString()).apply {
             isEditable = false

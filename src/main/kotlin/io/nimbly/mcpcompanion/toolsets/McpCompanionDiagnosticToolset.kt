@@ -52,7 +52,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
     suspend fun get_ide_settings(search: String? = null, key: String? = null, prefix: String? = null, depth: Int? = null, projectPath: String? = null): String {
         disabledMessage("get_ide_settings")?.let { return it }
         val project = resolveProject(projectPath)
-        return runOnEdt {
+        return captureResponse(runOnEdt {
             val known = knownIdeSettings(project)
             val results = linkedMapOf<String, String?>()
             when {
@@ -79,7 +79,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
                 else -> results.putAll(known)
             }
             Json.encodeToString(results as Map<String, String?>)
-        }
+        })
     }
 
     internal fun knownIdeSettings(project: com.intellij.openapi.project.Project): Map<String, String?> {
@@ -202,8 +202,8 @@ class McpCompanionDiagnosticToolset : McpToolset {
             )
         }
         if (entries.all { it.running.isEmpty() && it.recentlyFinished.isEmpty() })
-            return "No background processes running"
-        return Json.encodeToString(RunningProcessesResult(projects = entries))
+            return captureResponse("No background processes running")
+        return captureResponse(Json.encodeToString(RunningProcessesResult(projects = entries)))
     }
 
     /** Snapshots the tracker's recently-finished queue for inclusion in diagnostic tools. */
@@ -268,7 +268,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
         if (match == null) return "No running process found matching \"$title\""
 
         val label = active.title
-        return when (action.lowercase().trim()) {
+        return captureResponse(when (action.lowercase().trim()) {
             "cancel" -> {
                 if (match.reflectBoolean("isCancellable") == false) "Process \"$label\" is not cancellable"
                 else {
@@ -293,7 +293,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
                 suspender.reflectInvoke("resumeProcess", "Resumed: \"$label\"", "Process \"$label\" does not support resume")
             }
             else -> "Unknown action \"$action\". Use: cancel, pause, resume"
-        }
+        })
     }
 
     private fun ProgressIndicator.reflectBoolean(method: String): Boolean? = try {
@@ -359,7 +359,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
             val projects = com.intellij.openapi.project.ProjectManager.getInstance().openProjects
             IdeSnapshot(projects = projects.map { buildProjectSnapshot(it) })
         }
-        return Json.encodeToString(snapshot)
+        return captureResponse(Json.encodeToString(snapshot))
     }
 
     /** Builds the per-project section of a snapshot. Must be called on the EDT. */
@@ -575,10 +575,10 @@ class McpCompanionDiagnosticToolset : McpToolset {
 
         val logEntries = readIdeaLogErrors(minutesBack = minutesBack, level = level)
 
-        return Json.encodeToString(IntellijDiagnostic(
+        return captureResponse(Json.encodeToString(IntellijDiagnostic(
             projects = entries,
             logEntries = logEntries
-        ))
+        )))
     }
 
     private fun readIdeaLogErrors(minutesBack: Int, level: String = "error"): List<String> {

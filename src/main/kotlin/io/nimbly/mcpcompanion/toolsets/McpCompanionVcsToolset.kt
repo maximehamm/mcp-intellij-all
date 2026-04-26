@@ -50,7 +50,7 @@ class McpCompanionVcsToolset : McpToolset {
     suspend fun get_vcs_changes(includeDiff: Boolean = false, projectPath: String? = null): String {
         disabledMessage("get_vcs_changes")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val clm = ChangeListManager.getInstance(project)
                 val allChanges = clm.allChanges
@@ -85,7 +85,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_vcs_branch ────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ class McpCompanionVcsToolset : McpToolset {
     suspend fun get_vcs_branch(projectPath: String? = null): String {
         disabledMessage("get_vcs_branch")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val base = project.basePath ?: ""
@@ -149,7 +149,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_vcs_log ───────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ class McpCompanionVcsToolset : McpToolset {
     suspend fun get_vcs_log(maxCount: Int = 20, file: String = "", branch: String = "", projectPath: String? = null): String {
         disabledMessage("get_vcs_log")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val base = project.basePath ?: ""
@@ -244,7 +244,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_vcs_blame ─────────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ class McpCompanionVcsToolset : McpToolset {
     suspend fun get_vcs_blame(filePath: String, startLine: Int = 1, endLine: Int = Int.MAX_VALUE, projectPath: String? = null): String {
         disabledMessage("get_vcs_blame")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val absPath = if (filePath.startsWith("/")) filePath else "${project.basePath}/$filePath"
                 val vFile   = LocalFileSystem.getInstance().findFileByPath(absPath)
@@ -309,7 +309,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_local_history ─────────────────────────────────────────────────────
@@ -336,7 +336,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("get_local_history")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val lhClass   = Class.forName("com.intellij.history.LocalHistory")
                 val lh        = lhClass.getMethod("getInstance").invoke(null)
@@ -572,7 +572,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── vcs_stage_files ───────────────────────────────────────────────────────
@@ -591,7 +591,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_stage_files")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val base = (project.basePath ?: "").toLinuxPath()
@@ -614,7 +614,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) "${action.replaceFirstChar { it.uppercase() }}d: ${files.ifEmpty { listOf("all changes") }.joinToString(", ")}"
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_commit ────────────────────────────────────────────────────────────
@@ -638,7 +638,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_commit")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -660,7 +660,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Committed: \"$message\"" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     /**
@@ -715,7 +715,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_fetch")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -729,7 +729,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Fetch successful${if (out.isNotBlank()) ": $out" else ""}" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_merge_branch ──────────────────────────────────────────────────────
@@ -750,7 +750,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_merge_branch")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -765,7 +765,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Merged '$branch' into current branch${if (out.isNotBlank()) ": $out" else ""}" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_rebase ────────────────────────────────────────────────────────────
@@ -786,7 +786,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_rebase")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -802,7 +802,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Rebase successful${if (out.isNotBlank()) ": $out" else ""}" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── get_vcs_conflicts ─────────────────────────────────────────────────────
@@ -821,7 +821,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("get_vcs_conflicts")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -866,7 +866,7 @@ class McpCompanionVcsToolset : McpToolset {
                 }
                 Json.encodeToString(VcsConflicts(count = conflicts.size, conflicts = conflicts))
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_open_merge_tool ───────────────────────────────────────────────────
@@ -881,7 +881,7 @@ class McpCompanionVcsToolset : McpToolset {
     suspend fun vcs_open_merge_tool(projectPath: String? = null): String {
         disabledMessage("vcs_open_merge_tool")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 // First check whether there are actually any conflicts — Git.ResolveConflicts is a
                 // no-op when there are none, but the previous implementation would still claim success.
@@ -915,7 +915,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (!actionFound) return@withContext "IntelliJ action 'Git.ResolveConflicts' is not registered in this IDE — Git plugin may be disabled."
                 "Opened IntelliJ merge tool for $conflictCount conflicted file(s)."
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_create_branch ─────────────────────────────────────────────────────
@@ -936,7 +936,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_create_branch")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -964,7 +964,7 @@ class McpCompanionVcsToolset : McpToolset {
                     else "Created branch '$name' (still on current branch)"
                 } else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_checkout_branch ───────────────────────────────────────────────────
@@ -981,7 +981,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_checkout_branch")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -991,7 +991,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Switched to branch '$name'" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_push ──────────────────────────────────────────────────────────────
@@ -1012,7 +1012,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_push")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1030,7 +1030,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) "Pushed '${branch.ifBlank { currentBranch ?: "current branch" }}' successfully"
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_pull ──────────────────────────────────────────────────────────────
@@ -1051,7 +1051,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_pull")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1066,7 +1066,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Pull successful${if (out.isNotBlank()) ": $out" else ""}" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_stash ─────────────────────────────────────────────────────────────
@@ -1085,9 +1085,9 @@ class McpCompanionVcsToolset : McpToolset {
         ref: String = "stash@{0}",
         projectPath: String? = null
     ): String {
-        disabledMessage("vcs_stash")?.let { return it }
+        disabledMessage("vcs_stash")?.let { return captureResponse(it) }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1107,7 +1107,7 @@ class McpCompanionVcsToolset : McpToolset {
                     out.ifBlank { "${action.replaceFirstChar { it.uppercase() }} successful" }
                 } else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── get_vcs_file_history ──────────────────────────────────────────────────
@@ -1132,7 +1132,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("get_vcs_file_history")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1171,7 +1171,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_vcs_diff_between_branches ─────────────────────────────────────────
@@ -1198,7 +1198,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("get_vcs_diff_between_branches")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1222,7 +1222,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── vcs_show_commit ───────────────────────────────────────────────────────
@@ -1245,7 +1245,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_show_commit")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1265,7 +1265,7 @@ class McpCompanionVcsToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── vcs_reset ─────────────────────────────────────────────────────────────
@@ -1287,7 +1287,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_reset")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1303,7 +1303,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Reset $flag to '$ref' successful${if (out.isNotBlank()) ": $out" else ""}" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_revert ────────────────────────────────────────────────────────────
@@ -1325,7 +1325,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_revert")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1339,7 +1339,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Reverted '$hash'${if (noCommit) " (changes staged, not committed)" else ""}${if (out.isNotBlank()) ": $out" else ""}" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_cherry_pick ───────────────────────────────────────────────────────
@@ -1360,7 +1360,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_cherry_pick")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1374,7 +1374,7 @@ class McpCompanionVcsToolset : McpToolset {
                 if (ok) { vfsRefresh(project); "Cherry-picked '$hash'${if (noCommit) " (changes staged, not committed)" else ""}${if (out.isNotBlank()) ": $out" else ""}" }
                 else "Error: $out"
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── vcs_delete_branch ─────────────────────────────────────────────────────
@@ -1400,7 +1400,7 @@ class McpCompanionVcsToolset : McpToolset {
     ): String {
         disabledMessage("vcs_delete_branch")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
                 val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
@@ -1426,7 +1426,7 @@ class McpCompanionVcsToolset : McpToolset {
                 vfsRefresh(project)
                 results.joinToString("\n")
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
-        }
+        })
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

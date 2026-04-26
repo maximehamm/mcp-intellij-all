@@ -45,7 +45,7 @@ class McpCompanionDatabaseToolset : McpToolset {
     suspend fun list_database_sources(projectPath: String? = null): String {
         disabledMessage("list_database_sources")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val sources = getDataSources(project)
                 if (sources.isEmpty())
@@ -57,7 +57,7 @@ class McpCompanionDatabaseToolset : McpToolset {
             } catch (e: Exception) {
                 "Error listing data sources: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_database_schema ───────────────────────────────────────────────────
@@ -78,7 +78,7 @@ class McpCompanionDatabaseToolset : McpToolset {
     suspend fun get_database_schema(dataSource: String = "", includeColumns: Boolean = false, projectPath: String? = null): String {
         disabledMessage("get_database_schema")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val sources = getDataSources(project)
                 if (sources.isEmpty()) return@withContext "No data sources configured."
@@ -105,7 +105,7 @@ class McpCompanionDatabaseToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── execute_database_query ────────────────────────────────────────────────
@@ -128,7 +128,7 @@ class McpCompanionDatabaseToolset : McpToolset {
     suspend fun execute_database_query(query: String, dataSource: String = "", maxRows: Int = 100, projectPath: String? = null): String {
         disabledMessage("execute_database_query")?.let { return it }
         val project = resolveProject(projectPath)
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 // 1. Resolve the requested data source
                 val sources = getDataSources(project)
@@ -171,7 +171,7 @@ class McpCompanionDatabaseToolset : McpToolset {
             } catch (e: Exception) {
                 "Error: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── Schema traversal helpers ──────────────────────────────────────────────

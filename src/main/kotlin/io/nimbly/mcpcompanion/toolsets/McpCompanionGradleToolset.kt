@@ -96,7 +96,7 @@ class McpCompanionGradleToolset : McpToolset {
         val gradleRoot = resolveGradleProjectPath(project, gradleProjectPath)
             ?: return "Error: no linked Gradle project found in '${project.name}'. Open the project in IntelliJ and let Gradle import finish."
 
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val settings = ExternalSystemTaskExecutionSettings().apply {
                     externalProjectPath = gradleRoot
@@ -148,7 +148,7 @@ class McpCompanionGradleToolset : McpToolset {
             } catch (e: Exception) {
                 "Error running Gradle task: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_gradle_tasks ──────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ class McpCompanionGradleToolset : McpToolset {
         disabledMessage("get_gradle_tasks")?.let { return it }
         val project = resolveProject(projectPath)
 
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val roots = if (!gradleProjectPath.isNullOrBlank())
                     listOf(gradleProjectPath)
@@ -219,7 +219,7 @@ class McpCompanionGradleToolset : McpToolset {
             } catch (e: Exception) {
                 "Error listing Gradle tasks: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── refresh_gradle_project ────────────────────────────────────────────────
@@ -242,7 +242,7 @@ class McpCompanionGradleToolset : McpToolset {
         disabledMessage("refresh_gradle_project")?.let { return it }
         val project = resolveProject(projectPath)
 
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val roots = if (!gradleProjectPath.isNullOrBlank())
                     listOf(gradleProjectPath)
@@ -263,7 +263,7 @@ class McpCompanionGradleToolset : McpToolset {
             } catch (e: Exception) {
                 "Error refreshing Gradle project: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_gradle_dependencies ───────────────────────────────────────────────
@@ -291,7 +291,7 @@ class McpCompanionGradleToolset : McpToolset {
         disabledMessage("get_gradle_dependencies")?.let { return it }
         val project = resolveProject(projectPath)
 
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val roots = if (!gradleProjectPath.isNullOrBlank())
                     listOf(gradleProjectPath)
@@ -368,7 +368,7 @@ class McpCompanionGradleToolset : McpToolset {
             } catch (e: Exception) {
                 "Error listing Gradle dependencies: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── stop_gradle_task ──────────────────────────────────────────────────────
@@ -383,10 +383,10 @@ class McpCompanionGradleToolset : McpToolset {
         projectPath: absolute path of the target IntelliJ project's root — defaults to the currently-focused project.
     """)
     suspend fun stop_gradle_task(projectPath: String? = null): String {
-        disabledMessage("stop_gradle_task")?.let { return it }
+        disabledMessage("stop_gradle_task")?.let { return captureResponse(it) }
         val project = resolveProject(projectPath)
 
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val pm = ExternalSystemProcessingManager.getInstance()
                 // 1) Cancel via ExternalSystemProcessingManager (covers tasks tracked there).
@@ -424,7 +424,7 @@ class McpCompanionGradleToolset : McpToolset {
             } catch (e: Exception) {
                 "Error cancelling Gradle task: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     // ── get_gradle_project_info ───────────────────────────────────────────────
@@ -448,7 +448,7 @@ class McpCompanionGradleToolset : McpToolset {
         disabledMessage("get_gradle_project_info")?.let { return it }
         val project = resolveProject(projectPath)
 
-        return withContext(Dispatchers.IO) {
+        return captureResponse(withContext(Dispatchers.IO) {
             try {
                 val settings = GradleSettings.getInstance(project)
                 val candidates = if (!gradleProjectPath.isNullOrBlank())
@@ -512,7 +512,7 @@ class McpCompanionGradleToolset : McpToolset {
             } catch (e: Exception) {
                 "Error reading Gradle project info: ${e.javaClass.simpleName}: ${e.message}"
             }
-        }
+        })
     }
 
     private fun readWrapperVersion(rootPath: String): String? {
