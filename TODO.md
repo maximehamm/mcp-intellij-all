@@ -4,25 +4,6 @@
 - Open in Finder.Explorer
 - Open in Associated App
 
-- CTRl-C sur haut de la vue Monitoring : doit copier le nom du tool dans le presse-papier
-- 
-
-## MCP Calls tool window — follow-ups
-
-The `MCP Calls` tool window introduced in 2.18.0 has three known limitations to address:
-
-- **Persist call history to disk** so it survives IDE restart. Should:
-  - be opt-in (privacy: parameters can contain file paths, code snippets, queries)
-  - have a configurable cap (number of records + max bytes per record)
-  - probably store in `<project>/.idea/` or `~/.config/JetBrains/<product>/options/` (PathManager)
-- **Stop truncating payloads** at 64 KB. Once persistence is in place, parameters should be stored in full — possibly compressed or in a separate per-call file referenced from the index.
-- **Capture the response (return value) of own tools.** The platform's `ToolCallListener.afterMcpToolCall` does not expose the tool function's return value, so we need to:
-  - either install a `coroutineContext.mcpCallInfo`-aware helper and refactor every `@McpTool` body to call it before returning (~70 tools)
-  - or extract a `mcpCall("name") { … }` wrapper and migrate tools incrementally
-  - then store the response in `CallRecord.response` (already wired through the UI / dialog)
-
-## High priority
-
 ### Gradle (bundled in IntelliJ IDEA Community/Ultimate & Android Studio — not in PyCharm/WebStorm/etc.)
 
 > Implementation notes:

@@ -79,6 +79,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         val toolName: String,
         val client: String?,
         val isOwnTool: Boolean,
+        /** Absolute path of the project that received the call (used to filter by current project). */
+        val projectPath: String?,
         val startedAtMillis: Long,
         val startedNanos: Long,
         @Volatile var endedNanos: Long? = null,
@@ -106,7 +108,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     private fun fireCallRecordsChanged() = callRecordListeners.forEach { runCatching { it() } }
 
     /** Called by [McpCompanionToolCallListener] BEFORE each tool invocation. */
-    fun recordCallStart(callId: Int, toolName: String, parametersJson: String, client: String?) {
+    fun recordCallStart(callId: Int, toolName: String, parametersJson: String, client: String?, projectPath: String? = null) {
         // Persist the (untruncated) parameters to disk; the in-memory CallRecord stays lightweight.
         io.nimbly.mcpcompanion.util.CallPayloadStorage.save(callId, parameters = parametersJson, response = null)
         val record = CallRecord(
@@ -114,6 +116,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             toolName = toolName,
             client = client,
             isOwnTool = isOwnTool(toolName),
+            projectPath = projectPath,
             startedAtMillis = System.currentTimeMillis(),
             startedNanos = System.nanoTime(),
         )
@@ -148,6 +151,15 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
     /** Returns all records (newest first), capped at [MAX_CALL_RECORDS]. */
     fun getCallRecords(): List<CallRecord> = synchronized(callRecordsLock) { callRecords.toList() }
+
+    /** Clears all in-memory records AND wipes the on-disk payload directory. Triggered by the
+     *  "Clear" toolbar button in the Monitoring tool window. */
+    fun clearAllRecords() {
+        synchronized(callRecordsLock) { callRecords.clear() }
+        callRecordsByCallId.clear()
+        runCatching { io.nimbly.mcpcompanion.util.CallPayloadStorage.clear() }
+        fireCallRecordsChanged()
+    }
 
     /** Records that should still display the "active" animation in the widget. */
     fun getActiveCalls(): List<CallRecord> {

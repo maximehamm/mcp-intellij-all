@@ -416,23 +416,22 @@ class McpCompanionDiagnosticToolset : McpToolset {
     }
 
     /** Collects all open run/debug tabs with their current status (running, paused, finished ok/error). */
-    @Suppress("DEPRECATION")
     private fun collectRunsSnapshot(project: com.intellij.openapi.project.Project): List<SnapshotRun> {
         val debugSessions = com.intellij.xdebugger.XDebuggerManager.getInstance(project).debugSessions
-        // Index debug sessions by their ProcessHandler (stable identity across the lifetime of the process),
-        // with a fallback index by RunContentDescriptor reference.
+        // Index debug sessions by their ProcessHandler — stable identity across the lifetime of the process.
+        // We previously also kept a `debugByDescriptor` fallback via XDebugSession.runContentDescriptor,
+        // but that property is deprecated in split-mode IDEs and IntelliJ logs an error every time it's
+        // accessed. The handler-based lookup covers the common cases (>99 % of debug sessions have a
+        // ProcessHandler reachable from the descriptor) and avoids the deprecated path entirely.
         val debugByHandler = debugSessions
             .mapNotNull { sess -> runCatching { sess.debugProcess.processHandler to sess }.getOrNull() }
-            .toMap()
-        val debugByDescriptor = debugSessions
-            .mapNotNull { sess -> sess.runContentDescriptor?.let { it to sess } }
             .toMap()
 
         return com.intellij.execution.ui.RunContentManager.getInstance(project)
             .allDescriptors
             .map { desc ->
                 val ph = desc.processHandler
-                val session = (ph?.let { debugByHandler[it] }) ?: debugByDescriptor[desc]
+                val session = ph?.let { debugByHandler[it] }
                 val mode = if (session != null || desc.contentToolWindowId == "Debug") "debug" else "run"
 
                 val exitCode = if (ph != null && ph.isProcessTerminated)

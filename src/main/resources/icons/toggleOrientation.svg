@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Two rectangles in different orientations: portrait (back) + landscape (front).
+       Bottom rectangle is shorter on the right so the portrait extends past it. -->
+  <g fill="none" stroke="#6C707E" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Back rectangle: portrait -->
+    <rect x="8" y="2" width="5" height="10" rx="1.5"/>
+    <!-- Front rectangle: landscape, narrower on the right -->
+    <rect x="2" y="9" width="9" height="5" rx="1.5"/>
+  </g>
+</svg>

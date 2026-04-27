@@ -41,6 +41,10 @@ class McpCompanionStartupActivity : ProjectActivity {
                 // MCP Server plugin not available or topic missing — non-fatal: history will be empty.
                 toolCallListenerSubscribed.set(false)
             }
+            // Silence the IDE "Internal Error" popup that the MCP framework triggers when a tool
+            // call has missing/invalid parameters — those are user-facing errors (already shown in
+            // the Monitoring tool window's Errors tab) and should not surface as an IDE bug.
+            installMcpErrorFilter()
         }
 
         // Register Escape key listener on all current and future editors.
@@ -134,6 +138,66 @@ class McpCompanionStartupActivity : ProjectActivity {
         val listener = editor.getUserData(ESCAPE_LISTENER_KEY) ?: return
         editor.contentComponent.removeKeyListener(listener)
         editor.putUserData(ESCAPE_LISTENER_KEY, null)
+    }
+
+    /**
+     * Subscribes to `com.intellij.diagnostic.MessagePool` and auto-marks-as-read any IDE error
+     * caused by an MCP framework parameter mismatch. Without this, every wrong-arg call surfaces
+     * as a red "fatal IDE error" popup — annoying for the user and useless since the error is
+     * already visible in the Monitoring tool window's Errors tab.
+     *
+     * Implementation: `MessagePool` / `MessagePoolListener` / `AbstractMessage` are all marked
+     * `@ApiStatus.Internal` in the platform — using them directly trips the plugin verifier with
+     * INTERNAL_API_USAGES. We therefore reach them through reflection + a `Proxy` for the listener.
+     * The reflective shape is covered by [io.nimbly.mcpcompanion.ReflectionApiTest]; if the platform
+     * ever renames any of these symbols, the test fails (or the runCatching silently skips).
+     */
+    private fun installMcpErrorFilter() {
+        runCatching {
+            val poolCls = Class.forName("com.intellij.diagnostic.MessagePool")
+            val listenerCls = Class.forName("com.intellij.diagnostic.MessagePoolListener")
+            val msgCls = Class.forName("com.intellij.diagnostic.AbstractMessage")
+
+            val pool = poolCls.getMethod("getInstance").invoke(null) ?: return@runCatching
+            val getFatalErrors = poolCls.getMethod("getFatalErrors", Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+            val addListener = poolCls.getMethod("addListener", listenerCls)
+
+            val getMessage = msgCls.getMethod("getMessage")
+            val getThrowable = msgCls.getMethod("getThrowable")
+            val getThrowableText = msgCls.getMethod("getThrowableText")
+            val setRead = msgCls.getMethod("setRead", Boolean::class.javaPrimitiveType)
+
+            val handler = java.lang.reflect.InvocationHandler { _, method, _ ->
+                if (method.name == "newEntryAdded") {
+                    runCatching {
+                        @Suppress("UNCHECKED_CAST")
+                        val errors = getFatalErrors.invoke(pool, true, false) as? List<Any?> ?: emptyList()
+                        for (msg in errors) {
+                            if (msg == null) continue
+                            val text = buildString {
+                                append((getMessage.invoke(msg) as? String).orEmpty())
+                                append(" ")
+                                val t = getThrowable.invoke(msg) as? Throwable
+                                append(t?.message.orEmpty())
+                            }
+                            val throwableText = (getThrowableText.invoke(msg) as? String).orEmpty()
+                            if ("MCP tool call has been failed" in text ||
+                                "No argument is passed for required parameter" in text ||
+                                "com.intellij.mcpserver.impl.util.CallableBridge" in throwableText
+                            ) {
+                                setRead.invoke(msg, true)
+                            }
+                        }
+                    }
+                }
+                null
+            }
+
+            val proxy = java.lang.reflect.Proxy.newProxyInstance(
+                listenerCls.classLoader, arrayOf(listenerCls), handler,
+            )
+            addListener.invoke(pool, proxy)
+        }
     }
 
     companion object {

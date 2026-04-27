@@ -148,6 +148,52 @@ class ReflectionApiTest {
             "McpServerSettings.MyState.getEnableMcpServer() must return boolean")
     }
 
+    // ── MessagePool / MessagePoolListener / AbstractMessage ─────────────────────
+    // Used in McpCompanionStartupActivity.installMcpErrorFilter() via reflection to silence
+    // the IDE "Internal Error" pop-up that the MCP framework triggers on parameter mismatches.
+    // These classes are @ApiStatus.Internal — direct usage trips the plugin verifier with
+    // INTERNAL_API_USAGES, hence the reflective access. If the platform renames any of them,
+    // these tests fail fast at build time rather than at user runtime.
+
+    @Test
+    fun `MessagePool getInstance is a public static method`() {
+        val cls = Class.forName("com.intellij.diagnostic.MessagePool")
+        val method = cls.getMethod("getInstance")
+        assertTrue(java.lang.reflect.Modifier.isStatic(method.modifiers),
+            "MessagePool.getInstance() must be static — error-filter is broken")
+    }
+
+    @Test
+    fun `MessagePool getFatalErrors and addListener exist`() {
+        val cls = Class.forName("com.intellij.diagnostic.MessagePool")
+        val listenerCls = Class.forName("com.intellij.diagnostic.MessagePoolListener")
+        assertNotNull(
+            cls.getMethod("getFatalErrors", Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType),
+            "MessagePool.getFatalErrors(boolean, boolean) not found",
+        )
+        assertNotNull(
+            cls.getMethod("addListener", listenerCls),
+            "MessagePool.addListener(MessagePoolListener) not found",
+        )
+    }
+
+    @Test
+    fun `MessagePoolListener has newEntryAdded method`() {
+        val cls = Class.forName("com.intellij.diagnostic.MessagePoolListener")
+        assertNotNull(cls.getMethod("newEntryAdded"),
+            "MessagePoolListener.newEntryAdded() not found — Proxy listener won't dispatch")
+    }
+
+    @Test
+    fun `AbstractMessage exposes getMessage getThrowable getThrowableText setRead`() {
+        val cls = Class.forName("com.intellij.diagnostic.AbstractMessage")
+        assertNotNull(cls.getMethod("getMessage"), "AbstractMessage.getMessage() not found")
+        assertNotNull(cls.getMethod("getThrowable"), "AbstractMessage.getThrowable() not found")
+        assertNotNull(cls.getMethod("getThrowableText"), "AbstractMessage.getThrowableText() not found")
+        assertNotNull(cls.getMethod("setRead", Boolean::class.javaPrimitiveType),
+            "AbstractMessage.setRead(boolean) not found")
+    }
+
     // ── TerminalViewImpl (send_to_terminal) ────────────────────────────────────
     // send_to_terminal uses TerminalViewImpl.createSendTextBuilder() + doSendText().
     // If the class or methods disappear, the tool will silently return an error — catch

@@ -13,6 +13,7 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
+import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.ui.JBColor
 import com.intellij.ui.JBSplitter
 import com.intellij.ui.components.JBList
@@ -65,7 +66,10 @@ class McpCompanionCallsToolWindowFactory : ToolWindowFactory {
     }
 }
 
-internal class McpCompanionCallsPanel(private val project: Project) : JPanel(BorderLayout()) {
+/** Layout orientation for the Monitoring tool window — persisted via [PropertiesComponent]. */
+enum class MonitoringOrientation { VERTICAL, HORIZONTAL }
+
+internal class McpCompanionCallsPanel(private val project: Project) : SimpleToolWindowPanel(/* vertical = */ true, /* borderless = */ true) {
 
     private val model = DefaultListModel<McpCompanionSettings.CallRecord>()
 
@@ -78,25 +82,55 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
     // Errors are usually long single-line stack traces — enable soft wrap so the user can read them.
     private val errorsEditor: Editor = createJsonViewer(errorsDocument, project, softWrap = true)
 
-    /** Top tab in the lower section: just "Parameters". A single-tab JBTabbedPane gives a header
-     *  that visually mirrors the lower (Response/Errors) tabs for consistency. */
-    private val parametersTabbedPane = com.intellij.ui.components.JBTabbedPane().apply {
-        addTab("Parameters", parametersEditor.component)
+    /** Removes the inner padding/insets that JBTabbedPane adds around tab content — keeps the
+     *  Editor inside aligned with the tab edges (no visible gap on the left). */
+    private fun com.intellij.ui.components.JBTabbedPane.flushContent() {
+        tabComponentInsets = JBUI.emptyInsets()
+        border = JBUI.Borders.empty()
     }
 
-    /** Bottom tabs in the lower section: Response + Errors. */
+    /** Top tab in the "separate" layout: just "Parameters". */
+    private val parametersTabbedPane = com.intellij.ui.components.JBTabbedPane().apply {
+        addTab("Parameters", parametersEditor.component)
+        flushContent()
+    }
+
+    /** Bottom tabs in the "separate" layout: Response + Errors. */
     private val responseErrorsTabbedPane = com.intellij.ui.components.JBTabbedPane().apply {
         addTab("Response", responseEditor.component)
         addTab("Errors", errorsEditor.component)
+        flushContent()
     }
+
+    /** "Grouped" layout: a single tabbed pane with all 3 panels side-by-side. */
+    private val groupedTabbedPane = com.intellij.ui.components.JBTabbedPane().apply {
+        addTab("Parameters", parametersEditor.component)
+        addTab("Response", responseEditor.component)
+        addTab("Errors", errorsEditor.component)
+        flushContent()
+    }
+
+    // ── Persisted UI state (toolbar toggles) ──────────────────────────────
+    private val props = com.intellij.ide.util.PropertiesComponent.getInstance()
+    private val PROP_ORIENTATION = "io.nimbly.mcpcompanion.calls.orientation"
+    private val PROP_GROUPED = "io.nimbly.mcpcompanion.calls.grouped"
+
+    private var orientationMode: MonitoringOrientation =
+        runCatching { MonitoringOrientation.valueOf(props.getValue(PROP_ORIENTATION, MonitoringOrientation.VERTICAL.name)) }
+            .getOrDefault(MonitoringOrientation.VERTICAL)
+    private var groupedMode: Boolean = props.getBoolean(PROP_GROUPED, false)
+    /** Tools hidden via right-click → "Hide …". Empty = no hiding. */
+    private val hiddenTools: MutableSet<String> = mutableSetOf()
 
     private val list = JBList(model).apply {
         cellRenderer = CallRecordRenderer()
         background = UIUtil.getListBackground()
         addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
-                if (e.clickCount == 2) openDetailsDialog()
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e) && e.clickCount == 2) openDetailsDialog()
             }
+            override fun mousePressed(e: MouseEvent) { maybeShowPopup(e) }
+            override fun mouseReleased(e: MouseEvent) { maybeShowPopup(e) }
         })
         addListSelectionListener { updateDetailsPanel() }
         // Cmd/Ctrl + C → copy the selected tool name to the system clipboard.
@@ -113,35 +147,124 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
         })
     }
 
+    private fun maybeShowPopup(e: MouseEvent) {
+        if (!e.isPopupTrigger) return
+        // Right-click should also select the row underneath (UX expectation).
+        val idx = list.locationToIndex(e.point)
+        if (idx >= 0) list.selectedIndex = idx
+        val record = list.selectedValue ?: return
+        val popup = javax.swing.JPopupMenu()
+        popup.add(javax.swing.JMenuItem("Hide \"${record.toolName}\"").apply {
+            addActionListener { hideTool(record.toolName) }
+        })
+        if (hiddenTools.isNotEmpty()) {
+            popup.add(javax.swing.JMenuItem("Show all hidden tools (${hiddenTools.size})").apply {
+                addActionListener { resetHidden() }
+            })
+        }
+        popup.show(e.component, e.x, e.y)
+    }
+
+    private fun hideTool(name: String) {
+        hiddenTools.add(name)
+        refreshFromSettings()
+    }
+
+    private fun resetHidden() {
+        hiddenTools.clear()
+        refreshFromSettings()
+    }
+
     private val refreshListener: () -> Unit = {
         ApplicationManager.getApplication().invokeLater(::refreshFromSettings)
     }
 
-    /** Stored as a field so [updateDetailsPanel] can hide the whole lower section when nothing is selected. */
-    // Default 30/20/50 split target → outer = 0.30 (list/details), inner = 20/(20+50) ≈ 0.286 (params/response).
-    // Splitter IDs include `.v2` so the new defaults apply for users who had the older 0.55/0.5 layout.
-    private val detailsSplitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.detailsSplitter.v2", 0.286f).apply {
-        firstComponent = parametersTabbedPane
-        secondComponent = responseErrorsTabbedPane
-    }
+    /** Holder for the currently active layout — replaced when toggles change. */
+    private val centerHolder = JPanel(BorderLayout()).apply { background = UIUtil.getListBackground() }
+
+    /** Reference to the details splitter (only used in "separate" mode); null in "grouped" mode. */
+    private var detailsSplitter: JBSplitter? = null
 
     init {
         background = UIUtil.getListBackground()
-        // Outer split: list on top, details below.
-        val splitter = JBSplitter(true, "io.nimbly.mcpcompanion.calls.splitter.v2", 0.30f).apply {
-            firstComponent = JBScrollPane(list).apply {
-                border = JBUI.Borders.empty()
-                viewportBorder = JBUI.Borders.empty()
-                viewport.background = UIUtil.getListBackground()
-                background = UIUtil.getListBackground()
-            }
-            secondComponent = detailsSplitter
-            background = UIUtil.getListBackground()
-        }
-        add(splitter, BorderLayout.CENTER)
+        // SimpleToolWindowPanel: place toolbar in the tool window header strip (no double separator),
+        // and the list/details splitter as the main content.
+        val tb = buildToolbar()
+        toolbar = tb.component
+        setContent(centerHolder)
+        rebuildLayout()
         preferredSize = Dimension(600, 500)
         refreshFromSettings()
         McpCompanionSettings.getInstance().addCallRecordListener(refreshListener)
+    }
+
+    private fun buildToolbar(): com.intellij.openapi.actionSystem.ActionToolbar {
+        val group = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
+            add(ClearAction())
+            addSeparator()
+            add(OrientationAction())
+            add(GroupedAction())
+        }
+        val toolbar = com.intellij.openapi.actionSystem.ActionManager.getInstance()
+            .createActionToolbar("McpCompanionMonitoring", group, true)
+        toolbar.targetComponent = this
+        // Drop the default 1-px top border that JBToolbar paints by default — that's the thin gray
+        // line between the tool window header and our actions.
+        toolbar.component.border = JBUI.Borders.empty()
+        return toolbar
+    }
+
+    private fun rebuildLayout() {
+        centerHolder.removeAll()
+        val effectiveVertical = orientationMode == MonitoringOrientation.VERTICAL
+        val listPane = JBScrollPane(list).apply {
+            border = JBUI.Borders.empty()
+            viewportBorder = JBUI.Borders.empty()
+            viewport.background = UIUtil.getListBackground()
+            background = UIUtil.getListBackground()
+        }
+        val detailsComponent: JComponent = if (groupedMode) {
+            // Single tabbed pane with 3 tabs side-by-side.
+            detailsSplitter = null
+            // Make sure all 3 editors are owned by groupedTabbedPane (re-add to handle rebuild after switch).
+            groupedTabbedPane.removeAll()
+            groupedTabbedPane.addTab("Parameters", parametersEditor.component)
+            groupedTabbedPane.addTab("Response", responseEditor.component)
+            groupedTabbedPane.addTab("Errors", errorsEditor.component)
+            groupedTabbedPane
+        } else {
+            // Re-attach editors to the separate panes (after possible regrouping).
+            parametersTabbedPane.removeAll()
+            parametersTabbedPane.addTab("Parameters", parametersEditor.component)
+            responseErrorsTabbedPane.removeAll()
+            responseErrorsTabbedPane.addTab("Response", responseEditor.component)
+            responseErrorsTabbedPane.addTab("Errors", errorsEditor.component)
+            // The inner splitter follows the outer orientation: vertical mode → params/response stacked
+            // top-bottom; horizontal mode → 3-column layout (list | params | response/errors).
+            // Different splitter IDs per orientation so each persists its own proportion.
+            val innerId = if (effectiveVertical)
+                "io.nimbly.mcpcompanion.calls.detailsSplitter.vert.v1"
+            else
+                "io.nimbly.mcpcompanion.calls.detailsSplitter.horiz.v1"
+            JBSplitter(effectiveVertical, innerId, if (effectiveVertical) 0.286f else 0.4f).apply {
+                firstComponent = parametersTabbedPane
+                secondComponent = responseErrorsTabbedPane
+            }.also { detailsSplitter = it }
+        }
+        // Outer splitter ID also depends on orientation, again so each persists its own proportion.
+        val outerId = if (effectiveVertical)
+            "io.nimbly.mcpcompanion.calls.splitter.vert.v1"
+        else
+            "io.nimbly.mcpcompanion.calls.splitter.horiz.v1"
+        val outerProportion = if (effectiveVertical) 0.30f else 0.25f
+        val outer = JBSplitter(effectiveVertical, outerId, outerProportion).apply {
+            firstComponent = listPane
+            secondComponent = detailsComponent
+            background = UIUtil.getListBackground()
+        }
+        centerHolder.add(outer, BorderLayout.CENTER)
+        centerHolder.revalidate()
+        centerHolder.repaint()
     }
 
     fun dispose() {
@@ -153,7 +276,8 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
 
     private fun refreshFromSettings() {
         val rememberedCallId = list.selectedValue?.callId
-        val records = McpCompanionSettings.getInstance().getCallRecords()
+        val all = McpCompanionSettings.getInstance().getCallRecords()
+        val records = all.filter { matchesFilters(it) }
         model.clear()
         records.forEach { model.addElement(it) }
         // Try to keep the same call selected after a refresh.
@@ -161,22 +285,35 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
             val newIndex = records.indexOfFirst { it.callId == rememberedCallId }
             if (newIndex >= 0) list.selectedIndex = newIndex
         } else if (records.isNotEmpty()) {
-            // First record arriving while nothing was selected — auto-select it so the user
-            // sees the details panel populate immediately (instead of staying blank).
             list.selectedIndex = 0
         }
         updateDetailsPanel()
     }
 
+    private fun matchesFilters(r: McpCompanionSettings.CallRecord): Boolean {
+        if (r.toolName in hiddenTools) return false
+        return true
+    }
+
     private fun updateDetailsPanel() {
         val r = list.selectedValue
-        // Hide the entire lower section (Parameters + Response/Errors) when nothing is selected
-        // (e.g. on first open before any call has been recorded).
         val showDetails = r != null
-        if (detailsSplitter.isVisible != showDetails) {
-            detailsSplitter.isVisible = showDetails
-            detailsSplitter.parent?.revalidate()
-            detailsSplitter.parent?.repaint()
+
+        // Hide the entire lower section when nothing is selected (separate mode) or hide the
+        // grouped tabbed pane (grouped mode).
+        if (groupedMode) {
+            if (groupedTabbedPane.isVisible != showDetails) {
+                groupedTabbedPane.isVisible = showDetails
+                groupedTabbedPane.parent?.revalidate()
+                groupedTabbedPane.parent?.repaint()
+            }
+        } else {
+            val ds = detailsSplitter
+            if (ds != null && ds.isVisible != showDetails) {
+                ds.isVisible = showDetails
+                ds.parent?.revalidate()
+                ds.parent?.repaint()
+            }
         }
         if (!showDetails) return
 
@@ -191,20 +328,81 @@ internal class McpCompanionCallsPanel(private val project: Project) : JPanel(Bor
         applyHighlighter(responseEditor as EditorEx, fileTypeFor(response))
         applyHighlighter(parametersEditor as EditorEx, fileTypeFor(params))
 
-        // Hide the Response/Errors panel for tools from other plugins — we don't capture
-        // their responses (no captureResponse() hook) and the framework's error path differs,
-        // so showing two empty tabs is misleading.
         val showResponseErrors = r != null && r.isOwnTool
-        if (responseErrorsTabbedPane.isVisible != showResponseErrors) {
-            responseErrorsTabbedPane.isVisible = showResponseErrors
-            responseErrorsTabbedPane.parent?.revalidate()
-            responseErrorsTabbedPane.parent?.repaint()
-        }
-        // Auto-switch to Errors tab when an error record is selected, else show Response.
-        if (showResponseErrors) {
-            responseErrorsTabbedPane.selectedIndex = if (errors.isNotEmpty()) 1 else 0
+        if (groupedMode) {
+            // Auto-switch to Errors tab WHEN the new record has an error — otherwise leave
+            // whatever tab the user was on (don't yank them off Parameters or Response on each
+            // selection change).
+            if (showResponseErrors && errors.isNotEmpty()) {
+                groupedTabbedPane.selectedIndex = 2
+            } else if (!showResponseErrors) {
+                // Other-tool record: only Parameters has content → snap to it.
+                groupedTabbedPane.selectedIndex = 0
+            }
+            // No error and own tool → preserve current tab.
+        } else {
+            // Hide the Response/Errors panel for tools from other plugins.
+            if (responseErrorsTabbedPane.isVisible != showResponseErrors) {
+                responseErrorsTabbedPane.isVisible = showResponseErrors
+                responseErrorsTabbedPane.parent?.revalidate()
+                responseErrorsTabbedPane.parent?.repaint()
+            }
+            if (showResponseErrors && errors.isNotEmpty()) {
+                // Auto-switch to Errors only when the selected record has an error.
+                responseErrorsTabbedPane.selectedIndex = 1
+            }
+            // Otherwise preserve the user's current tab choice.
         }
     }
+
+    // ── Toolbar actions ───────────────────────────────────────────────────
+
+    private inner class ClearAction : com.intellij.openapi.actionSystem.AnAction(
+        "Clear", "Clear all recorded MCP calls (in-memory + on-disk)",
+        com.intellij.icons.AllIcons.Actions.GC
+    ) {
+        override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            McpCompanionSettings.getInstance().clearAllRecords()
+            hiddenTools.clear()
+        }
+        override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+    }
+
+    private inner class OrientationAction : com.intellij.openapi.actionSystem.AnAction(
+        "Toggle Orientation",
+        "Switch layout between vertical (stacked) and horizontal (3 columns)",
+        IconLoader.getIcon("/icons/toggleOrientation.svg", McpCompanionCallsToolWindowFactory::class.java),
+    ) {
+        override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            orientationMode = when (orientationMode) {
+                MonitoringOrientation.VERTICAL -> MonitoringOrientation.HORIZONTAL
+                MonitoringOrientation.HORIZONTAL -> MonitoringOrientation.VERTICAL
+            }
+            props.setValue(PROP_ORIENTATION, orientationMode.name)
+            rebuildLayout()
+            updateDetailsPanel()
+        }
+        override fun update(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            e.presentation.text = "Orientation: ${orientationMode.name.lowercase().replaceFirstChar { it.uppercase() }}"
+        }
+        override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+    }
+
+    private inner class GroupedAction : com.intellij.openapi.actionSystem.ToggleAction(
+        "Group All Tabs Together",
+        "When ON: all 3 panels (Parameters, Response, Errors) share a single tabbed pane.",
+        com.intellij.icons.AllIcons.Actions.GroupBy,
+    ) {
+        override fun isSelected(e: com.intellij.openapi.actionSystem.AnActionEvent) = groupedMode
+        override fun setSelected(e: com.intellij.openapi.actionSystem.AnActionEvent, state: Boolean) {
+            groupedMode = state
+            props.setValue(PROP_GROUPED, state)
+            rebuildLayout()
+            updateDetailsPanel()
+        }
+        override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+    }
+
 
     /** Returns "JSON" if [text] looks like a JSON object/array and parses, else PlainText. */
     private fun fileTypeFor(text: String): com.intellij.openapi.fileTypes.FileType {

@@ -79,4 +79,14 @@ object CallPayloadStorage {
         val existing = load(callId)
         save(callId, parameters = existing?.parameters ?: "", response = response)
     }
+
+    /** Removes every payload file from the directory (used by the "Clear" button). */
+    fun clear() {
+        ensureWipedAndExists()
+        runCatching {
+            Files.list(dir).use { stream ->
+                stream.forEach { it.deleteIfExists() }
+            }
+        }
+    }
 }
