@@ -110,17 +110,32 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
         flushContent()
     }
 
-    // ── Persisted UI state (toolbar toggles) ──────────────────────────────
+    // ── Persisted UI state (toolbar toggles + hidden tools) ───────────────
     private val props = com.intellij.ide.util.PropertiesComponent.getInstance()
     private val PROP_ORIENTATION = "io.nimbly.mcpcompanion.calls.orientation"
     private val PROP_GROUPED = "io.nimbly.mcpcompanion.calls.grouped"
+    private val PROP_HIDDEN_TOOLS = "io.nimbly.mcpcompanion.calls.hiddenTools"
 
     private var orientationMode: MonitoringOrientation =
         runCatching { MonitoringOrientation.valueOf(props.getValue(PROP_ORIENTATION, MonitoringOrientation.VERTICAL.name)) }
             .getOrDefault(MonitoringOrientation.VERTICAL)
     private var groupedMode: Boolean = props.getBoolean(PROP_GROUPED, false)
-    /** Tools hidden via right-click → "Hide …". Empty = no hiding. */
-    private val hiddenTools: MutableSet<String> = mutableSetOf()
+    /** Tools hidden via right-click → "Hide …". Persisted across IDE restarts as a `\n`-joined
+     *  list in [PropertiesComponent] under [PROP_HIDDEN_TOOLS]. Empty = no hiding. */
+    private val hiddenTools: MutableSet<String> = loadHiddenTools()
+
+    private fun loadHiddenTools(): MutableSet<String> {
+        val raw = props.getValue(PROP_HIDDEN_TOOLS, "")
+        return raw.split('\n').filter { it.isNotBlank() }.toMutableSet()
+    }
+
+    private fun saveHiddenTools() {
+        if (hiddenTools.isEmpty()) {
+            props.unsetValue(PROP_HIDDEN_TOOLS)
+        } else {
+            props.setValue(PROP_HIDDEN_TOOLS, hiddenTools.joinToString("\n"))
+        }
+    }
 
     private val list = JBList(model).apply {
         cellRenderer = CallRecordRenderer()
@@ -167,11 +182,13 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
 
     private fun hideTool(name: String) {
         hiddenTools.add(name)
+        saveHiddenTools()
         refreshFromSettings()
     }
 
     private fun resetHidden() {
         hiddenTools.clear()
+        saveHiddenTools()
         refreshFromSettings()
     }
 
