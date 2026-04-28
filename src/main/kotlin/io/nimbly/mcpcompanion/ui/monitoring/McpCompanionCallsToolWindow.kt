@@ -218,6 +218,7 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
     private fun buildToolbar(): com.intellij.openapi.actionSystem.ActionToolbar {
         val group = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
             add(ClearAction())
+            add(ResetFilterAction())
             addSeparator()
             add(OrientationAction())
             add(GroupedAction())
@@ -309,6 +310,14 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
 
     private fun matchesFilters(r: McpCompanionSettings.CallRecord): Boolean {
         if (r.toolName in hiddenTools) return false
+        // Project-scoped filter: when a call carries an explicit `projectPath` argument, only
+        // surface it in the Monitoring window of the matching project. Calls without `projectPath`
+        // (= global / context-resolved) appear in every window.
+        val recordPath = r.projectPath
+        if (recordPath != null) {
+            val ownPath = runCatching { project.basePath?.removeSuffix("/") }.getOrNull()
+            if (ownPath != null && recordPath != ownPath) return false
+        }
         return true
     }
 
@@ -380,7 +389,24 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
     ) {
         override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
             McpCompanionSettings.getInstance().clearAllRecords()
-            hiddenTools.clear()
+        }
+        override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+    }
+
+    /** Restores visibility of every tool previously hidden via the right-click → "Hide …" menu.
+     *  Disabled when no tool is hidden (nothing to restore). */
+    private inner class ResetFilterAction : com.intellij.openapi.actionSystem.AnAction(
+        "Reset Filter",
+        "Restore visibility of all tools hidden via right-click",
+        com.intellij.icons.AllIcons.General.Filter,
+    ) {
+        override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            resetHidden()
+        }
+        override fun update(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            val n = hiddenTools.size
+            e.presentation.isEnabled = n > 0
+            e.presentation.text = if (n > 0) "Reset Filter ($n hidden)" else "Reset Filter"
         }
         override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
     }

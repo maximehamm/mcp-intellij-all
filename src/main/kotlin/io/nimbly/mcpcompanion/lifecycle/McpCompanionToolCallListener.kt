@@ -30,21 +30,21 @@ class McpCompanionToolCallListener : ToolCallListener {
     override fun beforeMcpToolCall(descriptor: McpToolDescriptor, callInfo: McpCallInfo) {
         runCatching {
             val params = runCatching { prettyJson.encodeToString(JsonObject.serializer(), callInfo.rawArguments) }.getOrElse { "{}" }
-            // If the call carries an explicit `projectPath` argument, honor it — the framework's
-            // `callInfo.project` is just the default chosen when several projects are open in the
-            // same JVM, so it can mislabel the record. Falls back to the framework project.
+            // Record `projectPath` ONLY when the call carries it as an explicit argument — that way
+            // the per-project Monitoring filter can show project-scoped calls in their owning window
+            // and global calls (no `projectPath` arg) in every window. We deliberately don't fall
+            // back to `callInfo.project?.basePath`: the framework picks an arbitrary default when
+            // several projects are open, which would mis-attribute global calls.
             val argProjectPath = runCatching {
                 val v = callInfo.rawArguments["projectPath"]
                 (v as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
             }.getOrNull()?.trim()?.removeSuffix("/")?.takeIf { it.isNotEmpty() }
-            val effectiveProjectPath = argProjectPath
-                ?: runCatching { callInfo.project?.basePath?.removeSuffix("/") }.getOrNull()
             McpCompanionSettings.getInstance().recordCallStart(
                 callId = callInfo.callId,
                 toolName = descriptor.name,
                 parametersJson = params,
                 client = callInfo.clientInfo?.name?.takeIf { it != "Unknown MCP client" },
-                projectPath = effectiveProjectPath,
+                projectPath = argProjectPath,
             )
         }
     }
