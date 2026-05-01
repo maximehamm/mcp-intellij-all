@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.2.2"
+version = "3.2.3"
 
 repositories {
     mavenCentral()

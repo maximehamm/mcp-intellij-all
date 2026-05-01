@@ -4,6 +4,27 @@
 - Open in Finder.Explorer
 - Open in Associated App
 
+● Liste de ce qui m'a obligé à fallback Bash cette dernière heure :
+
+1. vcs_rename_branch (git branch -m old new)                                                                                 
+   - Pour renommer feature/LCS-782_mise-à-jour-tarifs → feature/LCS-782_mise-a-jour-tarifs
+   - Solution actuelle : Bash
+2. vcs_push avec option delete (git push origin --delete <branch>)                                                         
+   - Pour supprimer l'ancienne branche distante après le rename                                                               
+   - Ou alternative : vcs_delete_branch qui accepterait remote: true                                                          
+   - Solution actuelle : Bash
+3. Détection / nettoyage du .git/index.lock orphelin                                                                         
+   - À chaque conflit avec gradle-git-properties → error: could not write index sans diagnostic                               
+   - Idéalement : MCP détecte le lock orphelin (mtime > X minutes, pas de process git tournant) et propose de le supprimer    
+   - Solution actuelle : rm .git/index.lock manuel (avec friction permission)
+4. Meilleur reporting d'erreur sur vcs_stash apply                                                                           
+   - L'apply a retourné Error:  sans contenu → j'ai dû deviner ce qui se passait                                              
+   - Lié au lock ; le MCP pourrait propager le message git réel
+5. Filtres avancés sur vcs_get_vcs_log                                                                                       
+   - Pas de -S "string" (pickaxe : trouve les commits qui ajoutent/suppriment un texte)                                       
+   - Pas de --since (filtrer par date)                                                                                        
+   - Solution actuelle : Bash git log -S ou --since
+
 ### Gradle (bundled in IntelliJ IDEA Community/Ultimate & Android Studio — not in PyCharm/WebStorm/etc.)
 
 > Implementation notes:
