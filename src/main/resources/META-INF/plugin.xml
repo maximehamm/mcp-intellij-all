@@ -7,7 +7,7 @@
     <description><![CDATA[
 
         <p>
-        <b>72 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
+        <b>74 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
         <p>Works with any MCP-compatible AI client: <b>Claude</b> (Anthropic), <b>GitHub Copilot</b>, <b>Codex</b>, <b>Cursor</b>, <b>Windsurf</b>, and any other assistant that supports the Model Context Protocol.</p>
         </p>
 

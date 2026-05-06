@@ -163,9 +163,24 @@ class McpCompanionVcsToolset : McpToolset {
         - maxCount: maximum number of commits to return per repository (default: 20)
         - file: optional file path (relative to project root) — restricts log to commits touching that file
         - branch: optional branch name to read the log from (default: current branch)
+        - pickaxe: optional `git log -S <string>` filter — returns only commits that introduce or remove the given string (default: "")
+        - since: optional `git log --since <expr>` filter (e.g. "2 weeks ago", "2026-04-01") (default: "")
+        - until: optional `git log --until <expr>` filter — upper time bound (default: "")
+        - author: optional `git log --author <pattern>` filter (regex, default: "")
+        - grep: optional `git log --grep <pattern>` filter — matches against the commit message (default: "")
         - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
     """)
-    suspend fun get_vcs_log(maxCount: Int = 20, file: String = "", branch: String = "", projectPath: String? = null): String {
+    suspend fun get_vcs_log(
+        maxCount: Int = 20,
+        file: String = "",
+        branch: String = "",
+        pickaxe: String = "",
+        since: String = "",
+        until: String = "",
+        author: String = "",
+        grep: String = "",
+        projectPath: String? = null,
+    ): String {
         disabledMessage("get_vcs_log")?.let { return it }
         val project = resolveProject(projectPath)
         return captureResponse(withContext(Dispatchers.IO) {
@@ -199,6 +214,14 @@ class McpCompanionVcsToolset : McpToolset {
 
                     val params = buildList {
                         add("--max-count=$maxCount")
+                        // Filters that take a value as a single fused argument (=) — git accepts
+                        // both `--flag=value` and `--flag value`, but the fused form simplifies
+                        // argv routing through GitLineHandler.
+                        if (pickaxe.isNotBlank()) { add("-S"); add(pickaxe) }
+                        if (since.isNotBlank())   add("--since=$since")
+                        if (until.isNotBlank())   add("--until=$until")
+                        if (author.isNotBlank())  add("--author=$author")
+                        if (grep.isNotBlank())    add("--grep=$grep")
                         if (branch.isNotBlank()) add(branch)
                         if (file.isNotBlank()) { add("--"); add(file) }
                     }.toTypedArray()
@@ -1390,6 +1413,76 @@ class McpCompanionVcsToolset : McpToolset {
         })
     }
 
+    // ── vcs_rename_branch ─────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_rename_branch")
+    @McpDescription(description = """
+        Renames a Git branch (git branch -m). With pushRemote=true, also pushes the renamed branch
+        and deletes the old remote branch — the recommended sequence after renaming a branch that
+        was already published. Disabled by default in Settings (destructive on remote).
+
+        Parameters:
+        - newName: target branch name (required).
+        - oldName: branch to rename (default: "" = current branch).
+        - pushRemote: if true, after the local rename pushes `newName` to `remote` with -u and
+          then deletes `remote/oldName` (default: false). Requires `oldName` to be specified or
+          the rename must be of the current branch.
+        - remote: remote name when pushRemote=true (default: "origin").
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_rename_branch(
+        newName: String,
+        oldName: String = "",
+        pushRemote: Boolean = false,
+        remote: String = "origin",
+        projectPath: String? = null,
+    ): String {
+        disabledMessage("vcs_rename_branch")?.let { return it }
+        val project = resolveProject(projectPath)
+        return captureResponse(withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+
+                // Resolve the source branch name once — needed for both the local rename and
+                // (optionally) the remote-side cleanup.
+                val resolvedOld = oldName.ifBlank {
+                    runCatching { invoke(repo, "getCurrentBranch")?.let { invoke(it, "getName")?.toString() } }
+                        .getOrNull() ?: return@withContext "Error: cannot determine current branch (detached HEAD?)"
+                }
+
+                val results = mutableListOf<String>()
+
+                // 1. Local rename — `git branch -m <old> <new>` works for any branch (including
+                //    the current one); when omitting <old>, git renames the current branch.
+                val (renameOk, renameOut) = if (oldName.isBlank())
+                    gitExec(cl, project, root, "BRANCH", "-m", newName)
+                else
+                    gitExec(cl, project, root, "BRANCH", "-m", oldName, newName)
+                if (!renameOk) return@withContext "Error: $renameOut"
+                results += "Renamed local branch '$resolvedOld' → '$newName'"
+
+                // 2. Optionally publish the rename: push new + delete old. We use the same
+                //    `--delete` syntax already used by vcs_delete_branch for consistency.
+                if (pushRemote) {
+                    val (pushOk, pushOut) = gitExec(cl, project, root, "PUSH", "-u", remote, newName)
+                    results += if (pushOk) "Pushed '$newName' to '$remote' with upstream tracking"
+                               else "Push of '$newName' failed: $pushOut"
+
+                    if (pushOk) {
+                        val (delOk, delOut) = gitExec(cl, project, root, "PUSH", remote, "--delete", resolvedOld)
+                        results += if (delOk) "Deleted old remote branch '$remote/$resolvedOld'"
+                                   else "Delete of old remote branch failed: $delOut"
+                    }
+                }
+                vfsRefresh(project)
+                results.joinToString("\n")
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        })
+    }
+
     // ── vcs_delete_branch ─────────────────────────────────────────────────────
 
     @McpTool(name = "vcs_delete_branch")
@@ -1438,6 +1531,94 @@ class McpCompanionVcsToolset : McpToolset {
                 }
                 vfsRefresh(project)
                 results.joinToString("\n")
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        })
+    }
+
+    // ── vcs_check_repo_health ─────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_check_repo_health")
+    @McpDescription(description = """
+        Diagnoses common Git working-tree issues that produce opaque errors elsewhere — most
+        notably an orphan `.git/index.lock` left behind by a crashed build tool (gradle-git-properties,
+        a killed `git commit`, etc.). Returns a structured report and, with `clean=true`, removes
+        stale locks older than `staleLockMinutes`.
+
+        Parameters:
+        - clean: if true, deletes lock files older than `staleLockMinutes` after the diagnostic (default: false).
+        - staleLockMinutes: how old a lock file must be (in minutes) before it is considered orphan (default: 5).
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_check_repo_health(
+        clean: Boolean = false,
+        staleLockMinutes: Int = 5,
+        projectPath: String? = null,
+    ): String {
+        disabledMessage("vcs_check_repo_health")?.let { return it }
+        val project = resolveProject(projectPath)
+        return captureResponse(withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+
+                val gitDir = java.io.File(root.path, ".git")
+                // .git can be a file (worktree / submodule) pointing to the real git dir.
+                val realGitDir: java.io.File = if (gitDir.isFile) {
+                    val target = gitDir.readText().trim().removePrefix("gitdir:").trim()
+                    val resolved = java.io.File(target).takeIf { it.isAbsolute }
+                        ?: java.io.File(root.path, target).canonicalFile
+                    resolved
+                } else gitDir
+
+                if (!realGitDir.isDirectory) {
+                    return@withContext "Error: cannot locate .git directory at ${gitDir.path}"
+                }
+
+                // Lock files that block read/write operations. `index.lock` is by far the most
+                // common culprit; the others are listed for completeness.
+                val lockNames = listOf("index.lock", "HEAD.lock", "config.lock", "packed-refs.lock")
+                val now = System.currentTimeMillis()
+                val staleMs = staleLockMinutes * 60_000L
+
+                data class Lock(val file: java.io.File, val ageMin: Long)
+                val locks = lockNames
+                    .map { java.io.File(realGitDir, it) }
+                    .filter { it.exists() }
+                    .map { Lock(it, (now - it.lastModified()) / 60_000L) }
+
+                val report = StringBuilder()
+                report.appendLine("Repository: ${root.path}")
+                report.appendLine(".git directory: ${realGitDir.path}")
+                if (locks.isEmpty()) {
+                    report.appendLine("✓ No lock files present — repository looks healthy.")
+                    return@withContext report.toString().trim()
+                }
+
+                report.appendLine("Found ${locks.size} lock file(s):")
+                for (lock in locks) {
+                    val tag = if (lock.ageMin >= staleLockMinutes) "STALE" else "fresh"
+                    report.appendLine("  • ${lock.file.name} (${lock.ageMin} min old, $tag)")
+                }
+
+                if (!clean) {
+                    report.appendLine()
+                    report.appendLine("Re-run with clean=true to delete locks older than $staleLockMinutes minute(s).")
+                    report.appendLine("Fresh locks (under $staleLockMinutes min) are NOT deleted — they may belong to a running git process.")
+                    return@withContext report.toString().trim()
+                }
+
+                report.appendLine()
+                val (deleted, skipped) = locks.partition { it.file.lastModified() < now - staleMs }
+                for (lock in deleted) {
+                    val ok = runCatching { lock.file.delete() }.getOrDefault(false)
+                    report.appendLine(if (ok) "✓ Deleted ${lock.file.name}" else "✗ Failed to delete ${lock.file.name}")
+                }
+                for (lock in skipped) {
+                    report.appendLine("⏭ Skipped ${lock.file.name} (only ${lock.ageMin} min old, < $staleLockMinutes min threshold)")
+                }
+                report.toString().trim()
             } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
         })
     }

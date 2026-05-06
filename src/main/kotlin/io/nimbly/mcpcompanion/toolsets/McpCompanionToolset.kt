@@ -141,7 +141,7 @@ class McpCompanionToolset : McpToolset {
 ### VCS
 - get_vcs_changes(includeDiff=false) — modified/added/deleted/moved files; includeDiff=true adds unified diff per file
 - get_vcs_branch() — current branch + local/remote branches (Git)
-- get_vcs_log(maxCount=20, file="", branch="") — recent commits with hash, author, date, subject, files changed (Git)
+- get_vcs_log(maxCount=20, file="", branch="", pickaxe="", since="", until="", author="", grep="") — recent commits; pickaxe filters commits that add/remove a string, since/until/author/grep filter the log
 - get_vcs_blame(filePath, startLine=1, endLine=MAX) — line-by-line annotation: author, date, revision per line
 - get_local_history(scope="file"|"directory"|"project", path="") — local history of a file, directory, or entire project (IntelliJ Local History, not Git)
 - get_vcs_file_history(filePath, maxCount=20, follow=true) — commit history for a single file; follow=true tracks renames
@@ -154,6 +154,8 @@ class McpCompanionToolset : McpToolset {
 - vcs_stash(action="list"|"push"|"pop"|"apply"|"drop", message="", ref="stash@{0}") — manage stashes
 - vcs_create_branch(name, checkout=true, from="") — create a new branch; checkout=true (default) also switches to it
 - vcs_checkout_branch(name) — switch to an existing branch (git checkout <branch>)
+- vcs_rename_branch(newName, oldName="", pushRemote=false, remote="origin") — rename a branch (git branch -m); pushRemote=true also publishes new + deletes old remote
+                                ⚠ disabled by default — pushRemote rewrites remote refs
 - vcs_delete_branch(name, scope="local"|"remote"|"both", force=false, remote="origin") — delete a branch locally, remotely, or both
                                 ⚠ disabled by default — destructive action
 - vcs_fetch(remote="", prune=false) — fetch from one or all remotes without merging (git fetch)
@@ -165,6 +167,7 @@ class McpCompanionToolset : McpToolset {
                                 ⚠ "hard" discards all local changes; "soft" keeps index + working tree; "mixed" (default) keeps working tree only
 - vcs_revert(hash, noCommit=false) — create a new commit that undoes a previous commit (safe — no history rewrite)
 - vcs_cherry_pick(hash, noCommit=false) — apply the changes from a specific commit on top of the current branch
+- vcs_check_repo_health(clean=false, staleLockMinutes=5) — diagnose orphan .git/index.lock files; clean=true removes locks older than the threshold
 
 ### General
 - get_mcp_companion_overview → this overview

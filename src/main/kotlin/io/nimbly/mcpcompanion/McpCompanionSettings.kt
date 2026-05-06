@@ -189,7 +189,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         const val MAX_CALL_RECORDS = 50
 
         /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
-        val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query", "vcs_delete_branch")
+        val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query", "vcs_delete_branch", "vcs_rename_branch")
 
         /**
          * Flat set of every MCP Companion tool name — used to filter the global [ToolCallListener]
@@ -239,9 +239,9 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "get_vcs_changes", "get_vcs_branch", "get_vcs_log", "get_vcs_blame", "get_local_history",
                 "get_vcs_file_history", "get_vcs_diff_between_branches", "vcs_show_commit",
                 "vcs_stage_files", "vcs_commit", "vcs_push", "vcs_pull", "vcs_stash",
-                "vcs_create_branch", "vcs_checkout_branch", "vcs_delete_branch",
+                "vcs_create_branch", "vcs_checkout_branch", "vcs_rename_branch", "vcs_delete_branch",
                 "vcs_fetch", "vcs_merge_branch", "vcs_rebase", "get_vcs_conflicts", "vcs_open_merge_tool",
-                "vcs_reset", "vcs_revert", "vcs_cherry_pick"
+                "vcs_reset", "vcs_revert", "vcs_cherry_pick", "vcs_check_repo_health"
             ),
             "General" to listOf(
                 "get_mcp_companion_overview", "execute_ide_action", "replace_text_undoable", "delete_file"

@@ -87,7 +87,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 |------|-------------|
 | `get_vcs_changes` | All locally modified, added, deleted, and moved files (any VCS). Pass `includeDiff=true` to include a unified diff per file |
 | `get_vcs_branch` | Current branch and all local/remote branches for each Git repository |
-| `get_vcs_log` | Recent commit history: hash, author, date, subject, and changed files. Filter by file or branch (Git) |
+| `get_vcs_log` | Recent commit history: hash, author, date, subject, and changed files. Filter by file, branch, pickaxe (`-S`), since/until, author, or grep |
 | `get_vcs_blame` | Line-by-line blame annotation: who last modified each line, when, and in which commit (any VCS) |
 | `get_local_history` | IntelliJ Local History for a file, directory, or the whole project. Returns timestamped revisions with optional unified diffs |
 | `get_vcs_file_history` | Commit history for a single file with optional `--follow` to track renames across commits |
@@ -100,6 +100,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `vcs_stash` | Manage Git stashes: `action="push"` / `"pop"` / `"apply"` / `"drop"` / `"list"` |
 | `vcs_create_branch` | Create a new Git branch; pass `checkout=true` (default) to switch to it immediately |
 | `vcs_checkout_branch` | Switch the working tree to an existing branch (`git checkout <branch>`) |
+| `vcs_rename_branch` 🔒 | Rename a branch (`git branch -m`); `pushRemote=true` also publishes the new name and deletes the old remote branch |
 | `vcs_delete_branch` 🔒 | Delete a Git branch locally, remotely, or both |
 | `vcs_fetch` | Fetch from one or all remotes without merging (`git fetch`); pass `prune=true` to remove deleted remote branches |
 | `vcs_merge_branch` | Merge a branch into the current one (`git merge`); pass `noFf=true` to force a merge commit |
@@ -109,6 +110,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `vcs_reset` | Reset the current branch to a previous commit (`--soft`/`--mixed`/`--hard`) |
 | `vcs_revert` | Create a new commit that undoes a previous commit (safe — no history rewrite) |
 | `vcs_cherry_pick` | Apply the changes from a specific commit on top of the current branch |
+| `vcs_check_repo_health` | Diagnose orphan `.git/index.lock` files left by crashed builds; pass `clean=true` to remove stale locks |
 
 ### General
 | Tool | Description |
