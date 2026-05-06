@@ -175,6 +175,34 @@ class VcsOperationsTest : BasePlatformTestCase() {
         assertFalse("Original message should be gone", log.contains("original message"))
     }
 
+    /**
+     * Regression test for GitHub issue #2 — vcs_commit was returning an opaque "Error:"
+     * (empty payload) when the user invoked it with `force=true` on a repo with no staged
+     * changes. Root cause: `git commit -m "…"` writes "nothing to commit, working tree clean"
+     * to **stdout** (not stderr) before exiting with code 1, so gitExec's old code path
+     * (which only read `getErrorOutput()` on failure) returned an empty string.
+     *
+     * The fix combines stdout + stderr + the exit code in gitExec's failure branch. This
+     * test exercises that exact scenario at the [gitExec] level: it must surface a useful
+     * message rather than nothing.
+     *
+     * Without the fix, the assertion that `out` contains either "nothing to commit" or
+     * "exit code" fails — `out` is just "" — which is precisely what the bug reporter saw.
+     */
+    fun `test commit with nothing staged reports a useful error (issue #2)`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+        // Working tree is clean (initial commit only). No `git add` has run since.
+        val (ok, out) = execPair("COMMIT", "-m", "should fail — nothing staged")
+        println("  vcs_commit (no staging) → ok=$ok out='$out'")
+        assertFalse("git commit must fail when nothing is staged", ok)
+        assertTrue(
+            "git commit failure must surface a useful message — got empty output, " +
+                "which would render as the opaque 'Error:' described in issue #2.\n" +
+                "Output was: '$out'",
+            out.contains("nothing to commit") || out.contains("exit code"),
+        )
+    }
+
     // ── vcs_stash ─────────────────────────────────────────────────────────────
 
     fun `test stash push saves working tree changes`() {

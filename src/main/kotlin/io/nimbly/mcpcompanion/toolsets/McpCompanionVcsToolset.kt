@@ -652,6 +652,19 @@ class McpCompanionVcsToolset : McpToolset {
                     if (unstagedWarning != null) return@withContext unstagedWarning
                 }
 
+                // ── Empty-staging-area pre-check (skipped when amending) ──────
+                // `git commit` with nothing staged exits with code 1 and prints "nothing to commit"
+                // to stdout (not stderr), which historically caused this tool to return an opaque
+                // empty "Error:" — see GitHub issue #2. Detect the case explicitly first.
+                if (!amend) {
+                    val (cachedOk, cachedOut) = gitExec(cl, project, root, "DIFF", "--cached", "--name-only")
+                    val staged = if (cachedOk) cachedOut.lines().filter { it.isNotBlank() } else emptyList()
+                    if (staged.isEmpty()) {
+                        return@withContext "Error: nothing staged — there are no files in the staging area to commit. " +
+                                "Stage files first with vcs_stage_files(files=[...])."
+                    }
+                }
+
                 val params = buildList {
                     add("-m"); add(message)
                     if (amend) add("--amend")
@@ -1489,7 +1502,27 @@ class McpCompanionVcsToolset : McpToolset {
         val result = runM.invoke(git, handler)
         val ok = ((invoke(result, "success") ?: invoke(result, "isSuccess")) as? Boolean) ?: false
         @Suppress("UNCHECKED_CAST")
-        val out = ((if (ok) invoke(result, "getOutput") else invoke(result, "getErrorOutput")) as? List<String>)?.joinToString("\n") ?: ""
+        val stdout = (invoke(result, "getOutput") as? List<String>)?.joinToString("\n").orEmpty()
+        @Suppress("UNCHECKED_CAST")
+        val stderr = (invoke(result, "getErrorOutput") as? List<String>)?.joinToString("\n").orEmpty()
+        val out = if (ok) {
+            stdout
+        } else {
+            // On failure, some git subcommands write the user-visible message to stdout (e.g.
+            // `git commit` with nothing staged → "nothing to commit, working tree clean" goes to
+            // stdout). Combining both streams + the exit code prevents the caller from receiving
+            // an empty `"Error: "` payload.
+            val exitCode = (invoke(result, "getExitCode") as? Int) ?: -1
+            buildString {
+                if (stderr.isNotBlank()) append(stderr)
+                if (stdout.isNotBlank()) {
+                    if (isNotEmpty()) append("\n")
+                    append(stdout)
+                }
+                if (isBlank()) append("git command failed (exit code $exitCode)")
+                else append(" (exit code $exitCode)")
+            }
+        }
         ok to out
     }.getOrElse { e ->
         // Unwrap InvocationTargetException so callers see the real exception
