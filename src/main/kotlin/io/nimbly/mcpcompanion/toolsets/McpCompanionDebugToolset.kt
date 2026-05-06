@@ -188,23 +188,36 @@ class McpCompanionDebugToolset : McpToolset {
         return captureResponse(runOnEdt {
             val (file, err) = resolveFilePathOrError(project, filePath)
             if (err != null) return@runOnEdt err
-            val normalizedPath = filePath.replace('\\', '/')
             val manager = XDebuggerManager.getInstance(project).breakpointManager
-            val existing = manager.allBreakpoints
-                .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
-                .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(normalizedPath) }
+            val existing = findLineBreakpoint(manager, file!!, filePath, line)
             if (existing == null) {
-                com.intellij.xdebugger.XDebuggerUtil.getInstance().toggleLineBreakpoint(project, file!!, line - 1, false)
+                // toggleLineBreakpoint is a TOGGLE: add if absent, remove if present. We only
+                // call it after confirming there's no match (via VirtualFile equality + path
+                // fallback), otherwise we'd silently delete the user's existing breakpoint.
+                com.intellij.xdebugger.XDebuggerUtil.getInstance().toggleLineBreakpoint(project, file, line - 1, false)
             }
             val bp = existing ?: run {
                 var found: com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>? = null
                 repeat(10) {
-                    found = manager.allBreakpoints
-                        .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
-                        .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(normalizedPath) }
+                    found = findLineBreakpoint(manager, file, filePath, line)
                     if (found == null) Thread.sleep(100)
                 }
-                found ?: return@runOnEdt "Failed to create breakpoint at $filePath:$line"
+                // On failure, surface diagnostic info instead of an opaque error — see GitHub
+                // bug report (WSL2 + Windows backslash paths). The earlier matching used
+                // `presentableFilePath.endsWith("forward/slash")` which always failed on Windows
+                // because presentableFilePath there uses backslashes.
+                found ?: return@runOnEdt buildString {
+                    append("Failed to create breakpoint at $filePath:$line")
+                    val all = manager.allBreakpoints
+                        .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
+                    append(" (${all.size} breakpoint(s) currently in project")
+                    val nearby = all.filter { it.line == line - 1 }.take(3)
+                    if (nearby.isNotEmpty()) {
+                        append("; existing breakpoints on line $line: ")
+                        append(nearby.joinToString(", ") { it.presentableFilePath })
+                    }
+                    append("). Resolved file: ${file.path}")
+                }
             }
             val expr = if (condition.isNotBlank())
                 com.intellij.xdebugger.XDebuggerUtil.getInstance()
@@ -215,6 +228,39 @@ class McpCompanionDebugToolset : McpToolset {
             if (condition.isNotBlank()) "Breakpoint $action at $filePath:$line with condition: $condition"
             else "Breakpoint $action at $filePath:$line"
         })
+    }
+
+    /**
+     * Looks up the line breakpoint at [line] in [virtualFile], matching across path styles.
+     *
+     * Why we can't just compare paths:
+     *  - On Windows / WSL2, [com.intellij.xdebugger.breakpoints.XLineBreakpoint.presentableFilePath]
+     *    uses backslashes (`back\src\main\java\...`), but the user's input is normalized to
+     *    forward slashes by [filePath].replace('\\', '/'). Comparing `backslash.endsWith("/forward")`
+     *    always returns false → matching silently failed for every Windows user.
+     *  - The right comparison is by VirtualFile identity. We fall back to a normalized-path
+     *    suffix match if the breakpoint's URL doesn't resolve to a VirtualFile (rare but possible).
+     *
+     * Returns null if no matching breakpoint is found.
+     */
+    private fun findLineBreakpoint(
+        manager: com.intellij.xdebugger.breakpoints.XBreakpointManager,
+        virtualFile: com.intellij.openapi.vfs.VirtualFile,
+        filePath: String,
+        line: Int,
+    ): com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>? {
+        val normalized = filePath.replace('\\', '/')
+        return manager.allBreakpoints
+            .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
+            .firstOrNull { bp ->
+                if (bp.line != line - 1) return@firstOrNull false
+                // 1. URL match — most robust, works regardless of host OS / path separators.
+                if (bp.fileUrl == virtualFile.url) return@firstOrNull true
+                // 2. Suffix match on normalized presentable path — handles cases where the
+                //    breakpoint was created with a slightly different URL (e.g. content-root
+                //    relative vs project-root relative).
+                bp.presentableFilePath.replace('\\', '/').endsWith(normalized)
+            }
     }
 
     // ── get_breakpoints ───────────────────────────────────────────────────────
@@ -284,10 +330,10 @@ class McpCompanionDebugToolset : McpToolset {
         disabledMessage("set_breakpoint_condition")?.let { return it }
         val project = resolveProject(projectPath)
         return captureResponse(runOnEdt {
+            val (file, err) = resolveFilePathOrError(project, filePath)
+            if (err != null) return@runOnEdt err
             val manager = XDebuggerManager.getInstance(project).breakpointManager
-            val bp = manager.allBreakpoints
-                .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpoint<*>>()
-                .firstOrNull { it.line == line - 1 && it.presentableFilePath.endsWith(filePath.replace('\\', '/')) }
+            val bp = findLineBreakpoint(manager, file!!, filePath, line)
                 ?: return@runOnEdt "No breakpoint found at $filePath:$line"
 
             if (condition.isEmpty()) {
