@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.3.0"
+version = "3.4.0"
 
 repositories {
     mavenCentral()
@@ -48,6 +48,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.4.0</b> — New <code>vcs_move_file</code> tool — moves or renames a tracked file/directory via <code>git mv</code>, preserving Git history so <code>git log --follow</code> and <code>git blame</code> keep working.</li>
                 <li><b>3.3.0</b> — New <code>vcs_rename_branch</code> (git branch -m, with optional remote rename) and <code>vcs_check_repo_health</code> (detects and cleans orphan <code>.git/index.lock</code> files). <code>get_vcs_log</code> now supports <code>pickaxe</code>, <code>since</code>, <code>until</code>, <code>author</code>, and <code>grep</code> filters.</li>
                 <li><b>3.2.0</b> — Monitoring tool window: new toolbar with <kbd>Clear</kbd>, layout toggle (vertical/horizontal), and grouped-tabs toggle. Right-click a row to <kbd>Hide</kbd> a tool from the list.</li>
                 <li><b>3.1.0</b> — Monitoring tool window now persists full untruncated parameters AND captured responses to a per-session disk store (cleared at IDE restart). Layout split: list on top, Parameters in the middle, Response+Errors tabs at the bottom — bottom hidden for tools from other plugins (no response capture available). JSON responses are auto pretty-printed; non-JSON responses (Markdown overviews, XML, plain text) render in plain text. <kbd>Cmd/Ctrl + C</kbd> on a row copies the tool name to the clipboard.</li>

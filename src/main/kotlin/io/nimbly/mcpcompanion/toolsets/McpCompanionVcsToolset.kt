@@ -1413,6 +1413,63 @@ class McpCompanionVcsToolset : McpToolset {
         })
     }
 
+    // ── vcs_move_file ─────────────────────────────────────────────────────────
+
+    @McpTool(name = "vcs_move_file")
+    @McpDescription(description = """
+        Moves or renames a tracked file (or directory) using `git mv` — this preserves the file's
+        Git history (renames are detected by the commit) so subsequent `git log --follow` and
+        `git blame` continue to work seamlessly.
+
+        Both paths are interpreted relative to the project root. The rename is staged automatically;
+        run `vcs_commit` next to record it.
+
+        Parameters:
+        - sourcePath: path of the file or directory to move, relative to the project root (required).
+        - targetPath: destination path, relative to the project root (required). When moving a single
+          file, this can be the destination file name or an existing directory. When moving a directory,
+          this must be the new directory name.
+        - force: if true, overwrites the target if it already exists (default: false). Without this,
+          Git refuses to overwrite to protect you against accidental data loss.
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun vcs_move_file(
+        sourcePath: String,
+        targetPath: String,
+        force: Boolean = false,
+        projectPath: String? = null,
+    ): String {
+        disabledMessage("vcs_move_file")?.let { return it }
+        val project = resolveProject(projectPath)
+        return captureResponse(withContext(Dispatchers.IO) {
+            try {
+                val cl = git4ideaLoader() ?: return@withContext "Git plugin (Git4Idea) not available."
+                val repo = getFirstRepo(cl, project) ?: return@withContext "No Git repository found."
+                val root = invoke(repo, "getRoot") as? com.intellij.openapi.vfs.VirtualFile
+                    ?: return@withContext "Cannot get repository root."
+
+                // Pre-flight: make sure the source exists. `git mv` will return a useful error
+                // anyway, but this avoids a confusing "fatal: bad source" and lets us produce
+                // a path-aware diagnostic referring to the user's input.
+                val srcFile = java.io.File(root.path, sourcePath)
+                if (!srcFile.exists()) {
+                    return@withContext "Error: source file does not exist: $sourcePath (resolved to ${srcFile.path})"
+                }
+
+                val params = buildList {
+                    if (force) add("-f")
+                    add(sourcePath)
+                    add(targetPath)
+                }
+                val (ok, out) = gitExec(cl, project, root, "MV", *params.toTypedArray())
+                if (ok) {
+                    vfsRefresh(project)
+                    "Moved '$sourcePath' → '$targetPath' (staged for commit)"
+                } else "Error: $out"
+            } catch (e: Exception) { "Error: ${e.javaClass.simpleName}: ${e.message}" }
+        })
+    }
+
     // ── vcs_rename_branch ─────────────────────────────────────────────────────
 
     @McpTool(name = "vcs_rename_branch")

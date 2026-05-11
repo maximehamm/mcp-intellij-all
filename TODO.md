@@ -4,24 +4,21 @@
 - Open in Finder.Explorer
 - Open in Associated App
 
-### Gradle (bundled in IntelliJ IDEA Community/Ultimate & Android Studio — not in PyCharm/WebStorm/etc.)
-
-> Implementation notes:
-> - Mark these tools as requiring `com.intellij.gradle` in `McpCompanionSettings.TOOL_REQUIRED_PLUGIN` (degrades gracefully on IDEs without Gradle).
-> - Use `compileOnly` for Gradle API imports in `build.gradle.kts` (no hard dependency — same approach as `mcpserver.jar`).
-> - Runtime guard via `PluginManagerCore.isPluginInstalled(PluginId.getId("com.intellij.gradle"))` with a clear error message when absent.
-
 **High value:**
 - **run_gradle_task** — Execute one or more Gradle tasks. Params: `tasks: List<String>`, `args: List<String> = []`, `projectPath?: String`. Returns `{ status, exitCode, durationMs, stdout, stderr, failedTasks }`.
 - **get_gradle_tasks** — List available Gradle tasks grouped by category (Build / Verification / Help / Other / custom). Returns `{ group: [{ name, description, project }] }`.
 - **refresh_gradle_project** — Force a Gradle re-sync (equivalent of the 🔄 button in the Gradle tool window). Required after editing `build.gradle.kts` (new dependency, plugin, etc.) so IntelliJ picks up the changes.
 - **get_gradle_dependencies** — Parsed dependency tree for a given configuration (e.g. `runtimeClasspath`). Lets the AI answer "why do I have this version of jackson?" or "what transitively pulls log4j?".
 - **stop_gradle_task** — Cancel a running Gradle build (equivalent of the red square in the tool window).
-
-- **git move** pàur déplacer ou renommer un fichier
-
-**Comfort:**
 - **get_gradle_project_info** — Wrapper version, JDK used, list of subprojects with their paths, source sets. Helps reasoning about monorepo structure.
+
+- **git move** pour déplacer ou renommer un fichier
+
+Refactoring :
+- Extract Class / Move Class to file
+- Move Members (déplacer un membre d'une classe à une autre)
+- Extract Method
+- Change Signature
 
 ### Other
 

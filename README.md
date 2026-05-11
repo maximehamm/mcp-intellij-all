@@ -110,6 +110,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `vcs_reset` | Reset the current branch to a previous commit (`--soft`/`--mixed`/`--hard`) |
 | `vcs_revert` | Create a new commit that undoes a previous commit (safe — no history rewrite) |
 | `vcs_cherry_pick` | Apply the changes from a specific commit on top of the current branch |
+| `vcs_move_file` | Move or rename a tracked file/directory via `git mv` — preserves history so `git log --follow` and `git blame` keep working |
 | `vcs_check_repo_health` | Diagnose orphan `.git/index.lock` files left by crashed builds; pass `clean=true` to remove stale locks |
 
 ### General

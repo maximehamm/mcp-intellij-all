@@ -241,7 +241,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "vcs_stage_files", "vcs_commit", "vcs_push", "vcs_pull", "vcs_stash",
                 "vcs_create_branch", "vcs_checkout_branch", "vcs_rename_branch", "vcs_delete_branch",
                 "vcs_fetch", "vcs_merge_branch", "vcs_rebase", "get_vcs_conflicts", "vcs_open_merge_tool",
-                "vcs_reset", "vcs_revert", "vcs_cherry_pick", "vcs_check_repo_health"
+                "vcs_reset", "vcs_revert", "vcs_cherry_pick", "vcs_move_file", "vcs_check_repo_health"
             ),
             "General" to listOf(
                 "get_mcp_companion_overview", "execute_ide_action", "replace_text_undoable", "delete_file"

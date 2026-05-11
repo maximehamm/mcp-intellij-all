@@ -896,6 +896,60 @@ class VcsOperationsTest : BasePlatformTestCase() {
         assertFalse("Bare repo should NOT have the branch after delete", refsAfter.contains("remote-to-delete"))
     }
 
+    // ── 3.4.0: vcs_move_file ──────────────────────────────────────────────────
+
+    fun `test MV moves a tracked file and preserves history`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+        // Commit a file so the rename has history to follow.
+        File(repoDir, "OldName.java").writeText("class OldName { int v = 1; }")
+        git(repoDir, "add", "OldName.java")
+        git(repoDir, "commit", "-m", "add OldName.java")
+
+        // gitExec("MV", "OldName.java", "NewName.java") is the path used by vcs_move_file.
+        val (ok, out) = execPair("MV", "OldName.java", "NewName.java")
+        println("  mv result = ok=$ok out='$out'")
+        assertTrue("git mv must succeed: $out", ok)
+
+        assertFalse("Old file must be gone from working tree", File(repoDir, "OldName.java").exists())
+        assertTrue ("New file must exist in working tree",     File(repoDir, "NewName.java").exists())
+
+        // git mv stages the rename automatically — verify it's staged before commit.
+        val staged = git(repoDir, "status", "--short")
+        println("  status after mv = '$staged'")
+        assertTrue("Rename must be staged (R OldName.java -> NewName.java)",
+            staged.contains("R") && staged.contains("OldName.java") && staged.contains("NewName.java"))
+
+        // After committing, `git log --follow` must trace back through the rename — this is the
+        // whole point of using `git mv` instead of fs rename + git add.
+        git(repoDir, "commit", "-m", "rename OldName.java → NewName.java")
+        val followLog = git(repoDir, "log", "--follow", "--oneline", "NewName.java")
+        println("  log --follow = '$followLog'")
+        assertTrue("--follow must surface the original 'add OldName.java' commit",
+            followLog.contains("add OldName.java"))
+    }
+
+    fun `test MV fails when target exists without -f and succeeds with -f`() {
+        if (git4ideaLoader() == null) { System.err.println("SKIP: git4idea not available"); return }
+        // Two tracked files; we'll try to overwrite one with the other.
+        File(repoDir, "Src.java").writeText("class Src {}")
+        File(repoDir, "Dst.java").writeText("class Dst {}")
+        git(repoDir, "add", "Src.java", "Dst.java")
+        git(repoDir, "commit", "-m", "add Src.java + Dst.java")
+
+        // Without -f: git mv refuses to overwrite the existing destination — protects the user.
+        val (okNoForce, outNoForce) = execPair("MV", "Src.java", "Dst.java")
+        println("  mv without -f = ok=$okNoForce out='$outNoForce'")
+        assertFalse("git mv must refuse to overwrite without -f", okNoForce)
+        assertTrue ("Error must reference Dst.java", outNoForce.contains("Dst.java"))
+
+        // With -f: overwrites the destination.
+        val (okForce, outForce) = execPair("MV", "-f", "Src.java", "Dst.java")
+        println("  mv with -f = ok=$okForce out='$outForce'")
+        assertTrue("git mv -f must succeed: $outForce", okForce)
+        assertFalse("Src.java must be gone",            File(repoDir, "Src.java").exists())
+        assertTrue ("Dst.java must still exist",        File(repoDir, "Dst.java").exists())
+    }
+
     // ── 3.3.0: vcs_rename_branch ──────────────────────────────────────────────
 
     fun `test BRANCH -m renames a local branch`() {

@@ -167,6 +167,7 @@ class McpCompanionToolset : McpToolset {
                                 ⚠ "hard" discards all local changes; "soft" keeps index + working tree; "mixed" (default) keeps working tree only
 - vcs_revert(hash, noCommit=false) — create a new commit that undoes a previous commit (safe — no history rewrite)
 - vcs_cherry_pick(hash, noCommit=false) — apply the changes from a specific commit on top of the current branch
+- vcs_move_file(sourcePath, targetPath, force=false) — move or rename a tracked file/directory via `git mv`, preserving Git history (the rename is staged automatically)
 - vcs_check_repo_health(clean=false, staleLockMinutes=5) — diagnose orphan .git/index.lock files; clean=true removes locks older than the threshold
 
 ### General
