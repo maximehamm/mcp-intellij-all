@@ -244,6 +244,126 @@ class ToolsetIntegrationTest : BasePlatformTestCase() {
         }
     }
 
+    // ── 3.4.1: resolveProject single-project fallback ─────────────────────────
+    //
+    // Bug report 2026-05-12: the JetBrains MCP framework's `coroutineContext.project` throws
+    // `McpExpectedError("Unable to determine the target project for the current MCP tool call.")`
+    // even when only one project is open in the JVM. Our `resolveProject` now short-circuits in
+    // the single-project case to keep the API ergonomic for the common scenario.
+
+    fun `test resolveProject returns the single open project when projectPath is null`() {
+        // BasePlatformTestCase always opens a single project — exactly the scenario we want to cover.
+        val resolved = kotlinx.coroutines.runBlocking {
+            io.nimbly.mcpcompanion.util.resolveProject(null)
+        }
+        assertEquals("Should return the single open project", project, resolved)
+    }
+
+    fun `test resolveProject returns the single open project when projectPath is blank`() {
+        val resolved = kotlinx.coroutines.runBlocking {
+            io.nimbly.mcpcompanion.util.resolveProject("")
+        }
+        assertEquals("Should return the single open project for blank path", project, resolved)
+    }
+
+    fun `test resolveProject honours an explicit matching projectPath`() {
+        val resolved = kotlinx.coroutines.runBlocking {
+            io.nimbly.mcpcompanion.util.resolveProject(project.basePath)
+        }
+        assertEquals("Should return the project whose basePath matches the argument", project, resolved)
+    }
+
+    // ── 3.4.1: replace_text_undoable robustness ───────────────────────────────
+    //
+    // Same bug report: the framework rejects ~30-line Java payloads (Mockito generics + accents)
+    // as "No argument is passed for required parameter 'newText'". We work around this by giving
+    // `oldText`/`newText` a default value of "" and validating ourselves.
+
+    fun `test replace_text_undoable returns clear error for empty oldText`() {
+        // No file needed — the empty-oldText check fires BEFORE file resolution by design,
+        // so the path can be a non-existent dummy. This is the central behaviour change
+        // introduced to keep the contract clear once oldText became a defaultable param.
+        val result = kotlinx.coroutines.runBlocking {
+            io.nimbly.mcpcompanion.toolsets.McpCompanionToolset()
+                .replace_text_undoable(
+                    pathInProject = "irrelevant.java",
+                    oldText = "",
+                    newText = "anything",
+                    projectPath = project.basePath,
+                )
+        }
+        assertTrue(
+            "Empty oldText must produce a clear error rather than a framework rejection, got: $result",
+            result.contains("oldText is empty"),
+        )
+    }
+
+    fun `test replace_text_undoable handles a 30-line Java payload with generics and accents`() {
+        // Reproduces the user-reported failure mode: Mockito generics, accents, multi-line.
+        // We write the file to real disk (under project.basePath) so the toolset's path
+        // resolver — which uses LocalFileSystem — can find it. configureByText alone uses an
+        // in-memory TempFileSystem that LocalFileSystem can't see, so it isn't usable here.
+        val sourceBlock = """
+            class Original {
+                /**
+                 * Méthode d'orchestration — gère les pièces jointes Mockito.
+                 */
+                public List<AttachmentDto> processAttachments() {
+                    when(service.<AttachmentDto>findByOwner(any())).thenReturn(List.of());
+                    return List.of();
+                }
+            }
+        """.trimIndent()
+        val replacementBlock = """
+            class Original {
+                /**
+                 * Méthode d'orchestration — gère les pièces jointes via le « bus » d'événements.
+                 * Voir : org.example.bus.EventBus#dispatch(Event) pour le détail.
+                 */
+                public List<AttachmentDto> processAttachments() {
+                    Mockito.<AttachmentDto>any();
+                    when(service.<AttachmentDto>findByOwner(any())).thenReturn(List.of(
+                        new AttachmentDto("éàç", 1L),
+                        new AttachmentDto("«hello»", 2L),
+                        new AttachmentDto("multi\nline", 3L)
+                    ));
+                    return service.<AttachmentDto>findAll();
+                }
+            }
+        """.trimIndent()
+        val baseDir = java.io.File(project.basePath!!)
+        baseDir.mkdirs()
+        val target = java.io.File(baseDir, "Original.java")
+        target.writeText(sourceBlock)
+        invokeAndWaitIfNeeded {
+            com.intellij.openapi.vfs.LocalFileSystem.getInstance().refreshAndFindFileByPath(target.absolutePath)
+        }
+
+        val result = kotlinx.coroutines.runBlocking {
+            io.nimbly.mcpcompanion.toolsets.McpCompanionToolset()
+                .replace_text_undoable(
+                    pathInProject = "Original.java",
+                    oldText = sourceBlock,
+                    newText = replacementBlock,
+                    projectPath = project.basePath,
+                )
+        }
+        assertEquals("Replacement must succeed, got: $result", "ok", result)
+
+        // Read from disk to verify the write made it through (the suspend function uses
+        // WriteCommandAction → document.replaceString, which persists via the VFS).
+        val vFile = invokeAndWaitIfNeeded {
+            com.intellij.openapi.vfs.LocalFileSystem.getInstance().refreshAndFindFileByPath(target.absolutePath)
+        }
+        assertNotNull("Refreshed VirtualFile should be non-null", vFile)
+        val newText = invokeAndWaitIfNeeded {
+            FileDocumentManager.getInstance().getDocument(vFile!!)!!.text
+        }
+        assertTrue("File should contain the new accent string", newText.contains("éàç"))
+        assertTrue("File should contain the new « hello » string", newText.contains("«hello»"))
+        assertTrue("File should retain the Mockito.<AttachmentDto> generic", newText.contains("Mockito.<AttachmentDto>"))
+    }
+
     // ── Diagnostic ────────────────────────────────────────────────────────────
 
     fun `test collectRunningProcesses does not throw`() {

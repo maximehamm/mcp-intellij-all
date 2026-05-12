@@ -171,6 +171,12 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
         if (daemonRunning) return "IDE is still analysing the file — inspections not ready yet. Wait a moment and call get_quick_fixes again."
 
+        // Refresh from disk first — when a peer tool (e.g. the AI client's own Edit) writes the
+        // file outside IntelliJ, the VFS keeps the stale length and `document.lineCount` lies,
+        // producing "Line N out of range" even though the line exists on disk.
+        runOnEdt {
+            com.intellij.openapi.vfs.VfsUtil.markDirtyAndRefresh(/* async = */ false, /* recursive = */ false, /* reloadChildren = */ false, vFile)
+        }
         val document = runOnEdt { FileDocumentManager.getInstance().getDocument(vFile) }
             ?: return "Cannot read document for $filePath"
 
@@ -278,6 +284,11 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
         if (daemonRunning) return "IDE is still analysing the file — wait a moment and try again."
 
+        // Same disk-refresh as get_quick_fixes — keeps `document.lineCount` truthful when a peer
+        // tool wrote the file outside IntelliJ.
+        runOnEdt {
+            com.intellij.openapi.vfs.VfsUtil.markDirtyAndRefresh(/* async = */ false, /* recursive = */ false, /* reloadChildren = */ false, vFile)
+        }
         val document = runOnEdt { FileDocumentManager.getInstance().getDocument(vFile) }
             ?: return "Cannot read document for $filePath"
 

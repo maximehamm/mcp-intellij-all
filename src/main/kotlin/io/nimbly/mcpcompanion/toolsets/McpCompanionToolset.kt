@@ -221,12 +221,32 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         - newText: replacement text
         - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
     """)
-    suspend fun replace_text_undoable(pathInProject: String, oldText: String, newText: String, projectPath: String? = null): String {
+    // Defaults on `oldText`/`newText` work around a JetBrains MCP framework bug (observed 2026-05-12)
+    // where required-String parameter validation rejects multi-line Java payloads (~30 lines with
+    // generics + accents) as "No argument is passed for required parameter 'newText'", even though
+    // the JSON-RPC carries them correctly. Making the params optional lets the deserializer accept
+    // them; we then validate emptiness ourselves with a clearer error message.
+    suspend fun replace_text_undoable(pathInProject: String, oldText: String = "", newText: String = "", projectPath: String? = null): String {
         disabledMessage("replace_text_undoable")?.let { return it }
+        if (oldText.isEmpty()) return "error: oldText is empty — provide the exact text to find"
         val project = resolveProject(projectPath)
-        val (virtualFile, err) = resolveFilePathOrError(project, pathInProject)
+        // Refresh the file from disk before resolving. When the file was modified externally
+        // (e.g. by Claude's Edit tool writing directly to disk), IntelliJ's VFS cache holds the
+        // pre-change content, so `document.text.indexOf(oldText)` returns -1 or the wrong offset.
+        val refreshed = runOnEdt {
+            val (file, err) = resolveFilePathOrError(project, pathInProject)
+            if (err == null && file != null) {
+                com.intellij.openapi.vfs.VfsUtil.markDirtyAndRefresh(/* async = */ false, /* recursive = */ false, /* reloadChildren = */ false, file)
+            }
+            file to err
+        }
+        val (virtualFile, err) = refreshed
         if (err != null) return "error: $err"
         val document = runOnEdt {
+            // Reload from disk in case another writer modified the buffer just before us.
+            FileDocumentManager.getInstance().reloadFromDisk(
+                FileDocumentManager.getInstance().getDocument(virtualFile!!) ?: return@runOnEdt null
+            )
             FileDocumentManager.getInstance().getDocument(virtualFile!!)
         } ?: return "error: cannot open document for: $pathInProject"
         val offset = document.text.indexOf(oldText)
