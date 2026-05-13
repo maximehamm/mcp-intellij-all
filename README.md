@@ -64,6 +64,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `run_inspections` | Runs inspections on a file, folder, or whole project — works on closed files too; filter by inspection ID or severity |
 | `refresh_project` 🔬 | Sync Gradle or Maven build system — detects the build tool automatically from the project root |
 | `get_project_structure` | Returns SDK, modules, source roots, excluded folders, and module dependencies |
+| `get_psi_tree` 🔬 | Dump the PSI tree of a file as hierarchical text (class, token type, range, preview) — handy for debugging folding builders, annotators, intentions, refactorings |
 
 ### Database *(requires Database Tools and SQL plugin — IntelliJ IDEA Ultimate)*
 | Tool | Description |

@@ -177,6 +177,15 @@ def run_all(port):
         check("run_inspections", {"scope":"file","filePath":"scripts/debug_test_node.js"}, port, lambda t: (len(t) > 10, "too short")),
         check("refresh_project", {}, port, lambda t: (len(t) > 5, "too short")),
         check("get_project_structure", {}, port, is_json_with_keys("modules")),
+        # get_psi_tree on a real Java file: expect the hierarchical "Stats:" footer + at least
+        # one line range annotation. We use scripts/debug_test_node.js since it's a known file
+        # in the sandbox project.
+        check("get_psi_tree", {"filePath":"scripts/debug_test_node.js"}, port,
+              lambda t: (("Stats:" in t and ", L1" in t), "missing PSI tree format")),
+        check("get_psi_tree", {"filePath":"scripts/debug_test_node.js","line":1}, port,
+              lambda t: ("L1" in t, "missing L1 annotation when line=1")),
+        check("get_psi_tree", {"filePath":"definitely-nonexistent-file.xyz"}, port,
+              lambda t: (t.startswith("File not found:"), "should produce 'File not found:' error")),
     ]
 
     # Group 6 — Database

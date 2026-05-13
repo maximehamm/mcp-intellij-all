@@ -721,6 +721,155 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         return captureResponse(results.joinToString("\n"))
     }
 
+    // ── get_psi_tree ──────────────────────────────────────────────────────────
+
+    @McpTool(name = "get_psi_tree")
+    @McpDescription(description = """
+        Dumps the PSI tree of a file as a hierarchical text — element class, optional token type,
+        text range [start..end, L<startLine>..L<endLine>], and a short text preview per node.
+        Indispensable for debugging plugins that rely on the PSI (folding, annotators, intentions,
+        breakpoints, refactorings) without rebuilding the plugin.
+
+        Parameters:
+        - filePath: path of the file to inspect — relative to the project root (e.g. 'src/main/kotlin/Foo.kt') or absolute. The file must be part of the project / indexed by the IDE.
+        - line: optional 1-based line number — restricts the dump to the smallest PSI element covering that line. Defaults to dumping the whole file.
+        - maxDepth: max tree depth to traverse (default 20). Children past this depth are summarized as '... (N more children)'.
+        - maxNodes: max total nodes to emit (default 500). Stops the dump and appends a '… <truncated>' marker.
+        - includeWhitespace: include PsiWhiteSpace leaves (default false — usually noise).
+        - previewLength: chars of node text preview, escaped, between quotes (default 40; 0 = no preview).
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
+    """)
+    suspend fun get_psi_tree(
+        filePath: String,
+        line: Int = 0,
+        maxDepth: Int = 20,
+        maxNodes: Int = 500,
+        includeWhitespace: Boolean = false,
+        previewLength: Int = 40,
+        projectPath: String? = null,
+    ): String {
+        disabledMessage("get_psi_tree")?.let { return it }
+        val project = resolveProject(projectPath)
+        val vFile = resolveFilePath(project, filePath)
+            ?: return captureResponse("File not found: $filePath (resolved relative to ${project.basePath})")
+        return captureResponse(runReadAction {
+            val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
+                ?: return@runReadAction "PSI unavailable for $filePath. Is the file part of the project / indexed by the IDE?"
+            val document = FileDocumentManager.getInstance().getDocument(vFile)
+                ?: return@runReadAction "Cannot read document for $filePath"
+
+            // If `line` is set, narrow the root to the smallest PSI element that fully covers
+            // the requested line. We use the line's [start..end) range and walk up parents from
+            // the leaf at lineStart until one of them encloses the whole range.
+            val effectiveMaxDepth = if (maxDepth <= 0) 20 else maxDepth
+            val effectiveMaxNodes = if (maxNodes <= 0) 500 else maxNodes
+            val effectivePreview = previewLength.coerceAtLeast(0)
+            val rootElement: com.intellij.psi.PsiElement = if (line > 0) {
+                if (line > document.lineCount) {
+                    return@runReadAction "Line $line is out of range (file has ${document.lineCount} lines)"
+                }
+                val lineStart = document.getLineStartOffset(line - 1)
+                val lineEnd   = document.getLineEndOffset(line - 1)
+                val leaf = psiFile.findElementAt(lineStart) ?: psiFile
+                var cur: com.intellij.psi.PsiElement = leaf
+                while (cur.parent != null && (cur.textRange == null || cur.textRange.startOffset > lineStart || cur.textRange.endOffset < lineEnd)) {
+                    cur = cur.parent
+                }
+                cur
+            } else psiFile
+
+            val out = StringBuilder()
+            val state = PsiDumpState(
+                out = out,
+                document = document,
+                emitted = 0,
+                maxNodes = effectiveMaxNodes,
+                maxDepth = effectiveMaxDepth,
+                includeWhitespace = includeWhitespace,
+                previewLength = effectivePreview,
+                deepestEmitted = 0,
+                truncatedByNodes = false,
+            )
+            dumpPsiNode(state, rootElement, depth = 0)
+            // Footer stats — quick at-a-glance summary the caller can rely on.
+            out.append('\n')
+            out.append("Stats: ${state.emitted} nodes, depth max ${state.deepestEmitted}, file ${document.textLength} chars / ${document.lineCount} lines.")
+            if (state.truncatedByNodes) out.append(" Output truncated at maxNodes=$effectiveMaxNodes.")
+            out.toString()
+        })
+    }
+
+    /** Recursive walker — emits one line per node and tracks the limits accumulated in [state]. */
+    private fun dumpPsiNode(state: PsiDumpState, element: com.intellij.psi.PsiElement, depth: Int) {
+        if (state.truncatedByNodes) return
+        if (!state.includeWhitespace && element is com.intellij.psi.PsiWhiteSpace) return
+        if (state.emitted >= state.maxNodes) {
+            state.out.append("… <truncated>\n")
+            state.truncatedByNodes = true
+            return
+        }
+        appendPsiLine(state, element, depth)
+        state.emitted++
+        if (depth > state.deepestEmitted) state.deepestEmitted = depth
+        if (depth + 1 > state.maxDepth) {
+            val childCount = element.children.size
+            if (childCount > 0) {
+                state.out.append("  ".repeat(depth + 1))
+                state.out.append("... ($childCount more children)\n")
+            }
+            return
+        }
+        for (child in element.children) dumpPsiNode(state, child, depth + 1)
+    }
+
+    /** Formats one node as: `<indent><ClassName> [{tokenType}] [<start>..<end>, L<sL>..L<eL>] "<preview>"`. */
+    private fun appendPsiLine(state: PsiDumpState, element: com.intellij.psi.PsiElement, depth: Int) {
+        state.out.append("  ".repeat(depth))
+        state.out.append(element.javaClass.simpleName)
+
+        // Token type only makes sense for leaves — surface it because folding builders and
+        // annotators key off it.
+        if (element is com.intellij.psi.impl.source.tree.LeafPsiElement) {
+            state.out.append(" {").append(element.elementType.toString()).append('}')
+        }
+
+        // Named elements get their name appended in quotes — covers PsiClass/PsiMethod by virtue
+        // of PsiNamedElement, and most Gherkin/Markdown/Cucumber nodes that also implement it.
+        if (element is com.intellij.psi.PsiNamedElement) {
+            element.name?.takeIf { it.isNotBlank() }?.let { state.out.append(" \"").append(it).append('"') }
+        }
+
+        val tr = element.textRange
+        if (tr != null) {
+            val startLine = state.document.getLineNumber(tr.startOffset) + 1
+            val endLine   = state.document.getLineNumber(tr.endOffset.coerceAtMost(state.document.textLength)) + 1
+            state.out.append(" [").append(tr.startOffset).append("..").append(tr.endOffset)
+            if (startLine == endLine) state.out.append(", L").append(startLine)
+            else                       state.out.append(", L").append(startLine).append("..L").append(endLine)
+            state.out.append(']')
+        }
+
+        if (state.previewLength > 0) {
+            val raw = element.text ?: ""
+            val escaped = raw.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+            val preview = if (escaped.length > state.previewLength) escaped.take(state.previewLength) + "…" else escaped
+            state.out.append(" \"").append(preview).append('"')
+        }
+        state.out.append('\n')
+    }
+
+    private class PsiDumpState(
+        val out: StringBuilder,
+        val document: com.intellij.openapi.editor.Document,
+        var emitted: Int,
+        val maxNodes: Int,
+        val maxDepth: Int,
+        val includeWhitespace: Boolean,
+        val previewLength: Int,
+        var deepestEmitted: Int,
+        var truncatedByNodes: Boolean,
+    )
+
     // ── get_project_structure ─────────────────────────────────────────────────
 
     @McpTool(name = "get_project_structure")

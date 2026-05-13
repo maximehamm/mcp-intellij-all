@@ -114,6 +114,8 @@ class McpCompanionToolset : McpToolset {
 - refresh_project        → sync Gradle or Maven — detects the build system automatically
                            use after modifying build.gradle, pom.xml, or when dependencies drift
 - get_project_structure  → list modules, SDK, source roots, dependencies — call this first on a new project
+- get_psi_tree           → dump the PSI tree of a file as hierarchical text (class, token type, range, preview)
+                           use to debug folding builders, annotators, intentions, refactorings without rebuilding the plugin
 
 ### Database (requires Database Tools plugin — IntelliJ IDEA Ultimate)
 - list_database_sources   → list all configured data sources (name, URL, driver, user, dbms)

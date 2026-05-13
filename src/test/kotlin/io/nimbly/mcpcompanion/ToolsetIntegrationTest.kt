@@ -364,6 +364,100 @@ class ToolsetIntegrationTest : BasePlatformTestCase() {
         assertTrue("File should retain the Mockito.<AttachmentDto> generic", newText.contains("Mockito.<AttachmentDto>"))
     }
 
+    // ── 3.5.0: get_psi_tree ───────────────────────────────────────────────────
+
+    fun `test get_psi_tree produces a well-formed hierarchical dump with Stats footer`() {
+        // BasePlatformTestCase's minimal headless platform does NOT register a Java parser by
+        // default, so a Sample.java written to disk will be parsed as PsiPlainTextFile instead
+        // of PsiJavaFile. That's fine — this test focuses on the dump _format_ (indentation,
+        // ranges, line annotations, footer), not on PSI semantics; the latter are exercised
+        // end-to-end via the sandbox in real IDE conditions.
+        val baseDir = java.io.File(project.basePath!!)
+        baseDir.mkdirs()
+        val src = java.io.File(baseDir, "Sample.java")
+        src.writeText("class Sample {\n    int v = 42;\n    void hello() {}\n}\n")
+        invokeAndWaitIfNeeded {
+            com.intellij.openapi.vfs.LocalFileSystem.getInstance().refreshAndFindFileByPath(src.absolutePath)
+        }
+
+        val dump = kotlinx.coroutines.runBlocking {
+            McpCompanionCodeAnalysisToolset().get_psi_tree(
+                filePath = "Sample.java",
+                projectPath = project.basePath,
+            )
+        }
+        assertTrue("Dump should mention the file name in the root quoted preview, got:\n$dump",
+            dump.contains("\"Sample.java\""))
+        assertTrue("Dump should annotate range and line numbers (L1), got:\n$dump",
+            dump.contains(", L1"))
+        assertTrue("Dump should end with the Stats footer, got:\n$dump",
+            dump.contains("Stats: ") && dump.contains("nodes, depth max"))
+        assertTrue("Dump should include an offset range like [0..", dump.contains("[0.."))
+        // 2-space indentation: at least one inner node must start with "  ".
+        assertTrue("Dump should contain at least one indented child line, got:\n$dump",
+            dump.lineSequence().any { it.startsWith("  ") && it.isNotBlank() })
+    }
+
+    fun `test get_psi_tree accepts a valid line parameter without error`() {
+        // In the headless platform .txt files are parsed as PsiPlainText — a single leaf — so we
+        // can't observe a narrower root. We just verify that passing `line` doesn't fail and
+        // still produces a well-formed dump; semantic narrowing is exercised in the sandbox.
+        val baseDir = java.io.File(project.basePath!!)
+        baseDir.mkdirs()
+        val src = java.io.File(baseDir, "Narrow.txt")
+        src.writeText("line one\nline two\nline THREE marker\nline four\n")
+        invokeAndWaitIfNeeded {
+            com.intellij.openapi.vfs.LocalFileSystem.getInstance().refreshAndFindFileByPath(src.absolutePath)
+        }
+
+        val dump = kotlinx.coroutines.runBlocking {
+            McpCompanionCodeAnalysisToolset().get_psi_tree(
+                filePath = "Narrow.txt",
+                line = 3,
+                projectPath = project.basePath,
+            )
+        }
+        assertFalse("Valid line must not produce an out-of-range error, got:\n$dump",
+            dump.contains("out of range"))
+        assertTrue("Dump should still include the Stats footer, got:\n$dump",
+            dump.contains("Stats:"))
+    }
+
+    fun `test get_psi_tree reports out-of-range line clearly`() {
+        val baseDir = java.io.File(project.basePath!!)
+        baseDir.mkdirs()
+        val src = java.io.File(baseDir, "Short.txt")
+        src.writeText("only one line\n")
+        invokeAndWaitIfNeeded {
+            com.intellij.openapi.vfs.LocalFileSystem.getInstance().refreshAndFindFileByPath(src.absolutePath)
+        }
+
+        val result = kotlinx.coroutines.runBlocking {
+            McpCompanionCodeAnalysisToolset().get_psi_tree(
+                filePath = "Short.txt",
+                line = 999,
+                projectPath = project.basePath,
+            )
+        }
+        assertTrue(
+            "Out-of-range line must produce a clear error referencing the line and the file length, got: $result",
+            result.contains("out of range") && result.contains("999"),
+        )
+    }
+
+    fun `test get_psi_tree reports a clear error for a missing file`() {
+        val result = kotlinx.coroutines.runBlocking {
+            McpCompanionCodeAnalysisToolset().get_psi_tree(
+                filePath = "does-not-exist.feature",
+                projectPath = project.basePath,
+            )
+        }
+        assertTrue(
+            "Missing file should produce a clear error mentioning the path, got: $result",
+            result.startsWith("File not found:") && result.contains("does-not-exist.feature"),
+        )
+    }
+
     // ── Diagnostic ────────────────────────────────────────────────────────────
 
     fun `test collectRunningProcesses does not throw`() {
