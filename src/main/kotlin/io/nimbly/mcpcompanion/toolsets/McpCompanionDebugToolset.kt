@@ -9,6 +9,7 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.clientInfo
+import com.intellij.mcpserver.mcpCallInfoOrNull
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.xdebugger.XDebuggerManager
@@ -483,14 +484,27 @@ class McpCompanionDebugToolset : McpToolset {
 
     @McpTool(name = "start_run_configuration")
     @McpDescription(description = """
-        Launches a run configuration by name and returns immediately (non-blocking).
-        mode: "run" (default) or "debug".
-        configurationName: exact name from list_run_configurations.
+        Launches a run configuration by name.
+        - mode: "run" (default) or "debug".
+        - configurationName: exact name from list_run_configurations.
+        - waitForExit: if true, blocks until the process terminates (or `timeoutMs` elapses).
+          Default false — fire-and-forget, like before. When true, the response includes the
+          exit code and total elapsed time.
+        - timeoutMs: max wait when waitForExit=true (default 600_000 = 10 min). On timeout the
+          process keeps running; the call returns a "timed out" status. The Monitoring tool window
+          shows a live elapsed-time indicator and offers a right-click "Stop process" action while
+          the call is in progress.
         Use get_console_output to read output after launch.
 
         projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
     """)
-    suspend fun start_run_configuration(configurationName: String, mode: String = "run", projectPath: String? = null): String {
+    suspend fun start_run_configuration(
+        configurationName: String,
+        mode: String = "run",
+        waitForExit: Boolean = false,
+        timeoutMs: Long = 600_000L,
+        projectPath: String? = null,
+    ): String {
         disabledMessage("start_run_configuration")?.let { return it }
         val project = resolveProject(projectPath)
 
@@ -501,11 +515,15 @@ class McpCompanionDebugToolset : McpToolset {
         val executor = if (mode == "debug") DefaultDebugExecutor.getDebugExecutorInstance()
                        else DefaultRunExecutor.getRunExecutorInstance()
 
-        withContext(Dispatchers.EDT) {
-            ProgramRunnerUtil.executeConfiguration(project, settings, executor)
-        }
-
-        return captureResponse("Run configuration '$configurationName' started in $mode mode. Use get_console_output to follow output.")
+        return captureResponse(executeRunConfigurationAndOptionallyWait(
+            project = project,
+            settings = settings,
+            executor = executor,
+            label = "Run configuration '$configurationName' ($mode)",
+            waitForExit = waitForExit,
+            timeoutMs = timeoutMs,
+            fireAndForgetMessage = "Run configuration '$configurationName' started in $mode mode. Use get_console_output to follow output.",
+        ))
     }
 
     // ── modify_run_configuration ──────────────────────────────────────────────
@@ -584,14 +602,21 @@ class McpCompanionDebugToolset : McpToolset {
 
     @McpTool(name = "debug_run_configuration")
     @McpDescription(description = """
-        Launches a run configuration in debug mode and returns immediately.
-        Does NOT wait for completion — use get_debug_variables to check if stopped at a breakpoint,
-        or get_console_output to read console output.
-        configurationName: exact name of the run configuration (use get_run_configurations to list them).
+        Launches a run configuration in debug mode.
+        - configurationName: exact name of the run configuration (use list_run_configurations to list them).
+        - waitForExit: if true, blocks until the debugged process terminates (or `timeoutMs` elapses).
+          Default false — returns immediately, letting the AI hit breakpoints with get_debug_variables.
+        - timeoutMs: max wait when waitForExit=true (default 600_000 = 10 min). On timeout the
+          process keeps running; the call returns a "timed out" status.
 
         projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
     """)
-    suspend fun debug_run_configuration(configurationName: String, projectPath: String? = null): String {
+    suspend fun debug_run_configuration(
+        configurationName: String,
+        waitForExit: Boolean = false,
+        timeoutMs: Long = 600_000L,
+        projectPath: String? = null,
+    ): String {
         disabledMessage("debug_run_configuration")?.let { return it }
         val project = resolveProject(projectPath)
 
@@ -599,11 +624,111 @@ class McpCompanionDebugToolset : McpToolset {
             com.intellij.execution.RunManager.getInstance(project).findConfigurationByName(configurationName)
         } ?: return "Configuration '$configurationName' not found"
 
-        withContext(Dispatchers.EDT) {
-            ProgramRunnerUtil.executeConfiguration(project, settings, DefaultDebugExecutor.getDebugExecutorInstance())
+        return captureResponse(executeRunConfigurationAndOptionallyWait(
+            project = project,
+            settings = settings,
+            executor = DefaultDebugExecutor.getDebugExecutorInstance(),
+            label = "Debug session for '$configurationName'",
+            waitForExit = waitForExit,
+            timeoutMs = timeoutMs,
+            fireAndForgetMessage = "Debug session started for '$configurationName'. Use get_debug_variables to inspect variables if stopped at a breakpoint.",
+        ))
+    }
+
+    /**
+     * Shared launcher for start_run_configuration and debug_run_configuration.
+     *
+     * When `waitForExit` is false, behaves like the previous code: kicks off the configuration
+     * on the EDT and returns the canned [fireAndForgetMessage] immediately.
+     *
+     * When `waitForExit` is true, subscribes to [com.intellij.execution.ExecutionManager.EXECUTION_TOPIC]
+     * BEFORE launching so we don't miss the `processStarted` event for fast-failing processes,
+     * captures the resulting `ProcessHandler`, registers it on our [McpCompanionSettings] running-
+     * process registry (so the Monitoring tool window can offer a "Stop process" action), then
+     * `waitFor(timeoutMs)`s the handler. The registry entry is always cleared in a `finally`.
+     */
+    private suspend fun executeRunConfigurationAndOptionallyWait(
+        project: com.intellij.openapi.project.Project,
+        settings: com.intellij.execution.RunnerAndConfigurationSettings,
+        executor: com.intellij.execution.Executor,
+        label: String,
+        waitForExit: Boolean,
+        timeoutMs: Long,
+        fireAndForgetMessage: String,
+    ): String {
+        if (!waitForExit) {
+            withContext(Dispatchers.EDT) {
+                ProgramRunnerUtil.executeConfiguration(project, settings, executor)
+            }
+            return fireAndForgetMessage
         }
 
-        return captureResponse("Debug session started for '$configurationName'. Use get_debug_variables to inspect variables if stopped at a breakpoint.")
+        val callId = runCatching {
+            coroutineContext.mcpCallInfoOrNull?.callId
+        }.getOrNull() ?: -1
+
+        val handlerLatch = CountDownLatch(1)
+        val terminatedLatch = CountDownLatch(1)
+        val handlerRef = java.util.concurrent.atomic.AtomicReference<com.intellij.execution.process.ProcessHandler?>(null)
+        val exitCodeRef = java.util.concurrent.atomic.AtomicInteger(Int.MIN_VALUE)
+
+        val configName = settings.configuration.name
+        val connection = project.messageBus.connect()
+        try {
+            connection.subscribe(
+                com.intellij.execution.ExecutionManager.EXECUTION_TOPIC,
+                object : com.intellij.execution.ExecutionListener {
+                    override fun processStarted(
+                        executorIdLocal: String,
+                        env: com.intellij.execution.runners.ExecutionEnvironment,
+                        handler: com.intellij.execution.process.ProcessHandler,
+                    ) {
+                        // Filter on configuration name to avoid latching the wrong handler when
+                        // several configs start concurrently. The framework guarantees one event
+                        // per launch, so this is safe.
+                        if (env.runProfile.name != configName) return
+                        if (handlerRef.compareAndSet(null, handler)) {
+                            handler.addProcessListener(object : com.intellij.execution.process.ProcessAdapter() {
+                                override fun processTerminated(event: com.intellij.execution.process.ProcessEvent) {
+                                    exitCodeRef.set(event.exitCode)
+                                    terminatedLatch.countDown()
+                                }
+                            })
+                            handlerLatch.countDown()
+                        }
+                    }
+                },
+            )
+
+            withContext(Dispatchers.EDT) {
+                ProgramRunnerUtil.executeConfiguration(project, settings, executor)
+            }
+
+            // Give the framework up to 30s to wire up the ProcessHandler. Slow IDE startups
+            // (large projects, debug initialization) can delay processStarted.
+            val started = handlerLatch.await(30, TimeUnit.SECONDS)
+            if (!started) return "$label launched, but no ProcessHandler was reported within 30s. The run keeps running in the IDE; check the run tool window."
+
+            val handler = handlerRef.get()!!
+            val startNanos = System.nanoTime()
+            McpCompanionSettings.getInstance().registerCancelHandler(callId) {
+                runCatching { handler.destroyProcess() }
+            }
+            try {
+                val finished = terminatedLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+                val elapsedMs = (System.nanoTime() - startNanos) / 1_000_000
+                return if (finished) {
+                    val exit = exitCodeRef.get()
+                    "$label finished — exit code $exit (${elapsedMs} ms)"
+                } else {
+                    "$label still running after ${elapsedMs} ms (timeoutMs=$timeoutMs). The process was NOT killed; stop it via the Monitoring tool window or the IDE's run UI."
+                }
+            } finally {
+                McpCompanionSettings.getInstance().unregisterCancelHandler(callId)
+            }
+        } finally {
+            connection.disconnect()
+        }
     }
 
     internal fun resolveDebugVariable(name: String, xValue: XValue): DebugVariable {

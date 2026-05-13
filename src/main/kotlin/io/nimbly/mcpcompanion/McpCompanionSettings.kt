@@ -107,6 +107,28 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     fun removeCallRecordListener(listener: () -> Unit) { callRecordListeners.remove(listener) }
     private fun fireCallRecordsChanged() = callRecordListeners.forEach { runCatching { it() } }
 
+    /**
+     * Per-callId cancel handlers. Tools that can be cancelled mid-flight (start_run_configuration
+     * with waitForExit=true, etc.) register a closure here so the Monitoring tool window can offer
+     * a "Stop" right-click action. The handler is invoked once and cleared by the tool itself in a
+     * `finally`. -1 is reserved for calls without a callId — they cannot be stopped.
+     */
+    private val cancelHandlers = java.util.concurrent.ConcurrentHashMap<Int, () -> Unit>()
+    fun registerCancelHandler(callId: Int, handler: () -> Unit) {
+        if (callId != -1) cancelHandlers[callId] = handler
+        fireCallRecordsChanged()
+    }
+    fun unregisterCancelHandler(callId: Int) {
+        cancelHandlers.remove(callId)
+        fireCallRecordsChanged()
+    }
+    fun hasCancelHandler(callId: Int): Boolean = cancelHandlers.containsKey(callId)
+    fun cancelCall(callId: Int): Boolean {
+        val handler = cancelHandlers[callId] ?: return false
+        runCatching { handler() }
+        return true
+    }
+
     /** Called by [McpCompanionToolCallListener] BEFORE each tool invocation. */
     fun recordCallStart(callId: Int, toolName: String, parametersJson: String, client: String?, projectPath: String? = null) {
         // Persist the (untruncated) parameters to disk; the in-memory CallRecord stays lightweight.

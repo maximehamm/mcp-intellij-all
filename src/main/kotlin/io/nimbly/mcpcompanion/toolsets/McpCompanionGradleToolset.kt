@@ -5,6 +5,7 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.clientInfo
+import com.intellij.mcpserver.mcpCallInfoOrNull
 import com.intellij.openapi.externalSystem.importing.ImportSpecBuilder
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
@@ -124,7 +125,19 @@ class McpCompanionGradleToolset : McpToolset {
                     ProgressExecutionMode.IN_BACKGROUND_ASYNC
                 )
 
-                val finished = latch.await(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+                // Register a cancel handler so the Monitoring tool window can stop this build
+                // mid-flight via the toolbar Stop button. The handler delegates to the same
+                // cancellation path as stop_gradle_task (ExternalSystemProcessingManager + the
+                // Run/Build process handlers). Cleared in finally below.
+                val callId = runCatching { coroutineContext.mcpCallInfoOrNull?.callId }.getOrNull() ?: -1
+                McpCompanionSettings.getInstance().registerCancelHandler(callId) {
+                    runCatching { cancelRunningGradleTasks(project) }
+                }
+                val finished = try {
+                    latch.await(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+                } finally {
+                    McpCompanionSettings.getInstance().unregisterCancelHandler(callId)
+                }
                 val durationMs = System.currentTimeMillis() - started
 
                 Json.encodeToString(
@@ -388,36 +401,7 @@ class McpCompanionGradleToolset : McpToolset {
 
         return captureResponse(withContext(Dispatchers.IO) {
             try {
-                val pm = ExternalSystemProcessingManager.getInstance()
-                // 1) Cancel via ExternalSystemProcessingManager (covers tasks tracked there).
-                val tracked = pm.findTasksOfState(
-                    GradleConstants.SYSTEM_ID,
-                    ExternalSystemTaskState.NOT_STARTED,
-                    ExternalSystemTaskState.IN_PROGRESS
-                )
-                var cancelled = 0
-                for (task in tracked) {
-                    if (task.cancel()) cancelled++
-                }
-
-                // 2) Also stop any running Gradle process via the standard Run/Build tool windows.
-                //    ExternalSystemUtil.runTask routes through the Run system, so the process handler
-                //    is the most reliable cancel point for builds initiated by run_gradle_task.
-                var killedProcesses = 0
-                try {
-                    val em = com.intellij.execution.ExecutionManager.getInstance(project)
-                    val running = em.getRunningProcesses()
-                    for (handler in running) {
-                        if (handler.isProcessTerminated || handler.isProcessTerminating) continue
-                        // Identify Gradle processes via the CommandLineInfo system property or class name heuristic.
-                        val name = handler.javaClass.name
-                        if ("Gradle" in name || "External" in name || handler.toString().contains("gradle", ignoreCase = true)) {
-                            handler.destroyProcess()
-                            killedProcesses++
-                        }
-                    }
-                } catch (_: Throwable) { /* fall through */ }
-
+                val (cancelled, killedProcesses) = cancelRunningGradleTasks(project)
                 val total = cancelled + killedProcesses
                 if (total == 0) "No running Gradle task to cancel."
                 else "Cancelled $total Gradle task(s) ($cancelled tracked + $killedProcesses process(es))."
@@ -524,6 +508,45 @@ class McpCompanionGradleToolset : McpToolset {
             // distributionUrl example: https\://services.gradle.org/distributions/gradle-9.3.0-bin.zip
             Regex("gradle-([0-9.]+(?:-[a-z0-9]+)?)-(?:bin|all)\\.zip").find(url)?.groupValues?.get(1)
         } catch (_: Exception) { null }
+    }
+
+    /**
+     * Cancels every in-flight Gradle task tracked by IntelliJ for [project], plus any lingering
+     * process handlers that look like a Gradle build. Used both by [stop_gradle_task] and by the
+     * cancel-handler registered in [run_gradle_task] (which surfaces a Stop button in the
+     * Monitoring tool window when a build is in progress).
+     *
+     * Returns a pair `(tracked-tasks-cancelled, processes-killed)`.
+     */
+    internal fun cancelRunningGradleTasks(project: com.intellij.openapi.project.Project): Pair<Int, Int> {
+        val pm = ExternalSystemProcessingManager.getInstance()
+        // 1) Cancel via ExternalSystemProcessingManager (covers tasks tracked there).
+        val tracked = pm.findTasksOfState(
+            GradleConstants.SYSTEM_ID,
+            ExternalSystemTaskState.NOT_STARTED,
+            ExternalSystemTaskState.IN_PROGRESS,
+        )
+        var cancelled = 0
+        for (task in tracked) {
+            if (task.cancel()) cancelled++
+        }
+        // 2) Also stop any running Gradle process via the standard Run/Build tool windows.
+        //    ExternalSystemUtil.runTask routes through the Run system, so the process handler
+        //    is the most reliable cancel point for builds initiated by run_gradle_task.
+        var killedProcesses = 0
+        try {
+            val em = com.intellij.execution.ExecutionManager.getInstance(project)
+            val running = em.getRunningProcesses()
+            for (handler in running) {
+                if (handler.isProcessTerminated || handler.isProcessTerminating) continue
+                val name = handler.javaClass.name
+                if ("Gradle" in name || "External" in name || handler.toString().contains("gradle", ignoreCase = true)) {
+                    handler.destroyProcess()
+                    killedProcesses++
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+        return cancelled to killedProcesses
     }
 }
 

@@ -193,7 +193,13 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
     }
 
     private val refreshListener: () -> Unit = {
-        ApplicationManager.getApplication().invokeLater(::refreshFromSettings)
+        ApplicationManager.getApplication().invokeLater {
+            refreshFromSettings()
+            // Toolbar must also re-evaluate on RUNNING → SUCCESS/ERROR transitions and on
+            // cancel-handler register/unregister events so the Stop button hides immediately
+            // when the call finishes.
+            runCatching { if (::toolbarRef.isInitialized) toolbarRef.updateActionsAsync() }
+        }
     }
 
     /** Holder for the currently active layout — replaced when toggles change. */
@@ -202,21 +208,40 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
     /** Reference to the details splitter (only used in "separate" mode); null in "grouped" mode. */
     private var detailsSplitter: JBSplitter? = null
 
+    /** 1 Hz repaint timer — keeps the elapsed-time column live while any call is RUNNING.
+     *  We only repaint (cheap) instead of refreshing the model — list contents don't change. */
+    private val elapsedTimer = javax.swing.Timer(1_000) { _ ->
+        if (model.elements().toList().any { it.status == McpCompanionSettings.CallRecord.Status.RUNNING }) {
+            list.repaint()
+        }
+    }.apply { isRepeats = true }
+
+    /** Stored to call `updateActionsAsync()` when our state changes (list selection, call status
+     *  transitions, cancel handler registration). Without explicit updates the action's `update`
+     *  fires on a slow internal poll which lags badly behind RUNNING → SUCCESS transitions. */
+    private lateinit var toolbarRef: com.intellij.openapi.actionSystem.ActionToolbar
+
     init {
         background = UIUtil.getListBackground()
         // SimpleToolWindowPanel: place toolbar in the tool window header strip (no double separator),
         // and the list/details splitter as the main content.
         val tb = buildToolbar()
+        toolbarRef = tb
         toolbar = tb.component
         setContent(centerHolder)
         rebuildLayout()
         preferredSize = Dimension(600, 500)
         refreshFromSettings()
         McpCompanionSettings.getInstance().addCallRecordListener(refreshListener)
+        // Re-evaluate StopAction visibility on selection changes — otherwise the button only
+        // appears/disappears on the action toolbar's internal poll (which is sluggish).
+        list.addListSelectionListener { runCatching { toolbarRef.updateActionsAsync() } }
+        elapsedTimer.start()
     }
 
     private fun buildToolbar(): com.intellij.openapi.actionSystem.ActionToolbar {
         val group = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
+            add(StopAction())  // visible ONLY when the focused call is RUNNING and cancellable
             add(ClearAction())
             add(ResetFilterAction())
             addSeparator()
@@ -287,6 +312,7 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
 
     fun dispose() {
         McpCompanionSettings.getInstance().removeCallRecordListener(refreshListener)
+        elapsedTimer.stop()
         EditorFactory.getInstance().releaseEditor(parametersEditor)
         EditorFactory.getInstance().releaseEditor(responseEditor)
         EditorFactory.getInstance().releaseEditor(errorsEditor)
@@ -356,6 +382,18 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
 
         val showResponseErrors = r != null && r.isOwnTool
         if (groupedMode) {
+            // For "other" tools we don't capture the response (the JetBrains MCP framework doesn't
+            // expose return values to side observers), so the Response and Errors tabs would be
+            // empty and confusing. Rebuild the tab set on the fly so only relevant tabs appear.
+            val expectedTabCount = if (showResponseErrors) 3 else 1
+            if (groupedTabbedPane.tabCount != expectedTabCount) {
+                groupedTabbedPane.removeAll()
+                groupedTabbedPane.addTab("Parameters", parametersEditor.component)
+                if (showResponseErrors) {
+                    groupedTabbedPane.addTab("Response", responseEditor.component)
+                    groupedTabbedPane.addTab("Errors", errorsEditor.component)
+                }
+            }
             // Auto-switch to Errors tab WHEN the new record has an error — otherwise leave
             // whatever tab the user was on (don't yank them off Parameters or Response on each
             // selection change).
@@ -382,6 +420,34 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
     }
 
     // ── Toolbar actions ───────────────────────────────────────────────────
+
+    /**
+     * Stops the call currently selected in the list — only visible when that call is
+     * (a) RUNNING and (b) has registered a cancel handler. The button disappears entirely
+     * (`isVisible = false`) the moment either condition stops being true, so the toolbar
+     * stays decluttered the rest of the time. See feature request 2026-05-13.
+     */
+    private inner class StopAction : com.intellij.openapi.actionSystem.AnAction(
+        "Stop", "Cancel the selected MCP call (kills the underlying process)",
+        com.intellij.icons.AllIcons.Actions.Suspend,
+    ) {
+        override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            val record = list.selectedValue ?: return
+            McpCompanionSettings.getInstance().cancelCall(record.callId)
+        }
+        override fun update(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            val record = list.selectedValue
+            val cancellable = record != null &&
+                record.status == McpCompanionSettings.CallRecord.Status.RUNNING &&
+                McpCompanionSettings.getInstance().hasCancelHandler(record.callId)
+            e.presentation.isVisible = cancellable
+            e.presentation.isEnabled = cancellable
+            if (cancellable && record != null) {
+                e.presentation.text = "Stop \"${record.toolName}\""
+            }
+        }
+        override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+    }
 
     private inner class ClearAction : com.intellij.openapi.actionSystem.AnAction(
         "Clear", "Clear all recorded MCP calls (in-memory + on-disk)",
@@ -546,7 +612,11 @@ private class CallRecordRenderer : JPanel(), ListCellRenderer<McpCompanionSettin
             McpCompanionSettings.CallRecord.Status.ERROR -> "✗"
         }
         val time = timeFormat.format(Date(value.startedAtMillis))
-        val durationStr = value.durationMs?.let { formatMs(it) } ?: "running…"
+        // For finished calls: show the recorded duration. For running calls: show LIVE elapsed time
+        // since start, so the user can see how long a long-running tool has been blocking. The
+        // panel triggers a 1 Hz repaint while any call is RUNNING (see startElapsedRefreshTimer).
+        val durationStr = value.durationMs?.let { formatMs(it) }
+            ?: formatMs((System.nanoTime() - value.startedNanos) / 1_000_000) + "…"
         val ownership = if (value.isOwnTool) "" else " (other)"
 
         statusTimeLabel.text = "<html><nobr>$statusIcon&nbsp;<code>$time</code></nobr></html>"
