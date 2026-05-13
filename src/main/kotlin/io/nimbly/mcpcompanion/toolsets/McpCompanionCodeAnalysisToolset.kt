@@ -725,18 +725,22 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
 
     @McpTool(name = "get_psi_tree")
     @McpDescription(description = """
-        Dumps the PSI tree of a file as a hierarchical text — element class, optional token type,
-        text range [start..end, L<startLine>..L<endLine>], and a short text preview per node.
-        Indispensable for debugging plugins that rely on the PSI (folding, annotators, intentions,
-        breakpoints, refactorings) without rebuilding the plugin.
+        Dumps the PSI tree of a file as a hierarchical text — element class, token type, text range
+        [start..end, L<startLine>..L<endLine>], and a short text preview per node. Indispensable
+        for debugging plugins that rely on the PSI (folding, annotators, intentions, breakpoints,
+        refactorings) without rebuilding the plugin.
+
+        All children are surfaced, including LeafPsiElement nodes (TEXT, KEYWORD, IDENTIFIER, etc.)
+        — they're exactly what annotators and folding builders key off. Composites also display
+        their AST elementType when distinct from the class name.
 
         Parameters:
         - filePath: path of the file to inspect — relative to the project root (e.g. 'src/main/kotlin/Foo.kt') or absolute. The file must be part of the project / indexed by the IDE.
-        - line: optional 1-based line number — restricts the dump to the smallest PSI element covering that line. Defaults to dumping the whole file.
+        - line: optional 1-based line number — restricts the dump to the smallest PSI element covering that line, AND dumps its full subtree (descendants up to maxDepth). Defaults to dumping the whole file.
         - maxDepth: max tree depth to traverse (default 20). Children past this depth are summarized as '... (N more children)'.
         - maxNodes: max total nodes to emit (default 500). Stops the dump and appends a '… <truncated>' marker.
-        - includeWhitespace: include PsiWhiteSpace leaves (default false — usually noise).
-        - previewLength: chars of node text preview, escaped, between quotes (default 40; 0 = no preview).
+        - includeWhitespace: include PsiWhiteSpace leaves too (default false — usually noise). Non-whitespace leaves are always shown.
+        - previewLength: chars of node text preview, escaped, between quotes (default 40; 0 = no preview — useful for a compact structural overview).
         - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
     """)
     suspend fun get_psi_tree(
@@ -812,14 +816,31 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         state.emitted++
         if (depth > state.deepestEmitted) state.deepestEmitted = depth
         if (depth + 1 > state.maxDepth) {
-            val childCount = element.children.size
+            val childCount = countAllChildren(element)
             if (childCount > 0) {
                 state.out.append("  ".repeat(depth + 1))
                 state.out.append("... ($childCount more children)\n")
             }
             return
         }
-        for (child in element.children) dumpPsiNode(state, child, depth + 1)
+        // IMPORTANT: walk via firstChild / nextSibling. `PsiElement.getChildren()` (which Kotlin
+        // exposes as `.children`) returns ONLY composite children — it intentionally filters out
+        // LeafPsiElement. That's wrong for a debugging dump: the leaves are exactly what annotators,
+        // folding builders, and inspections key off, so we must surface them. See improvement
+        // requests #1 & #2 (2026-05-13).
+        var child: com.intellij.psi.PsiElement? = element.firstChild
+        while (child != null) {
+            dumpPsiNode(state, child, depth + 1)
+            child = child.nextSibling
+        }
+    }
+
+    /** Counts ALL siblings under [element] — including leaves — via firstChild/nextSibling. */
+    private fun countAllChildren(element: com.intellij.psi.PsiElement): Int {
+        var n = 0
+        var c = element.firstChild
+        while (c != null) { n++; c = c.nextSibling }
+        return n
     }
 
     /** Formats one node as: `<indent><ClassName> [{tokenType}] [<start>..<end>, L<sL>..L<eL>] "<preview>"`. */
@@ -827,11 +848,17 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         state.out.append("  ".repeat(depth))
         state.out.append(element.javaClass.simpleName)
 
-        // Token type only makes sense for leaves — surface it because folding builders and
-        // annotators key off it.
-        if (element is com.intellij.psi.impl.source.tree.LeafPsiElement) {
-            state.out.append(" {").append(element.elementType.toString()).append('}')
+        // Token type — leaves expose it directly via LeafPsiElement.elementType; for composites
+        // we read it through the AST node. Surfacing the elementType on composites too is useful
+        // for languages where the PSI class name doesn't map 1:1 to the grammar token (improvement
+        // request #3, 2026-05-13). We skip it for the PsiFile root since it's noisy (always
+        // matches the file type) and PsiErrorElement (its message is more informative).
+        val elementType: String? = when (element) {
+            is com.intellij.psi.impl.source.tree.LeafPsiElement -> element.elementType.toString()
+            is com.intellij.psi.PsiFile -> null
+            else -> runCatching { element.node?.elementType?.toString() }.getOrNull()
         }
+        if (elementType != null) state.out.append(" {").append(elementType).append('}')
 
         // Named elements get their name appended in quotes — covers PsiClass/PsiMethod by virtue
         // of PsiNamedElement, and most Gherkin/Markdown/Cucumber nodes that also implement it.
