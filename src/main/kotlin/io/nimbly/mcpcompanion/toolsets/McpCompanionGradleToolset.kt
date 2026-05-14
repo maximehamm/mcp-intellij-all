@@ -243,15 +243,24 @@ class McpCompanionGradleToolset : McpToolset {
         Call this after editing build.gradle / build.gradle.kts / settings.gradle (added a
         dependency, plugin, …) so IntelliJ picks up the changes.
 
-        Returns immediately after triggering the sync — the actual import happens asynchronously
-        in the background; watch the Build / Sync tool window for progress.
+        By default returns immediately after triggering the sync — the actual import happens
+        asynchronously in the background. Pass `waitForSync=true` to block until the sync
+        finishes, which lets the AI safely call follow-up tools (get_gradle_dependencies,
+        get_project_structure, …) without racing the import. A Stop button appears in the
+        Monitoring tool window while the call is in-flight.
 
-        gradleProjectPath: absolute path of a specific linked Gradle project. If omitted,
-        all linked Gradle projects are refreshed.
-
-        projectPath: absolute path of the target IntelliJ project's root — defaults to the currently-focused project.
+        Parameters:
+        - gradleProjectPath: absolute path of a specific linked Gradle project. If omitted, all linked Gradle projects are refreshed.
+        - waitForSync: if true, blocks until every triggered re-sync ends (success or failure). Default false.
+        - timeoutMs: max wait when waitForSync=true (default 120_000 = 2 min). On timeout the sync keeps running.
+        - projectPath: absolute path of the target IntelliJ project's root — defaults to the currently-focused project.
     """)
-    suspend fun refresh_gradle_project(gradleProjectPath: String? = null, projectPath: String? = null): String {
+    suspend fun refresh_gradle_project(
+        gradleProjectPath: String? = null,
+        waitForSync: Boolean = false,
+        timeoutMs: Long = 120_000L,
+        projectPath: String? = null,
+    ): String {
         disabledMessage("refresh_gradle_project")?.let { return it }
         val project = resolveProject(projectPath)
 
@@ -265,14 +274,62 @@ class McpCompanionGradleToolset : McpToolset {
                 if (roots.isEmpty())
                     return@withContext "No linked Gradle project in '${project.name}'."
 
-                for (root in roots) {
-                    ExternalSystemUtil.refreshProject(
-                        root,
-                        ImportSpecBuilder(project, GradleConstants.SYSTEM_ID)
-                            .use(ProgressExecutionMode.IN_BACKGROUND_ASYNC)
-                    )
+                if (!waitForSync) {
+                    for (root in roots) {
+                        ExternalSystemUtil.refreshProject(
+                            root,
+                            ImportSpecBuilder(project, GradleConstants.SYSTEM_ID)
+                                .use(ProgressExecutionMode.IN_BACKGROUND_ASYNC),
+                        )
+                    }
+                    return@withContext "Triggered Gradle re-sync for ${roots.size} project(s): ${roots.joinToString(", ")}. Watch the Build tool window for progress."
                 }
-                "Triggered Gradle re-sync for ${roots.size} project(s): ${roots.joinToString(", ")}. Watch the Build tool window for progress."
+
+                // waitForSync=true: register an ExternalProjectRefreshCallback per root and
+                // count down a latch when each one ends. A Stop button is wired up via the
+                // standard cancel-handler registry so the user can abort from the Monitoring UI.
+                val callId = runCatching { coroutineContext.mcpCallInfoOrNull?.callId }.getOrNull() ?: -1
+                val latch = CountDownLatch(roots.size)
+                val outcomes = java.util.concurrent.ConcurrentLinkedQueue<String>()
+                val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+
+                McpCompanionSettings.getInstance().registerCancelHandler(callId) {
+                    cancelled.set(true)
+                    runCatching { cancelRunningGradleTasks(project) }
+                    while (latch.count > 0) latch.countDown()
+                }
+
+                try {
+                    val started = System.currentTimeMillis()
+                    for (root in roots) {
+                        val callback = object : com.intellij.openapi.externalSystem.service.project.ExternalProjectRefreshCallback {
+                            override fun onSuccess(externalProject: com.intellij.openapi.externalSystem.model.DataNode<com.intellij.openapi.externalSystem.model.project.ProjectData>?) {
+                                outcomes.add("✓ $root")
+                                latch.countDown()
+                            }
+                            override fun onFailure(errorMessage: String, errorDetails: String?) {
+                                outcomes.add("✗ $root: $errorMessage")
+                                latch.countDown()
+                            }
+                        }
+                        ExternalSystemUtil.refreshProject(
+                            root,
+                            ImportSpecBuilder(project, GradleConstants.SYSTEM_ID)
+                                .use(ProgressExecutionMode.IN_BACKGROUND_ASYNC)
+                                .callback(callback),
+                        )
+                    }
+
+                    val finished = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+                    val elapsedMs = System.currentTimeMillis() - started
+                    when {
+                        cancelled.get() -> "Gradle sync cancelled after ${elapsedMs} ms. Outcomes so far:\n" + outcomes.joinToString("\n")
+                        !finished -> "Gradle sync still running after ${elapsedMs} ms (timeoutMs=$timeoutMs). Outcomes so far:\n" + outcomes.joinToString("\n")
+                        else -> "Gradle sync completed for ${roots.size} project(s) in ${elapsedMs} ms:\n" + outcomes.joinToString("\n")
+                    }
+                } finally {
+                    McpCompanionSettings.getInstance().unregisterCancelHandler(callId)
+                }
             } catch (e: Exception) {
                 "Error refreshing Gradle project: ${e.javaClass.simpleName}: ${e.message}"
             }

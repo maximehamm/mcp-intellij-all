@@ -28,17 +28,17 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `get_services_output` ⚠️ | Services tool window sessions: SQL output log, result grids, active session/tab indicated |
 | `get_test_results` 🔬 | Last test run results: passed/failed/ignored status, duration, and failure messages |
 | `get_terminal_output` 🔬 | Content of all tabs in the embedded Terminal tool window |
-| `send_to_terminal` 🔬 🔒 | Send a command to a terminal tab and execute it |
+| `send_to_terminal` 🔬 🔒 | Send a command to a terminal tab and execute it. Optional `waitForIdle=true` (+ `timeoutMs`, `idleQuietMs`) blocks until the terminal output stops changing |
 
 ### Debug
 | Tool | Description |
 |------|-------------|
 | `list_run_configurations` | Lists all run configurations with name, type, folder, and running status |
-| `start_run_configuration` | Launches a named run configuration in run or debug mode |
+| `start_run_configuration` | Launches a named run configuration in run or debug mode. Optional `waitForExit=true` (+ `timeoutMs`) blocks until the process terminates and returns the exit code |
 | `modify_run_configuration` | Modifies VM options, program arguments, env vars, or working dir of a run configuration |
 | `get_run_configuration_xml` | Returns the full XML definition of a run configuration |
 | `create_run_configuration_from_xml` | Creates a new run configuration from an XML definition (any type) |
-| `debug_run_configuration` 🔬 | Launches a run configuration in debug mode |
+| `debug_run_configuration` 🔬 | Launches a run configuration in debug mode. Optional `waitForExit=true` (+ `timeoutMs`) blocks until the debugged process exits |
 | `get_debug_variables` 🔬 | Local variables and values from the current debugger stack frame |
 | `get_breakpoints` | Lists all line breakpoints with file, line, enabled state, and condition |
 | `add_conditional_breakpoint` | Adds a breakpoint with an optional condition expression |
@@ -62,7 +62,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `apply_quick_fix` | Applies a quick fix by exact text at a given line (use fixes returned by get_file_problems or get_quick_fixes) |
 | `list_inspections` | Lists all available inspections in the current profile, optionally filtered to a file or folder |
 | `run_inspections` | Runs inspections on a file, folder, or whole project — works on closed files too; filter by inspection ID or severity |
-| `refresh_project` 🔬 | Sync Gradle or Maven build system — detects the build tool automatically from the project root |
+| `refresh_project` 🔬 | Sync Gradle or Maven build system — detects the build tool automatically from the project root. Optional `waitForSync=true` (+ `timeoutMs`) blocks until import ends |
 | `get_project_structure` | Returns SDK, modules, source roots, excluded folders, and module dependencies |
 | `get_psi_tree` 🔬 | Dump the PSI tree of a file as hierarchical text (class, token type, range, preview) — handy for debugging folding builders, annotators, intentions, refactorings |
 
@@ -78,7 +78,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 |------|-------------|
 | `run_gradle_task` | Executes one or more Gradle tasks and returns a structured result (status, duration, gradleProjectPath) |
 | `get_gradle_tasks` | Lists Gradle tasks discovered by IntelliJ, grouped by category (build, verification, help, …) |
-| `refresh_gradle_project` | Forces a Gradle re-sync (equivalent of the 🔄 button in the Gradle tool window) |
+| `refresh_gradle_project` | Forces a Gradle re-sync (equivalent of the 🔄 button in the Gradle tool window). Optional `waitForSync=true` (+ `timeoutMs`) blocks until import ends |
 | `get_gradle_dependencies` | Imported dependency tree per module with resolved versions and scopes |
 | `stop_gradle_task` | Cancels all currently-running Gradle tasks |
 | `get_gradle_project_info` | Wrapper version, JDK used, list of subprojects with paths, source sets — for monorepo reasoning |

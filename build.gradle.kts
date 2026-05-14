@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.5.1"
+version = "3.6.0"
 
 repositories {
     mavenCentral()
@@ -48,6 +48,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.6.0</b> — Optional <code>waitForExit</code> / <code>waitForSync</code> / <code>waitForIdle</code> params on long-running tools (run configs, refresh, terminal). Monitoring tool window gains live elapsed time and a <kbd>Stop</kbd> button. Sync-capable tools flagged with ⏱ in Settings.</li>
                 <li><b>3.5.0</b> — New <code>get_psi_tree</code> tool — dumps the PSI tree of any file as hierarchical text with element classes, token types, ranges and previews. Lets the AI debug folding builders, annotators, intentions and refactorings without rebuilding the plugin.</li>
                 <li><b>3.4.0</b> — New <code>vcs_move_file</code> tool — moves or renames a tracked file/directory via <code>git mv</code>, preserving Git history so <code>git log --follow</code> and <code>git blame</code> keep working.</li>
                 <li><b>3.3.0</b> — New <code>vcs_rename_branch</code> (git branch -m, with optional remote rename) and <code>vcs_check_repo_health</code> (detects and cleans orphan <code>.git/index.lock</code> files). <code>get_vcs_log</code> now supports <code>pickaxe</code>, <code>since</code>, <code>until</code>, <code>author</code>, and <code>grep</code> filters.</li>

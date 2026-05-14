@@ -214,6 +214,22 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query", "vcs_delete_branch", "vcs_rename_branch")
 
         /**
+         * Tools that expose an *optional* synchronous mode — a `waitForX = true` parameter (and
+         * usually a `timeoutMs`) that makes the call block until the underlying work finishes
+         * instead of returning immediately. The Settings UI flags these with a clock indicator
+         * so the user / AI can see at a glance that the tool offers both fire-and-forget and
+         * sync-with-timeout flavours.
+         */
+        val SYNC_CAPABLE = setOf(
+            "start_run_configuration",   // waitForExit
+            "debug_run_configuration",   // waitForExit
+            "refresh_project",           // waitForSync
+            "refresh_gradle_project",    // waitForSync
+            "send_to_terminal",          // waitForIdle
+            "run_gradle_task",           // already sync with timeoutSeconds
+        )
+
+        /**
          * Flat set of every MCP Companion tool name — used to filter the global [ToolCallListener]
          * so we only record OUR tool invocations (and not those from JetBrains' built-in toolsets
          * or other third-party plugins that may also run on the same MCP server).

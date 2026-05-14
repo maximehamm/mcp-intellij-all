@@ -195,9 +195,8 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
     private val refreshListener: () -> Unit = {
         ApplicationManager.getApplication().invokeLater {
             refreshFromSettings()
-            // Toolbar must also re-evaluate on RUNNING → SUCCESS/ERROR transitions and on
-            // cancel-handler register/unregister events so the Stop button hides immediately
-            // when the call finishes.
+            // Re-evaluate the toolbar so the StopAction's `update` runs immediately on
+            // RUNNING → SUCCESS/ERROR transitions and on cancel-handler register/unregister.
             runCatching { if (::toolbarRef.isInitialized) toolbarRef.updateActionsAsync() }
         }
     }
@@ -216,15 +215,10 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
         }
     }.apply { isRepeats = true }
 
-    /** Stored to call `updateActionsAsync()` when our state changes (list selection, call status
-     *  transitions, cancel handler registration). Without explicit updates the action's `update`
-     *  fires on a slow internal poll which lags badly behind RUNNING → SUCCESS transitions. */
     private lateinit var toolbarRef: com.intellij.openapi.actionSystem.ActionToolbar
 
     init {
         background = UIUtil.getListBackground()
-        // SimpleToolWindowPanel: place toolbar in the tool window header strip (no double separator),
-        // and the list/details splitter as the main content.
         val tb = buildToolbar()
         toolbarRef = tb
         toolbar = tb.component
@@ -233,20 +227,19 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
         preferredSize = Dimension(600, 500)
         refreshFromSettings()
         McpCompanionSettings.getInstance().addCallRecordListener(refreshListener)
-        // Re-evaluate StopAction visibility on selection changes — otherwise the button only
-        // appears/disappears on the action toolbar's internal poll (which is sluggish).
         list.addListSelectionListener { runCatching { toolbarRef.updateActionsAsync() } }
         elapsedTimer.start()
     }
 
     private fun buildToolbar(): com.intellij.openapi.actionSystem.ActionToolbar {
         val group = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
-            add(StopAction())  // visible ONLY when the focused call is RUNNING and cancellable
             add(ClearAction())
             add(ResetFilterAction())
             addSeparator()
             add(OrientationAction())
             add(GroupedAction())
+            addSeparator()
+            add(StopAction())  // 5th button — visible always, greyed when no cancellable call.
         }
         val toolbar = com.intellij.openapi.actionSystem.ActionManager.getInstance()
             .createActionToolbar("McpCompanionMonitoring", group, true)
@@ -427,6 +420,8 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
      * (`isVisible = false`) the moment either condition stops being true, so the toolbar
      * stays decluttered the rest of the time. See feature request 2026-05-13.
      */
+    /** Stop button — 5th action in the toolbar. Always visible; greyed (`isEnabled = false`)
+     *  when there's no in-flight cancellable call. */
     private inner class StopAction : com.intellij.openapi.actionSystem.AnAction(
         "Stop", "Cancel the selected MCP call (kills the underlying process)",
         com.intellij.icons.AllIcons.Actions.Suspend,
@@ -440,11 +435,11 @@ internal class McpCompanionCallsPanel(private val project: Project) : SimpleTool
             val cancellable = record != null &&
                 record.status == McpCompanionSettings.CallRecord.Status.RUNNING &&
                 McpCompanionSettings.getInstance().hasCancelHandler(record.callId)
-            e.presentation.isVisible = cancellable
             e.presentation.isEnabled = cancellable
-            if (cancellable && record != null) {
-                e.presentation.text = "Stop \"${record.toolName}\""
-            }
+            e.presentation.text = if (cancellable && record != null)
+                "Stop \"${record.toolName}\""
+            else
+                "Stop (no cancellable call)"
         }
         override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
     }
@@ -641,8 +636,7 @@ private class CallRecordRenderer : JPanel(), ListCellRenderer<McpCompanionSettin
 
     private fun formatMs(ms: Long): String = when {
         ms < 1_000 -> "${ms} ms"
-        ms < 10_000 -> "%.1f s".format(ms / 1000.0)
-        ms < 60_000 -> "${ms / 1000} s"
+        ms < 60_000 -> "${ms / 1000} s"            // integer seconds — no half-second display
         else -> "${ms / 60_000} m ${(ms % 60_000) / 1000} s"
     }
 }

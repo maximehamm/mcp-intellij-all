@@ -7,7 +7,9 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.clientInfo
+import com.intellij.mcpserver.mcpCallInfoOrNull
 import com.intellij.mcpserver.project
+import kotlinx.coroutines.withContext
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.tabs.JBTabs
 import com.intellij.util.ui.UIUtil
@@ -555,14 +557,97 @@ class McpCompanionBuildToolset : McpToolset {
         Parameters:
         - command: the shell command to run (e.g. "ls -la", "gradle test")
         - tab: optional tab name to target; defaults to the currently active tab
-        Use get_terminal_output afterwards to read the result.
+        - waitForIdle: if true, blocks until the terminal output stops changing for `idleQuietMs`,
+          so the AI can immediately read the result without polling. Default false (legacy behavior).
+        - timeoutMs: max total wait when waitForIdle=true (default 60_000 = 1 min). On timeout the
+          tool returns whatever output is visible.
+        - idleQuietMs: how long the output must remain unchanged to be considered idle
+          (default 1500 ms). Lower = snappier returns but risk of partial output on slow commands;
+          higher = more reliable but slower.
 
         projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
     """)
-    suspend fun send_to_terminal(command: String, tab: String? = null, projectPath: String? = null): String {
+    suspend fun send_to_terminal(
+        command: String,
+        tab: String? = null,
+        waitForIdle: Boolean = false,
+        timeoutMs: Long = 60_000L,
+        idleQuietMs: Long = 1_500L,
+        projectPath: String? = null,
+    ): String {
         disabledMessage("send_to_terminal")?.let { return it }
         val project = resolveProject(projectPath)
-        return captureResponse(runOnEdt { sendToTerminalImpl(project, command, tab) })
+        val sendResult = runOnEdt { sendToTerminalImpl(project, command, tab) }
+        if (!waitForIdle) return captureResponse(sendResult)
+        if (!sendResult.startsWith("Command sent")) {
+            // Something went wrong before the command even reached the terminal (no widget, tab
+            // not found, etc.). Surface the original error verbatim; no point polling.
+            return captureResponse(sendResult)
+        }
+
+        // Poll terminal output and stop when it's been quiet for `idleQuietMs`. We compare the
+        // ACTIVE tab's text snapshot — that's the buffer the user just typed into.
+        val callId = runCatching { coroutineContext.mcpCallInfoOrNull?.callId }.getOrNull() ?: -1
+        val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+        McpCompanionSettings.getInstance().registerCancelHandler(callId) { cancelled.set(true) }
+        try {
+            return captureResponse(withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val startMs = System.currentTimeMillis()
+                fun snapshot(): String = runOnEdt { extractActiveTabText(project, tab) }
+                val initialSnapshot = snapshot()
+                var lastSnapshot = initialSnapshot
+                var lastChangeMs = System.currentTimeMillis()
+                // Require at least TWO distinct snapshots-after-initial before declaring idle.
+                // Why two? The first change is invariably the command line being typed/echoed
+                // into the buffer. If the command then runs silently (e.g. `sleep 20`) the
+                // buffer stays at that intermediate state and our idle detector would
+                // prematurely report success. Demanding a second distinct snapshot guarantees
+                // we've seen actual *command output* (or the prompt re-appearing) before
+                // settling. Silent commands therefore wait until `timeoutMs` — correctly, since
+                // we can't tell "still running" from "stable forever" without that signal.
+                var changeCount = 0
+                while (true) {
+                    if (cancelled.get()) {
+                        return@withContext "send_to_terminal cancelled after ${System.currentTimeMillis() - startMs} ms.\n--- output so far ---\n$lastSnapshot"
+                    }
+                    val elapsed = System.currentTimeMillis() - startMs
+                    if (elapsed >= timeoutMs) {
+                        val tail = when {
+                            changeCount == 0 -> " (no output change detected — did the command execute? Check the Terminal tab is visible)."
+                            changeCount == 1 -> " (only one change detected — command appears to be running silently; consider commands that print output)."
+                            else -> "."
+                        }
+                        return@withContext "send_to_terminal timed out after ${elapsed} ms (timeoutMs=$timeoutMs)$tail\n--- output ---\n$lastSnapshot"
+                    }
+                    Thread.sleep(250)
+                    val current = snapshot()
+                    val now = System.currentTimeMillis()
+                    if (current != lastSnapshot) {
+                        changeCount++
+                        lastSnapshot = current
+                        lastChangeMs = now
+                    } else if (changeCount >= 2 && now - lastChangeMs >= idleQuietMs) {
+                        return@withContext "send_to_terminal idle after ${now - startMs} ms (quiet for ${now - lastChangeMs} ms, $changeCount changes).\n--- output ---\n$lastSnapshot"
+                    }
+                }
+                @Suppress("UNREACHABLE_CODE") "unreachable"
+            })
+        } finally {
+            McpCompanionSettings.getInstance().unregisterCancelHandler(callId)
+        }
+    }
+
+    /** Returns the visible text of the named tab (or the active tab when [tab] is null). Used by
+     *  [send_to_terminal]'s idle-detection loop — we re-snapshot every 250 ms. */
+    private fun extractActiveTabText(project: com.intellij.openapi.project.Project, tab: String?): String {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
+            ?: return ""
+        val content = if (tab != null)
+            toolWindow.contentManager.contents.firstOrNull { it.displayName == tab }
+        else toolWindow.contentManager.selectedContent ?: toolWindow.contentManager.contents.firstOrNull()
+        content ?: return ""
+        val component = content.component as? javax.swing.JComponent ?: return ""
+        return readEditorText(component) ?: readJediTermText(component) ?: ""
     }
 
     internal fun sendToTerminalImpl(project: com.intellij.openapi.project.Project, command: String, tab: String?): String {

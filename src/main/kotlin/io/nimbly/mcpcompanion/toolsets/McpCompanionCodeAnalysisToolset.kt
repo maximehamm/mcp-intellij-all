@@ -8,7 +8,10 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.clientInfo
+import com.intellij.mcpserver.mcpCallInfoOrNull
 import com.intellij.mcpserver.project
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.runReadAction
@@ -676,11 +679,22 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         Refreshes (reimports/syncs) the project build system configuration.
         Automatically detects Gradle or Maven from the project root and triggers the appropriate sync action.
         Use this after modifying build.gradle, pom.xml, settings.gradle, or when dependencies are out of sync.
-        Returns what was triggered, or an error if no build system is detected.
 
-        projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
+        By default returns immediately after triggering the sync. Pass `waitForSync=true` to block
+        until every external-system task finishes — useful before calling get_project_structure
+        or get_gradle_dependencies on freshly-changed build files. A Stop button appears in the
+        Monitoring tool window while the call is waiting.
+
+        Parameters:
+        - waitForSync: if true, blocks until every triggered external-system import ends. Default false.
+        - timeoutMs: max wait when waitForSync=true (default 120_000 = 2 min).
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
     """)
-    suspend fun refresh_project(projectPath: String? = null): String {
+    suspend fun refresh_project(
+        waitForSync: Boolean = false,
+        timeoutMs: Long = 120_000L,
+        projectPath: String? = null,
+    ): String {
         disabledMessage("refresh_project")?.let { return it }
         val project = resolveProject(projectPath)
         val basePath = project.basePath ?: return "Cannot determine project base path"
@@ -694,6 +708,41 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
             return captureResponse("No Gradle or Maven build files found in project root ($basePath)")
 
         val results = mutableListOf<String>()
+        // Track tasks the external-system framework launched between us subscribing and the
+        // sync action returning. We then wait for each of those to terminate.
+        val pendingTasks = java.util.concurrent.ConcurrentHashMap.newKeySet<com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId>()
+        val taskDoneLatch = CountDownLatch(1)
+        val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+        val callId = if (waitForSync)
+            runCatching { coroutineContext.mcpCallInfoOrNull?.callId }.getOrNull() ?: -1
+        else -1
+        // The notifications API is the ExternalSystemProgressNotificationManager — a JVM-level
+        // listener registry (not a per-project message bus topic). We must filter onStart events
+        // ourselves to only track tasks belonging to *this* IntelliJ project.
+        val pnm = com.intellij.openapi.externalSystem.service.notification.ExternalSystemProgressNotificationManager.getInstance()
+        val listenerDisposable: com.intellij.openapi.Disposable? = if (waitForSync) com.intellij.openapi.util.Disposer.newDisposable("mcp-refresh-project-wait") else null
+
+        if (waitForSync && listenerDisposable != null) {
+            val listener = object : com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListener {
+                override fun onStart(projectPathL: String, id: com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId) {
+                    if (id.findProject() == project) pendingTasks.add(id)
+                }
+                override fun onSuccess(projectPathL: String, id: com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId) {
+                    if (pendingTasks.remove(id) && pendingTasks.isEmpty()) taskDoneLatch.countDown()
+                }
+                override fun onFailure(projectPathL: String, id: com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId, e: Exception) {
+                    if (pendingTasks.remove(id) && pendingTasks.isEmpty()) taskDoneLatch.countDown()
+                }
+                override fun onCancel(projectPathL: String, id: com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId) {
+                    if (pendingTasks.remove(id) && pendingTasks.isEmpty()) taskDoneLatch.countDown()
+                }
+            }
+            pnm.addNotificationListener(listener, listenerDisposable)
+            McpCompanionSettings.getInstance().registerCancelHandler(callId) {
+                cancelled.set(true)
+                taskDoneLatch.countDown()
+            }
+        }
 
         fun triggerAction(actionId: String, label: String) {
             val action = runOnEdt { am.getAction(actionId) } ?: run {
@@ -718,7 +767,30 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         if (hasGradle) triggerAction("ExternalSystem.RefreshAllProjects", "Gradle")
         if (hasMaven)  triggerAction("Maven.Reimport", "Maven")
 
-        return captureResponse(results.joinToString("\n"))
+        if (!waitForSync) return captureResponse(results.joinToString("\n"))
+
+        try {
+            val started = System.currentTimeMillis()
+            // Give the action a moment to enqueue its tasks — actionPerformed schedules on the EDT
+            // and the task ID isn't broadcast until the framework picks it up. 500 ms is enough
+            // in practice; if nothing has started we assume "no sync needed" rather than time out.
+            Thread.sleep(500)
+            if (pendingTasks.isEmpty()) {
+                results += "(no external-system task to wait for — sync may have been a no-op)"
+                return captureResponse(results.joinToString("\n"))
+            }
+            val finished = taskDoneLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+            val elapsedMs = System.currentTimeMillis() - started
+            results += when {
+                cancelled.get() -> "Sync cancelled after ${elapsedMs} ms."
+                !finished -> "Sync still running after ${elapsedMs} ms (timeoutMs=$timeoutMs). ${pendingTasks.size} task(s) pending."
+                else -> "Sync completed in ${elapsedMs} ms."
+            }
+            return captureResponse(results.joinToString("\n"))
+        } finally {
+            McpCompanionSettings.getInstance().unregisterCancelHandler(callId)
+            listenerDisposable?.let { com.intellij.openapi.util.Disposer.dispose(it) }
+        }
     }
 
     // ── get_psi_tree ──────────────────────────────────────────────────────────

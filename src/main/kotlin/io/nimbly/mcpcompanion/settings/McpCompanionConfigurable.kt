@@ -149,6 +149,20 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
                             cell(bar).applyToComponent {
                                 toolTipText = buildUsageTooltip(name)
                             }.customize(UnscaledGaps(right = 6))
+                            // Sync-capable indicator — a small ⏱ glyph sits right after the tool
+                            // id (between the checkbox and the usage bar) for tools that expose
+                            // a `waitForX` / `timeoutMs` parameter. Spacer label keeps the bar
+                            // column aligned for tools that don't have the marker.
+                            val syncCapable = name in McpCompanionSettings.SYNC_CAPABLE
+                            label(if (syncCapable) "⏱" else "  ")
+                                .applyToComponent {
+                                    if (syncCapable) {
+                                        toolTipText = "<html><b>Synchronous mode available</b><br/>" +
+                                            "Pass a <code>waitFor*=true</code> argument (and optional <code>timeoutMs</code>) " +
+                                            "to make this call block until the underlying work finishes.</html>"
+                                    }
+                                }
+                                .customize(UnscaledGaps(right = 6))
                             label("<html><font color='${UIUtil.getContextHelpForeground().toHex()}'>$shortDesc</font></html>")
                                 .applyToComponent {
                                     descriptionLabels.add(this)

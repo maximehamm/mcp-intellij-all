@@ -73,14 +73,17 @@ class McpCompanionToolset : McpToolset {
 - get_test_results       → read test results (pass/fail/duration/message)
 - get_terminal_output    → content of all tabs in the embedded Terminal tool window
 - send_to_terminal       → send a command to a terminal tab and execute it (follow with get_terminal_output to read the result)
+                           Pass waitForIdle=true (+ optional timeoutMs / idleQuietMs) to block until the terminal output stops changing — no need to poll get_terminal_output afterwards.
 
 ### Debug
 - list_run_configurations    → list all run configurations (name, type, running status)
 - start_run_configuration    → launch a named run config in run or debug mode
+                                Pass waitForExit=true (+ optional timeoutMs) to block until the process terminates and read the exit code in the response.
 - modify_run_configuration    → modify VM options, program args, env vars or working dir of any run config
 - get_run_configuration_xml       → get the full XML definition of a run configuration
 - create_run_configuration_from_xml → create a new run config from an XML definition (any type)
 - debug_run_configuration    → launch a named run config in debug mode
+                                Pass waitForExit=true (+ optional timeoutMs) to block until the debugged process exits.
 - get_debug_variables        → read local variables from the current stack frame
 - get_breakpoints            → list all breakpoints with conditions
 - add_conditional_breakpoint → add or update a breakpoint with an optional condition
@@ -113,6 +116,7 @@ class McpCompanionToolset : McpToolset {
                            filter by inspection ID(s) or minimum severity; returns problems + fixes
 - refresh_project        → sync Gradle or Maven — detects the build system automatically
                            use after modifying build.gradle, pom.xml, or when dependencies drift
+                           Pass waitForSync=true (+ optional timeoutMs) to block until the sync finishes — safe to follow with get_project_structure right after.
 - get_project_structure  → list modules, SDK, source roots, dependencies — call this first on a new project
 - get_psi_tree           → dump the PSI tree of a file as hierarchical text (class, token type, range, preview)
                            use to debug folding builders, annotators, intentions, refactorings without rebuilding the plugin
@@ -135,6 +139,7 @@ class McpCompanionToolset : McpToolset {
                              returns structured result with status (success/failure/timeout), duration, gradleProjectPath
 - refresh_gradle_project   → force a Gradle re-sync (🔄 button equivalent)
                              call this after editing build.gradle/build.gradle.kts/settings.gradle
+                             Pass waitForSync=true (+ optional timeoutMs) to block until import ends; safe to follow with get_gradle_dependencies / get_project_structure.
 - get_gradle_dependencies  → imported dependency tree per module with resolved versions and scopes
                              scope="compile|test|runtime|…" to filter; ⚠ reflects the imported model — refresh first if needed
 - stop_gradle_task         → cancel all currently-running Gradle tasks
