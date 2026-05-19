@@ -174,14 +174,18 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
         if (daemonRunning) return "IDE is still analysing the file — inspections not ready yet. Wait a moment and call get_quick_fixes again."
 
-        // Refresh from disk first — when a peer tool (e.g. the AI client's own Edit) writes the
-        // file outside IntelliJ, the VFS keeps the stale length and `document.lineCount` lies,
-        // producing "Line N out of range" even though the line exists on disk.
-        runOnEdt {
-            com.intellij.openapi.vfs.VfsUtil.markDirtyAndRefresh(/* async = */ false, /* recursive = */ false, /* reloadChildren = */ false, vFile)
-        }
-        val document = runOnEdt { FileDocumentManager.getInstance().getDocument(vFile) }
-            ?: return "Cannot read document for $filePath"
+        // External edit detection: when a peer tool (e.g. Claude's Edit) writes the file outside
+        // IntelliJ, the VFS keeps the stale byte length and `document.lineCount` lies, producing
+        // "Line N out of range" even though the line exists on disk. We re-sync via reloadFromDisk
+        // inside a WriteCommandAction — the bare call under `ModalityState.any()` triggers
+        // TransactionGuard SEVERE errors (see bug report 2026-05-19, WSL2 freezes).
+        val document = runOnEdt {
+            val doc = FileDocumentManager.getInstance().getDocument(vFile) ?: return@runOnEdt null
+            com.intellij.openapi.command.WriteCommandAction.writeCommandAction(project)
+                .withName("MCP Reload from Disk")
+                .run<RuntimeException> { FileDocumentManager.getInstance().reloadFromDisk(doc) }
+            doc
+        } ?: return "Cannot read document for $filePath"
 
         // Determine the search range: whole file (line=0) or a specific line
         val rangeStart: Int
@@ -214,7 +218,12 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         @Serializable
         data class FixGroup(val line: Int, val message: String, val fixes: List<String>)
 
+        // Wrap PSI/intention-action lookups in SlowOperations.knownIssue so IntelliJ 2026.1's
+        // strict EDT-slow-ops assertion doesn't flood the log. Action.isAvailable and PsiManager
+        // findClass both reach into FileBasedIndex / StubIndex, which the platform considers
+        // "slow on EDT" even though MCP callers explicitly accept the latency.
         val groups = runOnEdt {
+            com.intellij.util.SlowOperations.allowSlowOperations(com.intellij.util.SlowOperations.GENERIC).use {
             val editor = FileEditorManager.getInstance(project)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile), false)
             val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
@@ -248,6 +257,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
 
             val allGroups = fromHighlights.toMutableList()
             allGroups
+            }
         }
 
         if (groups.isEmpty()) return "No quick fixes found in $filePath" + if (line > 0) " at line $line" else ""
@@ -287,13 +297,15 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         }
         if (daemonRunning) return "IDE is still analysing the file — wait a moment and try again."
 
-        // Same disk-refresh as get_quick_fixes — keeps `document.lineCount` truthful when a peer
-        // tool wrote the file outside IntelliJ.
-        runOnEdt {
-            com.intellij.openapi.vfs.VfsUtil.markDirtyAndRefresh(/* async = */ false, /* recursive = */ false, /* reloadChildren = */ false, vFile)
-        }
-        val document = runOnEdt { FileDocumentManager.getInstance().getDocument(vFile) }
-            ?: return "Cannot read document for $filePath"
+        // Same disk-sync as get_quick_fixes — `reloadFromDisk` wrapped in a WriteCommandAction
+        // so TransactionGuard doesn't fire under our `runOnEdt` modality.
+        val document = runOnEdt {
+            val doc = FileDocumentManager.getInstance().getDocument(vFile) ?: return@runOnEdt null
+            com.intellij.openapi.command.WriteCommandAction.writeCommandAction(project)
+                .withName("MCP Reload from Disk")
+                .run<RuntimeException> { FileDocumentManager.getInstance().reloadFromDisk(doc) }
+            doc
+        } ?: return "Cannot read document for $filePath"
 
         if (line > document.lineCount) return "Line $line is out of range (file has ${document.lineCount} lines)"
         val lineStart = if (line <= 0) 0 else document.getLineStartOffset(line - 1)
@@ -323,13 +335,15 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
             kotlinx.coroutines.delay(150)
         }
 
-        // Collect highlights AND apply fix all on EDT (same as get_quick_fixes) to avoid stale HighlightInfo
-        val applied = runOnEdt {
+        // Collect highlights AND apply fix all on EDT (same as get_quick_fixes) to avoid stale HighlightInfo.
+        // Wrapped in SlowOperations.knownIssue so PSI/Action lookups don't trip IntelliJ 2026.1's
+        // EDT-slow-ops assertion — the MCP caller accepts the latency.
+        val applied = runOnEdt { com.intellij.util.SlowOperations.allowSlowOperations(com.intellij.util.SlowOperations.GENERIC).use {
             val editor  = FileEditorManager.getInstance(project)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile), false)
-                ?: return@runOnEdt false
+                ?: return@use false
             val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
-                ?: return@runOnEdt false
+                ?: return@use false
 
             val markupModel = DocumentMarkupModel.forDocument(document, project, false)
             val highlights = markupModel?.allHighlighters
@@ -356,7 +370,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
                                 if (isAvail) {
                                     action.javaClass.methods.find { it.name == "invoke" && it.parameterCount == 3 }
                                         ?.invoke(action, project, editor, psiFile)
-                                    return@runOnEdt true
+                                    return@use true
                                 }
                             }
                         }
@@ -364,7 +378,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
                 }
             }
             false
-        }
+        } }
 
         if (applied) {
             val loc = if (line > 0) "$filePath:$line" else filePath

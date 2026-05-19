@@ -88,11 +88,25 @@ internal fun resolveFilePathOrError(project: Project, filePath: String): Pair<Vi
     return null to error
 }
 
+/**
+ * Runs [action] on the EDT and waits for the result.
+ *
+ * Uses `ModalityState.defaultModalityState()` rather than `ModalityState.any()` — the latter
+ * was historically chosen to bypass modal dialogs but turned out to poison every nested
+ * write/transaction with `TransactionGuardImpl` "Write-unsafe context!" SEVERE log entries
+ * (see bug report 2026-05-19). On WSL2 those SEVEREs additionally froze the EDT for 5–34 s.
+ *
+ * `defaultModalityState()` is write-safe: when invoked from a background thread it captures
+ * the modality of the running task (NON_MODAL with no dialog open, the dialog's modality
+ * otherwise), and any nested `WriteCommandAction` then runs in a transaction-safe context.
+ * Trade-off: if the user has a modal dialog open we now wait for it, which is the correct
+ * behaviour anyway — MCP tools shouldn't sneak writes underneath a modal Settings panel.
+ */
 internal fun <T> runOnEdt(action: () -> T): T {
     val app = ApplicationManager.getApplication()
     if (app.isDispatchThread) return action()
     var result: T? = null
-    app.invokeAndWait({ result = action() }, ModalityState.any())
+    app.invokeAndWait({ result = action() }, ModalityState.defaultModalityState())
     @Suppress("UNCHECKED_CAST")
     return result as T
 }

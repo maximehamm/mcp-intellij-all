@@ -237,24 +237,28 @@ IMPORTANT: Always prefer IntelliJ tools over native Write/Edit/Bash(rm) for any 
         disabledMessage("replace_text_undoable")?.let { return it }
         if (oldText.isEmpty()) return "error: oldText is empty — provide the exact text to find"
         val project = resolveProject(projectPath)
-        // Refresh the file from disk before resolving. When the file was modified externally
-        // (e.g. by Claude's Edit tool writing directly to disk), IntelliJ's VFS cache holds the
-        // pre-change content, so `document.text.indexOf(oldText)` returns -1 or the wrong offset.
-        val refreshed = runOnEdt {
-            val (file, err) = resolveFilePathOrError(project, pathInProject)
-            if (err == null && file != null) {
-                com.intellij.openapi.vfs.VfsUtil.markDirtyAndRefresh(/* async = */ false, /* recursive = */ false, /* reloadChildren = */ false, file)
-            }
-            file to err
-        }
-        val (virtualFile, err) = refreshed
+        // External edits between calls: another tool may have written the file directly to disk
+        // (e.g. Claude's Edit tool). `FileDocumentManager.reloadFromDisk` is the EDT-safe way to
+        // pick that up — it re-syncs the in-memory document from the byte content of the file.
+        // We DELIBERATELY avoid `VfsUtil.markDirtyAndRefresh`: that path schedules a write-action
+        // via `RefreshQueueImpl.execute`, which raises a SEVERE "Write-unsafe context!" log entry
+        // when invoked under `ModalityState.any()` (the one our `runOnEdt` helper uses for
+        // immediate execution past modal dialogs). On WSL2 the slow 9P bridge then freezes the
+        // EDT for 5–34 s while the synchronous refresh round-trips to the host. `reloadFromDisk`
+        // does what we actually need (sync the buffer) without the heavy VFS round-trip. See
+        // bug report 2026-05-19 ("Write-unsafe context in McpCompanionToolset.replace_text_undoable").
+        val (virtualFile, err) = runOnEdt { resolveFilePathOrError(project, pathInProject) }
         if (err != null) return "error: $err"
+        // `reloadFromDisk` mutates the in-memory document, so it MUST run inside a write action
+        // attached to a command. Calling it bare under `ModalityState.any()` (our `runOnEdt`
+        // default) triggers `TransactionGuardImpl.assertWriteActionAllowed` → SEVERE log + EDT
+        // freeze on WSL2. WriteCommandAction handles the transaction/modality plumbing for us.
         val document = runOnEdt {
-            // Reload from disk in case another writer modified the buffer just before us.
-            FileDocumentManager.getInstance().reloadFromDisk(
-                FileDocumentManager.getInstance().getDocument(virtualFile!!) ?: return@runOnEdt null
-            )
-            FileDocumentManager.getInstance().getDocument(virtualFile!!)
+            val doc = FileDocumentManager.getInstance().getDocument(virtualFile!!) ?: return@runOnEdt null
+            WriteCommandAction.writeCommandAction(project)
+                .withName("MCP Reload from Disk")
+                .run<RuntimeException> { FileDocumentManager.getInstance().reloadFromDisk(doc) }
+            doc
         } ?: return "error: cannot open document for: $pathInProject"
         val offset = document.text.indexOf(oldText)
         if (offset == -1) return "error: text not found in file"
