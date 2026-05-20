@@ -118,6 +118,9 @@ intellijPlatform {
         ides {
             ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3.4")
             ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2026.1")
+            // TODO: add 2026.2 EAP once the gradle plugin resolves it — Marketplace verifies
+            // against the EAP and tightened PluginManagerCore.getPlugin to @Internal there.
+            // Try: `recommended()` or a specific build id once published in the JetBrains repo.
         }
     }
 }

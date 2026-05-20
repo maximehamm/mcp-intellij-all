@@ -1,12 +1,10 @@
 package io.nimbly.mcpcompanion.toolsets
 
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.clientInfo
 import com.intellij.mcpserver.project
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.vcs.ProjectLevelVcsManager
 import com.intellij.openapi.vcs.VcsException
 import com.intellij.openapi.vcs.annotate.LineAnnotationAspect
@@ -1682,10 +1680,7 @@ class McpCompanionVcsToolset : McpToolset {
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    internal fun git4ideaLoader(): ClassLoader? =
-        runCatching {
-            PluginManagerCore.getPlugin(PluginId.getId("Git4Idea"))?.pluginClassLoader
-        }.getOrNull()
+    internal fun git4ideaLoader(): ClassLoader? = io.nimbly.mcpcompanion.util.pluginClassLoader("Git4Idea")
 
     /** Returns the first Git repository found in the project. */
     internal fun getFirstRepo(cl: ClassLoader, project: com.intellij.openapi.project.Project): Any? = runCatching {

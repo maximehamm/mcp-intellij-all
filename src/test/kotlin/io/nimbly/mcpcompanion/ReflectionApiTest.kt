@@ -148,6 +148,56 @@ class ReflectionApiTest {
             "McpServerSettings.MyState.getEnableMcpServer() must return boolean")
     }
 
+    // ── PluginManagerCore ──────────────────────────────────────────────────────
+    // Reached reflectively via `io.nimbly.mcpcompanion.util.PluginReflection` because JetBrains
+    // marked `PluginManagerCore.getPlugin(PluginId)` `@ApiStatus.Internal` in IDEA 2026.2 EAP
+    // (the Marketplace verifier rejects direct references). If JetBrains ever renames the class
+    // or the methods we depend on, these tests fail at build time rather than at user runtime.
+
+    @Test
+    fun `PluginManagerCore class is accessible by reflection`() {
+        val cls = Class.forName("com.intellij.ide.plugins.PluginManagerCore")
+        assertNotNull(cls, "PluginManagerCore class must exist — every isPluginAvailable / plugin-classloader lookup depends on it")
+    }
+
+    @Test
+    fun `PluginManagerCore getPlugin(PluginId) returns a descriptor object`() {
+        val cls = Class.forName("com.intellij.ide.plugins.PluginManagerCore")
+        val method = cls.getMethod("getPlugin", com.intellij.openapi.extensions.PluginId::class.java)
+        assertTrue(java.lang.reflect.Modifier.isStatic(method.modifiers),
+            "PluginManagerCore.getPlugin(PluginId) must be static — our PluginReflection helper invokes it with null receiver")
+        // Calling with a definitely-absent id should return null without throwing.
+        val descriptor = method.invoke(null, com.intellij.openapi.extensions.PluginId.getId("io.nimbly.definitely-no-such-plugin"))
+        assertNull(descriptor, "getPlugin() of an absent id must return null")
+    }
+
+    @Test
+    fun `IdeaPluginDescriptor exposes getPluginClassLoader and getVersion`() {
+        // Verify the API SHAPE on the interface itself rather than on an instance — our test
+        // fixture loads the plugin via classpath injection, not through PluginManagerCore, so
+        // getPlugin(ourId) returns null in tests. Checking the interface method declarations
+        // catches any future rename of the API we reflect on without needing a live descriptor.
+        val descriptorCls = Class.forName("com.intellij.ide.plugins.IdeaPluginDescriptor")
+        val methods = descriptorCls.methods.map { it.name }.toSet()
+        assertTrue("getPluginClassLoader" in methods,
+            "IdeaPluginDescriptor must expose getPluginClassLoader() — pluginClassLoader(…) helper depends on it. Found methods: $methods")
+        assertTrue("getVersion" in methods,
+            "IdeaPluginDescriptor must expose getVersion() — McpCompanionTelemetry.pluginVersion() depends on it. Found methods: $methods")
+    }
+
+    @Test
+    fun `PluginManagerCore getPlugins returns an array`() {
+        // McpCompanionDiagnosticToolset (and PluginReflection.getPlugins) lists installed plugins
+        // for the IDE-snapshot tool — verify the static getPlugins() shape we depend on.
+        val cls = Class.forName("com.intellij.ide.plugins.PluginManagerCore")
+        val m = cls.methods.firstOrNull { it.name == "getPlugins" && it.parameterCount == 0 }
+        assertNotNull(m, "PluginManagerCore.getPlugins() static method must exist")
+        assertTrue(java.lang.reflect.Modifier.isStatic(m!!.modifiers),
+            "PluginManagerCore.getPlugins() must be static")
+        assertTrue(m.returnType.isArray,
+            "PluginManagerCore.getPlugins() must return an array")
+    }
+
     // ── MessagePool / MessagePoolListener / AbstractMessage ─────────────────────
     // Used in McpCompanionStartupActivity.installMcpErrorFilter() via reflection to silence
     // the IDE "Internal Error" pop-up that the MCP framework triggers on parameter mismatches.

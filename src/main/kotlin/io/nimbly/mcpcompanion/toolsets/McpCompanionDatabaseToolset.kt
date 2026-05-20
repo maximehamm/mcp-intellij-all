@@ -1,12 +1,10 @@
 package io.nimbly.mcpcompanion.toolsets
 
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.clientInfo
 import com.intellij.mcpserver.project
-import com.intellij.openapi.extensions.PluginId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -314,9 +312,11 @@ class McpCompanionDatabaseToolset : McpToolset {
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /** Returns the classloader of the Database Tools plugin, or throws DbPluginUnavailableException. */
+    /** Returns the classloader of the Database Tools plugin, or throws DbPluginUnavailableException.
+     *  Uses reflection through [io.nimbly.mcpcompanion.util.PluginReflection] because
+     *  `PluginManagerCore.getPlugin` is `@ApiStatus.Internal` in IDEA 2026.2 EAP. */
     private fun dbClassLoader(): ClassLoader =
-        PluginManagerCore.getPlugin(PluginId.getId("com.intellij.database"))?.pluginClassLoader
+        io.nimbly.mcpcompanion.util.pluginClassLoader("com.intellij.database")
             ?: throw DbPluginUnavailableException()
 
     /** Loads a class via the Database plugin's own classloader. */

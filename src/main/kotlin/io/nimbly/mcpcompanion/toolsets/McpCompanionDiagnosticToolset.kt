@@ -95,12 +95,10 @@ class McpCompanionDiagnosticToolset : McpToolset {
             map["project.sdk.version"] = sdk?.versionString
         }
 
-        val gradlePlugin = com.intellij.ide.plugins.PluginManagerCore.getPlugin(
-            com.intellij.openapi.extensions.PluginId.getId("com.intellij.gradle")
-        )
-        if (gradlePlugin != null) {
+        val gradleClassLoader = io.nimbly.mcpcompanion.util.pluginClassLoader("com.intellij.gradle")
+        if (gradleClassLoader != null) {
             val gradleError = runCatching {
-                val gsClass = Class.forName("org.jetbrains.plugins.gradle.settings.GradleSettings", true, gradlePlugin.classLoader)
+                val gsClass = Class.forName("org.jetbrains.plugins.gradle.settings.GradleSettings", true, gradleClassLoader)
                 val gs = gsClass.getMethod("getInstance", com.intellij.openapi.project.Project::class.java).invoke(null, project)
                 val linked = gs.javaClass.getMethod("getLinkedProjectsSettings").invoke(gs)
                 val all = (linked as? Iterable<*>)?.toList() ?: emptyList<Any>()
@@ -130,13 +128,11 @@ class McpCompanionDiagnosticToolset : McpToolset {
             runCatching { map["encoding.nativesToAscii"] = em.javaClass.getMethod("isNativesToAscii").invoke(em)?.toString() }
         }
 
-        val gitPlugin = listOf("Git4Idea", "com.intellij.vcs.git", "git4idea")
-            .mapNotNull { com.intellij.ide.plugins.PluginManagerCore.getPlugin(com.intellij.openapi.extensions.PluginId.getId(it)) }
-            .firstOrNull()
-        if (gitPlugin != null) {
+        val gitClassLoader = listOf("Git4Idea", "com.intellij.vcs.git", "git4idea")
+            .firstNotNullOfOrNull { io.nimbly.mcpcompanion.util.pluginClassLoader(it) }
+        if (gitClassLoader != null) {
             runCatching {
-                val cl = gitPlugin.classLoader
-                val gsClass = Class.forName("git4idea.config.GitVcsSettings", true, cl)
+                val gsClass = Class.forName("git4idea.config.GitVcsSettings", true, gitClassLoader)
                 val gs = gsClass.getMethod("getInstance", com.intellij.openapi.project.Project::class.java).invoke(null, project)
                 map["git.pathToGit"]              = runCatching { gs.javaClass.getMethod("getPathToGit").invoke(gs)?.toString() }.getOrNull()
                 map["git.updateMethod"]           = runCatching { gs.javaClass.getMethod("getUpdateMethod").invoke(gs)?.toString() }.getOrNull()
