@@ -1,15 +1,5 @@
 # TODO
 
-- Amélioration générale : pour les actions longues, proposer des paramètres  "waitForExit" et "timeout" pour attendre ou pas !
-        {
-            "configurationName": "TNR - LCS-782 Attachement immutabilité",
-            "waitForExit": true,
-            "timeout": 600000,
-            "projectPath": "//wsl.localhost/Ubuntu-22.04/home/pp6649/IdeaProjects/locosu1/locosu1"
-        }
-- Amélioration vue MCP : voir le temps écoulé qd les appels durent
--  Amélioration vue MCP : pouvoir stopper un mcp long en court !
-
 - Open into terminal 
 - Open in Finder.Explorer
 - Open in Associated App

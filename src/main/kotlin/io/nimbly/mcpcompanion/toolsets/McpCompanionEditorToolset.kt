@@ -288,6 +288,67 @@ class McpCompanionEditorToolset : McpToolset {
             }
         })
     }
+
+    // ── create_scratch_file ───────────────────────────────────────────────────
+
+    @McpTool(name = "create_scratch_file")
+    @McpDescription(description = """
+        Creates a new IntelliJ scratch file with the given content and opens it in the editor.
+        Scratch files live OUTSIDE the project tree (under the IDE's scratch area), so they
+        never pollute version control and never trigger build re-syncs — perfect for previewing
+        a snippet, dumping a sample, sketching an example, or any throwaway content you want
+        to show the user in the editor.
+
+        Parameters:
+        - fileName: file name (with extension if you want a specific language), e.g. "preview.md", "snippet.kt", "sample.json".
+        - content: the file content (any string, including multi-line).
+        - language: optional explicit Language id (e.g. "Markdown", "kotlin", "JAVA", "JSON", "PlainText").
+                    When omitted, the language is inferred from the file extension; falls back to plain text.
+        - open: open the scratch file in the editor after creation. Default true.
+        - projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted.
+    """)
+    suspend fun create_scratch_file(
+        fileName: String,
+        content: String,
+        language: String = "",
+        open: Boolean = true,
+        projectPath: String? = null,
+    ): String {
+        disabledMessage("create_scratch_file")?.let { return it }
+        if (fileName.isBlank()) return "error: fileName is empty"
+        val project = resolveProject(projectPath)
+        return captureResponse(runOnEdt {
+            try {
+                // Resolve a Language. Order of preference:
+                //   1. Explicit `language` arg by id (e.g. "Markdown", "JAVA").
+                //   2. Inferred from the file extension (FileTypeManager → Language).
+                //   3. PlainTextLanguage as a safe fallback.
+                val lang: com.intellij.lang.Language = run {
+                    if (language.isNotBlank()) {
+                        com.intellij.lang.Language.findLanguageByID(language)?.let { return@run it }
+                    }
+                    val ft = com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+                    (ft as? com.intellij.openapi.fileTypes.LanguageFileType)?.language
+                        ?: com.intellij.openapi.fileTypes.PlainTextLanguage.INSTANCE
+                }
+
+                val scratchFile = com.intellij.openapi.command.WriteCommandAction.writeCommandAction(project)
+                    .withName("Create MCP scratch file")
+                    .compute<com.intellij.openapi.vfs.VirtualFile?, RuntimeException> {
+                        com.intellij.ide.scratch.ScratchRootType.getInstance().createScratchFile(
+                            project, fileName, lang, content,
+                        )
+                    } ?: return@runOnEdt "error: scratch file creation returned null (filesystem unavailable?)"
+
+                if (open) {
+                    FileEditorManager.getInstance(project).openFile(scratchFile, true)
+                }
+                "Scratch file created: ${scratchFile.path} (language=${lang.id})"
+            } catch (e: Exception) {
+                "error: ${e.javaClass.simpleName}: ${e.message}"
+            }
+        })
+    }
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────

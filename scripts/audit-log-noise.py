@@ -44,6 +44,7 @@ TOOLS = [
     ("highlight_text", {"filePath": SAMPLE_JAVA, "ranges": "5:1-5:10"}),
     ("clear_highlights", {}),
     ("show_diff", {"filePath": SAMPLE_JAVA, "newContent": "// modified\n"}),
+    ("create_scratch_file", {"fileName": "audit-preview.md", "content": "# Audit\nHello from MCP."}),
     # Build / Run output (6)
     ("get_build_output", {}),
     ("get_console_output", {}),

@@ -64,6 +64,8 @@ class McpCompanionToolset : McpToolset {
 - clear_highlights       → remove all highlights (user can also press Escape)
 - show_diff              → open IntelliJ's built-in diff viewer to compare current file content with proposed content (read-only)
                            use this to SHOW the user a refactor or proposed change BEFORE applying it (vs. replace_text_undoable, which applies the change directly)
+- create_scratch_file    → create a new IntelliJ scratch file (outside the project tree) with given content and open it
+                           perfect for previewing a snippet, sample, or sketch in the editor without polluting the project
 
 ### Build & Tests
 - get_build_output       → read compiler errors before answering a build question

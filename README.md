@@ -19,6 +19,7 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `highlight_text` | Highlights multiple zones in a file using the IDE's search-result color |
 | `clear_highlights` | Removes all highlights added by `highlight_text` |
 | `show_diff` | Opens IntelliJ's built-in diff viewer to visually compare current file content with proposed content (read-only) |
+| `create_scratch_file` | Creates an IntelliJ scratch file (outside the project tree) with given content and opens it — great for previewing snippets without polluting the project |
 
 ### Build & Tests
 | Tool | Description |

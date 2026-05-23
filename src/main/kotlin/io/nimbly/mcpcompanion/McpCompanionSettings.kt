@@ -247,7 +247,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
         val TOOL_GROUPS = linkedMapOf(
             "Editor & Navigation" to listOf(
-                "get_open_editors", "navigate_to", "select_text", "highlight_text", "clear_highlights", "show_diff"
+                "get_open_editors", "navigate_to", "select_text", "highlight_text", "clear_highlights", "show_diff",
+                "create_scratch_file"
             ),
             "Build & Tests" to listOf(
                 "get_build_output", "get_console_output", "get_services_output", "get_test_results", "get_terminal_output", "send_to_terminal"
