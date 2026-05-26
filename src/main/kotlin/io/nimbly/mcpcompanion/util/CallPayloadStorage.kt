@@ -89,4 +89,23 @@ object CallPayloadStorage {
             }
         }
     }
+
+    /**
+     * Removes every payload file from the directory EXCEPT those whose `callId` is in [keep].
+     * Used by [io.nimbly.mcpcompanion.McpCompanionSettings.clearAllRecords] so the Clear toolbar
+     * action doesn't strand the payloads of calls that are still in flight.
+     */
+    fun clearExcept(keep: Set<Int>) {
+        ensureWipedAndExists()
+        val keepNames = keep.map { "$it.json" }.toSet()
+        runCatching {
+            Files.list(dir).use { stream ->
+                stream.forEach { path ->
+                    if (path.fileName.toString() !in keepNames) {
+                        path.deleteIfExists()
+                    }
+                }
+            }
+        }
+    }
 }

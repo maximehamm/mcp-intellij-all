@@ -174,12 +174,26 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     /** Returns all records (newest first), capped at [MAX_CALL_RECORDS]. */
     fun getCallRecords(): List<CallRecord> = synchronized(callRecordsLock) { callRecords.toList() }
 
-    /** Clears all in-memory records AND wipes the on-disk payload directory. Triggered by the
-     *  "Clear" toolbar button in the Monitoring tool window. */
+    /** Clears finished MCP call records (SUCCESS / ERROR / TIMEOUT) and their on-disk payloads.
+     *
+     *  RUNNING calls are deliberately preserved — clearing them would orphan the underlying
+     *  process from the user's view (and from the Stop button), with no way to inspect or
+     *  cancel it afterwards. The Clear toolbar button is for "tidy up the history", not
+     *  "cancel everything in flight".
+     */
     fun clearAllRecords() {
-        synchronized(callRecordsLock) { callRecords.clear() }
-        callRecordsByCallId.clear()
-        runCatching { io.nimbly.mcpcompanion.util.CallPayloadStorage.clear() }
+        val preservedCallIds = synchronized(callRecordsLock) {
+            val running = callRecords.filter { it.status == CallRecord.Status.RUNNING }
+            callRecords.clear()
+            callRecords.addAll(running)
+            running.map { it.callId }.toSet()
+        }
+        // Drop the per-call lookup entries for the records we just removed, keep RUNNING ones.
+        val toRemove = callRecordsByCallId.keys - preservedCallIds
+        toRemove.forEach { callRecordsByCallId.remove(it) }
+        // Disk payloads: keep on-disk entries for the preserved (still-running) calls; their
+        // response will be written on completion. Wipe the rest.
+        runCatching { io.nimbly.mcpcompanion.util.CallPayloadStorage.clearExcept(preservedCallIds) }
         fireCallRecordsChanged()
     }
 
