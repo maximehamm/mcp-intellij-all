@@ -81,8 +81,10 @@ Tout appel par réflexion (`Class.forName`, `getDeclaredField`, `getMethod`, etc
 ## Workflow de développement
 
 1. Coder le tool dans `McpCompanionToolset.kt` — ajouter `disabledMessage("nom_tool")?.let { return it }` en tête
-2. Ajouter le tool dans `McpCompanionSettings.ALL_TOOLS` (nom + description courte) pour qu'il apparaisse dans la page Settings
-3. Mettre à jour `plugin.xml` (description + example prompts) et `README.md`
+2. Ajouter le tool dans `McpCompanionSettings.TOOL_GROUPS` (dans le bon groupe) pour qu'il apparaisse dans la page Settings
+3. Mettre à jour `plugin.xml` (`<description>` + example prompts) et `README.md`
+   - ⚠️ **La `<description>` doit refléter EXACTEMENT la page Settings** : un `<h4>` par groupe de `TOOL_GROUPS`, **dans le même ordre**, et **chaque** tool du groupe listé en `<li><b>nom</b> — …</li>`. Mettre aussi à jour le compteur `<b>NN tools …</b>` (= somme de `TOOL_GROUPS`).
+   - 🔒 Garde-fou automatique : `DescriptionCompletenessTest` fait échouer le build si un tool manque dans la description, si un groupe Settings n'a pas son `<h4>` (ordre inclus), ou si le compteur est faux. Lancer `./gradlew test` avant de committer.
 4. Incrémenter le **second digit** de la version dans `build.gradle.kts` (ex: `1.1.0` → `1.2.0`)
 5. `./gradlew buildPlugin`
 6. L'utilisateur redémarre manuellement le sandbox (`runIde`) et active **Settings → Tools → MCP Server → Enable MCP Server** (à refaire à chaque redémarrage du sandbox)

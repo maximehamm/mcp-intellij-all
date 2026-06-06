@@ -302,7 +302,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "vcs_fetch", "vcs_merge_branch", "vcs_rebase", "get_vcs_conflicts", "vcs_open_merge_tool",
                 "vcs_reset", "vcs_revert", "vcs_cherry_pick", "vcs_move_file", "vcs_check_repo_health"
             ),
-            "Pull Requests" to listOf(
+            "Pull Requests (GitHub)" to listOf(
                 "list_pull_requests", "get_pull_request", "get_pull_request_comments",
                 "get_pull_request_files", "get_pull_request_commits", "get_pull_request_reviews",
                 "search_issues_or_prs",

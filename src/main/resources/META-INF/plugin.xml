@@ -18,13 +18,12 @@
         <h4>Editor &amp; Navigation</h4>
         <ul>
             <li><b>get_open_editors</b> — Open files, focused editor with caret position, and current text selection.</li>
-            <li><b>get_file_problems</b> — IDE-detected errors, warnings, and infos for a file or all open editors.</li>
-            <li><b>get_quick_fixes</b> — Quick fix suggestions at a specific file:line:column. Use after get_file_problems to get actionable fixes for a reported problem.</li>
             <li><b>navigate_to</b> — Opens a file and places the cursor at a given line and column.</li>
             <li><b>select_text</b> — Opens a file and selects a text range (ready to copy with Cmd+C).</li>
             <li><b>highlight_text</b> — Highlights multiple zones in a file using the IDE's search-result color (theme-aware). Press Escape to clear.</li>
             <li><b>clear_highlights</b> — Removes all highlights added by <code>highlight_text</code>.</li>
             <li><b>show_diff</b> — Opens IntelliJ's built-in diff viewer to visually compare the current content of a file with proposed new content (read-only — does not modify the file).</li>
+            <li><b>create_scratch_file</b> — Creates an IntelliJ scratch file (outside the project tree) with given content and opens it — great for previewing a snippet, sample, or sketch without polluting the project.</li>
         </ul>
 
         <h4>Build &amp; Tests</h4>
@@ -33,11 +32,18 @@
             <li><b>get_console_output</b> — Console output from both the Run and Debug tool windows. All tabs from each window, with the active window and active tab clearly indicated.</li>
             <li><b>get_services_output</b> — All sessions from the Services tool window, grouped by node name: SQL output log, result grids with column names, and which session/tab is currently active.</li>
             <li><b>get_test_results</b> — Last test run results: passed/failed/ignored status, duration, and failure messages with stack traces.</li>
+            <li><b>get_terminal_output</b> — Content of all tabs in the embedded Terminal tool window.</li>
+            <li><b>send_to_terminal</b> — Sends a command to a terminal tab and executes it. Optional <code>waitForIdle=true</code> blocks until the terminal output stops changing. ⚠ Disabled by default.</li>
         </ul>
 
         <h4>Debug</h4>
         <ul>
-            <li><b>debug_run_configuration</b> — Launches a run configuration in debug mode.</li>
+            <li><b>list_run_configurations</b> — Lists all run configurations with name, type, folder, and running status.</li>
+            <li><b>start_run_configuration</b> — Launches a named run configuration in run or debug mode. Optional <code>waitForExit=true</code> blocks until the process terminates and returns the exit code.</li>
+            <li><b>modify_run_configuration</b> — Modifies VM options, program arguments, env vars, or working dir of a run configuration.</li>
+            <li><b>get_run_configuration_xml</b> — Returns the full XML definition of a run configuration.</li>
+            <li><b>create_run_configuration_from_xml</b> — Creates a new run configuration from an XML definition (any type).</li>
+            <li><b>debug_run_configuration</b> — Launches a run configuration in debug mode. Optional <code>waitForExit=true</code> blocks until the debugged process exits.</li>
             <li><b>get_debug_variables</b> — Local variables and their values from the current debugger stack frame (available when paused at a breakpoint).</li>
             <li><b>get_breakpoints</b> — Lists all line breakpoints with file, line number, enabled state, and condition expression.</li>
             <li><b>add_conditional_breakpoint</b> — Adds a breakpoint with an optional condition expression.</li>
@@ -48,10 +54,22 @@
         <h4>Diagnostic &amp; Processes</h4>
         <ul>
             <li><b>get_ide_snapshot</b> — Lightweight snapshot of what the developer is currently doing: active file + caret, selection, open files, active runs/debug, indexing, background processes. Designed for frequent polling (e.g. a Claude Code hook to keep the AI aware of the current context).</li>
-            <li><b>get_ide_settings</b> — Read IntelliJ IDE settings: Gradle build delegation, SDK, compiler, encoding. Pass a keyword (<code>search</code>) to filter, a <code>key</code> for direct lookup, or a <code>prefix</code> (with optional <code>depth</code>) to retrieve all settings in a subtree.</li>
             <li><b>get_intellij_diagnostic</b> — One-call diagnostic: indexing status, active notifications, running/paused processes, and <code>idea.log</code> WARN/ERROR tail. Use this first when something is not working as expected.</li>
             <li><b>get_running_processes</b> — Lists all active and paused background processes (indexing, Gradle syncs, builds, etc.).</li>
             <li><b>manage_process</b> — Pauses, resumes, or cancels a background process by title.</li>
+            <li><b>get_ide_settings</b> — Read IntelliJ IDE settings: Gradle build delegation, SDK, compiler, encoding. Pass a keyword (<code>search</code>) to filter, a <code>key</code> for direct lookup, or a <code>prefix</code> (with optional <code>depth</code>) to retrieve all settings in a subtree.</li>
+        </ul>
+
+        <h4>Code Analysis</h4>
+        <ul>
+            <li><b>get_file_problems</b> — IDE-detected errors, warnings, and infos for a file or all open editors.</li>
+            <li><b>get_quick_fixes</b> — Quick fix suggestions at a specific file:line:column. Use after get_file_problems to get actionable fixes for a reported problem.</li>
+            <li><b>apply_quick_fix</b> — Applies a quick fix by its exact text at a given line (use fixes returned by get_file_problems or get_quick_fixes).</li>
+            <li><b>list_inspections</b> — Lists all available inspections in the current profile, optionally filtered to a file or folder.</li>
+            <li><b>run_inspections</b> — Runs inspections on a file, folder, or whole project — works on closed files too; filter by inspection ID or severity.</li>
+            <li><b>refresh_project</b> — Syncs the project build system (Gradle or Maven). Detects the build system automatically from the project root.</li>
+            <li><b>get_project_structure</b> — Project SDK, modules, source roots, excluded folders, and module dependencies. All paths relative to project root.</li>
+            <li><b>get_psi_tree</b> — Dumps the PSI tree of a file as hierarchical text (element class, token type, range, preview) — handy for debugging folding builders, annotators, intentions and refactorings.</li>
         </ul>
 
         <h4>Database</h4>
@@ -73,7 +91,7 @@
             <li><b>get_gradle_project_info</b> — Wrapper version, JDK used, list of subprojects with paths and source sets — useful for monorepo reasoning.</li>
         </ul>
 
-        <h4>Git &amp; VCS</h4>
+        <h4>VCS</h4>
         <ul>
             <li><b>get_vcs_changes</b> — All locally modified, added, deleted, and moved files (any VCS). Pass <code>includeDiff=true</code> to include a unified diff per file.</li>
             <li><b>get_vcs_branch</b> — Current Git branch and all local/remote branches for each repository.</li>
@@ -99,13 +117,31 @@
             <li><b>vcs_rebase</b> — Rebases the current branch onto another (<code>git rebase</code>); supports <code>abort=true</code> and <code>continueRebase=true</code>.</li>
             <li><b>get_vcs_conflicts</b> — Lists all conflicted files after a failed merge or rebase, with conflict type and optional file content including conflict markers.</li>
             <li><b>vcs_open_merge_tool</b> — Opens IntelliJ's built-in three-way merge tool for all conflicted files (equivalent to VCS → Git → Resolve Conflicts…).</li>
+            <li><b>vcs_rename_branch</b> — Renames a branch (<code>git branch -m</code>); with <code>pushRemote=true</code> also publishes the new name and deletes the old remote branch. ⚠ Disabled by default.</li>
+            <li><b>vcs_move_file</b> — Moves or renames a tracked file/directory via <code>git mv</code>, preserving Git history so <code>git log --follow</code> and <code>git blame</code> keep working.</li>
+            <li><b>vcs_check_repo_health</b> — Diagnoses orphan <code>.git/index.lock</code> files left by crashed builds; pass <code>clean=true</code> to remove stale locks.</li>
+        </ul>
+
+        <h4>Pull Requests (GitHub)</h4>
+        <p>Auto-detected from the <code>origin</code> remote; uses the GitHub account configured in Settings → Version Control → GitHub. No terminal or <code>gh</code> CLI needed.</p>
+        <ul>
+            <li><b>list_pull_requests</b> — Lists pull requests; filter by state (open/closed/merged/all) and source branch.</li>
+            <li><b>get_pull_request</b> — Full metadata of one PR: title, description, author, branches, state, mergeability, reviewers, CI checks.</li>
+            <li><b>get_pull_request_comments</b> — Review and discussion comments (both issue-level and review-line comments).</li>
+            <li><b>get_pull_request_files</b> — Files changed in the PR with status, additions/deletions, and per-file unified diff.</li>
+            <li><b>get_pull_request_commits</b> — Commits on the PR with SHA, author, and message.</li>
+            <li><b>get_pull_request_reviews</b> — Reviews on the PR (APPROVED / CHANGES_REQUESTED / COMMENTED / DISMISSED / PENDING) with body.</li>
+            <li><b>search_issues_or_prs</b> — Search GitHub issues and PRs using the github.com query syntax.</li>
+            <li><b>create_pull_request</b> — Opens a new PR (title, head, base, body, draft). ⚠ Disabled by default.</li>
+            <li><b>add_pull_request_comment</b> — Posts a top-level comment on a PR. ⚠ Disabled by default.</li>
+            <li><b>update_pull_request</b> — Updates a PR's title, body, state (close via state=closed), or base branch. ⚠ Disabled by default.</li>
+            <li><b>merge_pull_request</b> — Merges a PR with merge / squash / rebase strategy. ⚠ Disabled by default.</li>
+            <li><b>request_pull_request_reviewers</b> — Requests reviews from users and/or teams. ⚠ Disabled by default.</li>
         </ul>
 
         <h4>General</h4>
         <ul>
             <li><b>get_mcp_companion_overview</b> — Describes all available MCP Companion tools and how to use them.</li>
-            <li><b>get_project_structure</b> — Project SDK, modules, source roots, excluded folders, and module dependencies. All paths relative to project root.</li>
-            <li><b>refresh_project</b> — Syncs the project build system (Gradle or Maven). Detects the build system automatically from the project root.</li>
             <li><b>execute_ide_action</b> — Executes any IntelliJ action by ID (e.g. ShowSettings, ReformatCode, GotoFile), or searches for action IDs by keyword.</li>
             <li><b>replace_text_undoable</b> — Replaces text in a file via IntelliJ's document API (supports Cmd+Z undo).</li>
             <li><b>delete_file</b> — Deletes a file from the project (undoable).</li>
