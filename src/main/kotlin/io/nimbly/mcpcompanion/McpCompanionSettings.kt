@@ -225,7 +225,13 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         const val MAX_CALL_RECORDS = 50
 
         /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
-        val DISABLED_BY_DEFAULT = setOf("send_to_terminal", "delete_file", "execute_database_query", "vcs_delete_branch", "vcs_rename_branch")
+        val DISABLED_BY_DEFAULT = setOf(
+            "send_to_terminal", "delete_file", "execute_database_query",
+            "vcs_delete_branch", "vcs_rename_branch",
+            // PR write operations — mutate remote state and notify reviewers / mergers.
+            "add_pull_request_comment", "update_pull_request", "merge_pull_request", "request_pull_request_reviewers",
+            "create_pull_request",
+        )
 
         /**
          * Tools that expose an *optional* synchronous mode — a `waitForX = true` parameter (and
@@ -295,6 +301,13 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "vcs_create_branch", "vcs_checkout_branch", "vcs_rename_branch", "vcs_delete_branch",
                 "vcs_fetch", "vcs_merge_branch", "vcs_rebase", "get_vcs_conflicts", "vcs_open_merge_tool",
                 "vcs_reset", "vcs_revert", "vcs_cherry_pick", "vcs_move_file", "vcs_check_repo_health"
+            ),
+            "Pull Requests" to listOf(
+                "list_pull_requests", "get_pull_request", "get_pull_request_comments",
+                "get_pull_request_files", "get_pull_request_commits", "get_pull_request_reviews",
+                "search_issues_or_prs",
+                "add_pull_request_comment", "update_pull_request", "merge_pull_request",
+                "request_pull_request_reviewers", "create_pull_request",
             ),
             "General" to listOf(
                 "get_mcp_companion_overview", "execute_ide_action", "replace_text_undoable", "delete_file"

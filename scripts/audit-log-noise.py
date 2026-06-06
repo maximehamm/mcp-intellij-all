@@ -119,6 +119,21 @@ TOOLS = [
     ("vcs_cherry_pick", {"hash": "HEAD"}),
     ("vcs_move_file", {"sourcePath": "nonexistent.txt", "targetPath": "nonexistent-renamed.txt"}),
     ("vcs_check_repo_health", {}),
+    # Pull Requests (3) — auto-detect platform; calls may error if no token configured,
+    # but they should NOT produce log noise (the implementation handles auth failure cleanly).
+    ("list_pull_requests", {"state": "open"}),
+    ("get_pull_request", {"number": 1}),
+    ("get_pull_request_comments", {"number": 1}),
+    ("get_pull_request_files", {"number": 1}),
+    ("get_pull_request_commits", {"number": 1}),
+    ("get_pull_request_reviews", {"number": 1}),
+    ("search_issues_or_prs", {"q": "is:pr is:open"}),
+    # Write ops — disabled by default; we still call to exercise the gate without mutating.
+    ("add_pull_request_comment", {"number": 1, "body": "audit-noop"}),
+    ("update_pull_request", {"number": 1, "title": "audit-noop"}),
+    ("merge_pull_request", {"number": 1, "strategy": "merge"}),
+    ("request_pull_request_reviewers", {"number": 1, "reviewers": "audit-noop"}),
+    ("create_pull_request", {"title": "audit-noop", "head": "audit-noop-branch", "base": "main"}),
     # General (4)
     ("get_mcp_companion_overview", {}),
     ("execute_ide_action", {"search": "ReformatCode"}),

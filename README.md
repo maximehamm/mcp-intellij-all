@@ -115,6 +115,25 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 | `vcs_move_file` | Move or rename a tracked file/directory via `git mv` — preserves history so `git log --follow` and `git blame` keep working |
 | `vcs_check_repo_health` | Diagnose orphan `.git/index.lock` files left by crashed builds; pass `clean=true` to remove stale locks |
 
+### Pull Requests *(GitHub — auto-detected from `origin` remote)*
+
+Authentication: the GitHub account configured in **Settings → Version Control → GitHub** (token read from the bundled JetBrains plugin). All calls go through the plugin's API executor — no terminal / `gh` CLI needed.
+
+| Tool | Description |
+|------|-------------|
+| `list_pull_requests` | List PRs — filter by `state` (`open` / `closed` / `merged` / `all`) and optional source `branch` |
+| `get_pull_request` | Full metadata of one PR: title, description, author, source/target branches, status, reviewers, CI checks |
+| `get_pull_request_comments` | Review + discussion comments — both issue-level (general PR discussion) and review-line comments |
+| `get_pull_request_files` | Files changed in the PR with status, additions/deletions and per-file unified diff (auto-paginated) |
+| `get_pull_request_commits` | List commits on a PR — SHA, author, message, sub-stats (auto-paginated) |
+| `get_pull_request_reviews` | List reviews on a PR — state APPROVED/CHANGES_REQUESTED/COMMENTED/DISMISSED/PENDING + review body |
+| `search_issues_or_prs` | Search GitHub issues + PRs (`is:pr is:open author:@me`, `repo:owner/name label:bug`, …) |
+| `add_pull_request_comment` 🔒 | Post a top-level comment on a PR. Disabled by default |
+| `update_pull_request` 🔒 | Update title / body / state / base of a PR (close via `state="closed"`). Disabled by default |
+| `merge_pull_request` 🔒 | Merge a PR with `merge`/`squash`/`rebase` strategy. Disabled by default |
+| `request_pull_request_reviewers` 🔒 | Request reviews from users or teams. Disabled by default |
+| `create_pull_request` 🔒 | Open a new PR — completes the branch→commit→push→PR flow inside the IDE, no terminal. Disabled by default |
+
 ### General
 | Tool | Description |
 |------|-------------|

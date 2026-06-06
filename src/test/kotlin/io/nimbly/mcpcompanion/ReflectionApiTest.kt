@@ -198,6 +198,120 @@ class ReflectionApiTest {
             "PluginManagerCore.getPlugins() must return an array")
     }
 
+    // ── GitHub account manager (Pull Requests toolset) ─────────────────────────
+    //
+    // McpCompanionPullRequestsToolset / GitHubPluginInvoker read the OAuth token stored by the
+    // bundled JetBrains GitHub plugin via reflection because GHAccountManager is
+    // `@ApiStatus.Internal`. If it's renamed or moves packages, the Settings-integrated flow
+    // silently degrades — catch it at build time instead of via a bug report.
+
+    @Test
+    fun `GHAccountManager class exists in the bundled GitHub plugin`() {
+        val cls = runCatching {
+            Class.forName("org.jetbrains.plugins.github.authentication.accounts.GHAccountManager")
+        }.getOrNull()
+        if (cls == null) {
+            println("WARNING: GHAccountManager not found — bundled GitHub plugin may have been renamed; PR tools will return a clear error.")
+            return
+        }
+        // findCredentials is a suspend fun → compiled signature (account, Continuation).
+        val findCreds = cls.methods.firstOrNull { it.name == "findCredentials" && it.parameterCount == 2 }
+        val getAccounts = cls.methods.firstOrNull { (it.name == "getAccounts" || it.name == "getAccountsState") && it.parameterCount == 0 }
+        assertNotNull(findCreds, "GHAccountManager.findCredentials(account, Continuation) suspend fn is required — token lookup uses it")
+        assertNotNull(getAccounts, "GHAccountManager.getAccounts() (or getAccountsState()) is required — account discovery uses it")
+    }
+
+    // ── GitHub API request executor + typed request templates ───────────────────
+    // GitHubPluginInvoker reflectively builds the GitHub plugin's request executor and its
+    // Get/Post/Patch/Put.Json request subclasses. These are all @ApiStatus.Internal, hence the
+    // reflection. If JetBrains renames or reshapes any of them, the PR tools silently break —
+    // these tests fail at build time instead.
+
+    @Test
+    fun `GithubApiRequestExecutor Factory exposes getInstance + create(server, token)`() {
+        val factory = runCatching {
+            Class.forName("org.jetbrains.plugins.github.api.GithubApiRequestExecutor\$Factory")
+        }.getOrNull()
+        if (factory == null) { println("WARNING: GithubApiRequestExecutor.Factory not found — GitHub PR tools degrade"); return }
+        val serverPath = Class.forName("org.jetbrains.plugins.github.api.GithubServerPath")
+        assertNotNull(factory.getMethod("getInstance"), "Factory.getInstance() required")
+        assertNotNull(factory.getMethod("create", serverPath, String::class.java),
+            "Factory.create(GithubServerPath, String token) required — executor bootstrap uses it")
+    }
+
+    @Test
+    fun `GithubApiRequestExecutor exposes execute(GithubApiRequest)`() {
+        val executorCls = runCatching {
+            Class.forName("org.jetbrains.plugins.github.api.GithubApiRequestExecutor")
+        }.getOrNull()
+        if (executorCls == null) { println("WARNING: GithubApiRequestExecutor not found"); return }
+        val requestCls = Class.forName("org.jetbrains.plugins.github.api.GithubApiRequest")
+        val execute = executorCls.methods.firstOrNull {
+            it.name == "execute" && it.parameterCount == 1 && it.parameterTypes[0] == requestCls
+        }
+        assertNotNull(execute, "GithubApiRequestExecutor.execute(GithubApiRequest) required — every PR call goes through it")
+    }
+
+    @Test
+    fun `GithubApiRequest Get JsonMap and JsonPage constructors exist`() {
+        val mapCls = runCatching { Class.forName("org.jetbrains.plugins.github.api.GithubApiRequest\$Get\$JsonMap") }.getOrNull()
+        val pageCls = runCatching { Class.forName("org.jetbrains.plugins.github.api.GithubApiRequest\$Get\$JsonPage") }.getOrNull()
+        if (mapCls == null || pageCls == null) { println("WARNING: GithubApiRequest.Get.JsonMap/JsonPage not found"); return }
+        assertNotNull(mapCls.getConstructor(String::class.java, String::class.java),
+            "Get.JsonMap(url, acceptMime) required — single-object GET")
+        assertNotNull(pageCls.getConstructor(String::class.java, Class::class.java, String::class.java),
+            "Get.JsonPage(url, clazz, acceptMime) required — paginated GET")
+    }
+
+    @Test
+    fun `GithubApiRequest Post Patch Put Json constructors exist`() {
+        for (kind in listOf("Post", "Patch", "Put")) {
+            val cls = runCatching { Class.forName("org.jetbrains.plugins.github.api.GithubApiRequest\$$kind\$Json") }.getOrNull()
+            if (cls == null) { println("WARNING: GithubApiRequest.$kind.Json not found"); continue }
+            // Post.Json: (url, body, clazz, mediaType) ; Patch/Put.Json: (url, body, clazz)
+            val ctor = cls.constructors.firstOrNull {
+                (it.parameterCount == 4 || it.parameterCount == 3) &&
+                    it.parameterTypes[0] == String::class.java &&
+                    it.parameterTypes[2] == Class::class.java
+            }
+            assertNotNull(ctor, "$kind.Json (url, body, clazz[, mediaType]) constructor required — write PR tools use it")
+        }
+    }
+
+    @Test
+    fun `GithubResponsePage exposes getItems and getNextLink`() {
+        val cls = runCatching { Class.forName("org.jetbrains.plugins.github.api.data.GithubResponsePage") }.getOrNull()
+        if (cls == null) { println("WARNING: GithubResponsePage not found"); return }
+        assertNotNull(cls.methods.firstOrNull { it.name == "getItems" && it.parameterCount == 0 },
+            "GithubResponsePage.getItems() required — pagination reads the page items")
+        assertNotNull(cls.methods.firstOrNull { it.name == "getNextLink" && it.parameterCount == 0 },
+            "GithubResponsePage.getNextLink() required — pagination follows Link: rel=next")
+    }
+
+    // ── Git4Idea remote detection (origin URL → platform) ───────────────────────
+    // McpCompanionPullRequestsToolset.originRemoteUrl() reaches the Git plugin to read the
+    // origin remote URL (instead of shelling out to `git`). Pin the API it depends on.
+
+    @Test
+    fun `GitRepositoryManager exposes getInstance(Project) and getRepositories`() {
+        val cls = runCatching { Class.forName("git4idea.repo.GitRepositoryManager") }.getOrNull()
+        if (cls == null) { println("WARNING: GitRepositoryManager not found — origin detection degrades"); return }
+        assertNotNull(cls.getMethod("getInstance", com.intellij.openapi.project.Project::class.java),
+            "GitRepositoryManager.getInstance(Project) required")
+        assertNotNull(cls.getMethod("getRepositories"),
+            "GitRepositoryManager.getRepositories() required")
+    }
+
+    @Test
+    fun `GitRemote exposes getName and getFirstUrl`() {
+        val cls = runCatching { Class.forName("git4idea.repo.GitRemote") }.getOrNull()
+        if (cls == null) { println("WARNING: GitRemote not found — origin detection degrades"); return }
+        assertNotNull(cls.methods.firstOrNull { it.name == "getName" && it.parameterCount == 0 },
+            "GitRemote.getName() required — to pick the 'origin' remote")
+        assertNotNull(cls.methods.firstOrNull { it.name == "getFirstUrl" && it.parameterCount == 0 },
+            "GitRemote.getFirstUrl() required — to read the remote URL")
+    }
+
     // ── MessagePool / MessagePoolListener / AbstractMessage ─────────────────────
     // Used in McpCompanionStartupActivity.installMcpErrorFilter() via reflection to silence
     // the IDE "Internal Error" pop-up that the MCP framework triggers on parameter mismatches.

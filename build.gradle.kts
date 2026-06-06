@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.7.1"
+version = "3.8.0"
 
 repositories {
     mavenCentral()
@@ -28,6 +28,11 @@ dependencies {
         bundledPlugin("com.intellij.mcpServer")
         bundledPlugin("Git4Idea")
         bundledPlugin("com.intellij.gradle")
+        // GitHub plugin — required by the Pull Requests toolset to reach the user's configured
+        // account (token, server, executor). Reached purely via reflection so the plugin
+        // tolerates its absence at runtime (the tools just return a clear error), but declaring
+        // it here ensures the sandbox loads it so the tools are testable end-to-end via `runIde`.
+        bundledPlugin("org.jetbrains.plugins.github")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
@@ -48,6 +53,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.8.0</b> — New <b>Pull Requests</b> tool group for GitHub: list / inspect PRs, their comments, files, commits and reviews, plus <code>search_issues_or_prs</code> and write actions (<code>create_pull_request</code>, <code>merge_pull_request</code>, … — disabled by default).</li>
                 <li><b>3.7.0</b> — New <code>create_scratch_file</code> tool — creates an IntelliJ scratch file with given content and opens it in the editor. Lives outside the project tree, so no VCS noise — perfect for previewing snippets, samples or sketches.</li>
                 <li><b>3.6.0</b> — Optional <code>waitForExit</code> / <code>waitForSync</code> / <code>waitForIdle</code> params on long-running tools (run configs, refresh, terminal). Monitoring tool window gains live elapsed time and a <kbd>Stop</kbd> button. Sync-capable tools flagged with ⏱ in Settings.</li>
                 <li><b>3.5.0</b> — New <code>get_psi_tree</code> tool — dumps the PSI tree of any file as hierarchical text with element classes, token types, ranges and previews. Lets the AI debug folding builders, annotators, intentions and refactorings without rebuilding the plugin.</li>

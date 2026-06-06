@@ -179,6 +179,21 @@ class McpCompanionToolset : McpToolset {
 - vcs_move_file(sourcePath, targetPath, force=false) — move or rename a tracked file/directory via `git mv`, preserving Git history (the rename is staged automatically)
 - vcs_check_repo_health(clean=false, staleLockMinutes=5) — diagnose orphan .git/index.lock files; clean=true removes locks older than the threshold
 
+### Pull Requests (GitHub — auto-detected from `origin` remote URL)
+Authentication: the GitHub account configured in Settings → Version Control → GitHub (token read from the bundled JetBrains plugin). All calls go through the plugin's API executor — no terminal / `gh` CLI needed.
+- list_pull_requests(state="open"|"closed"|"merged"|"all", branch?) — list PRs
+- get_pull_request(number) — full metadata of one PR: title, description, author, status, reviewers, CI checks
+- get_pull_request_comments(number) — review + discussion comments (both issue and review-line comments)
+- get_pull_request_files(number) — files changed in the PR with status, additions/deletions, and per-file unified diff snippet (auto-paginated)
+- get_pull_request_commits(number) — list commits on the PR with SHA, author, message (auto-paginated)
+- get_pull_request_reviews(number) — list reviews (APPROVED/CHANGES_REQUESTED/COMMENTED/DISMISSED/PENDING) on the PR
+- search_issues_or_prs(q) — GitHub search syntax (e.g. "is:pr is:open author:@me"); returns total_count + items
+- add_pull_request_comment(number, body) 🔒 — post a top-level comment (Markdown), disabled by default
+- update_pull_request(number, title?, body?, state?, base?) 🔒 — edit title/body/state/base (close via state="closed"), disabled by default
+- merge_pull_request(number, strategy="merge"|"squash"|"rebase", commitTitle?, commitMessage?) 🔒 — merge with chosen strategy, disabled by default
+- request_pull_request_reviewers(number, reviewers?, teamReviewers?) 🔒 — request reviews from users/teams, disabled by default
+- create_pull_request(title, head, base, body?, draft?) 🔒 — open a new PR — completes the create-branch→commit→push→open-PR flow entirely inside the IDE, no terminal needed; disabled by default
+
 ### General
 - get_mcp_companion_overview → this overview
 - execute_ide_action         → execute any IntelliJ action by ID, or search for action IDs by keyword
