@@ -221,6 +221,37 @@ class ReflectionApiTest {
         assertNotNull(getAccounts, "GHAccountManager.getAccounts() (or getAccountsState()) is required — account discovery uses it")
     }
 
+    // ── GitLab account manager (Merge Requests toolset) ────────────────────────
+    // GitLabPluginInvoker reads the token from GitLabAccountManager via reflection (the class is
+    // @ApiStatus.Internal). Pin its shape — if it moves, the MR tools return a clear error but
+    // the Settings-integrated flow silently degrades.
+
+    @Test
+    fun `GitLabAccountManager class exists in the bundled GitLab plugin`() {
+        val cls = runCatching {
+            Class.forName("org.jetbrains.plugins.gitlab.authentication.accounts.GitLabAccountManager")
+        }.getOrNull()
+        if (cls == null) {
+            println("WARNING: GitLabAccountManager not found — bundled GitLab plugin may have been renamed; MR tools will return a clear error.")
+            return
+        }
+        // findCredentials is inherited from AccountManagerBase as a suspend fn (account, Continuation).
+        val all = generateSequence(cls as Class<*>?) { it.superclass }.flatMap { it.methods.asSequence() } +
+            cls.methods.asSequence()
+        val findCreds = all.firstOrNull { it.name == "findCredentials" && it.parameterCount == 2 }
+        val getAccounts = all.firstOrNull { (it.name == "getAccounts" || it.name == "getAccountsState") && it.parameterCount == 0 }
+        assertNotNull(findCreds, "GitLabAccountManager.findCredentials(account, Continuation) suspend fn is required — token lookup uses it")
+        assertNotNull(getAccounts, "GitLabAccountManager.getAccounts()/getAccountsState() is required — account discovery uses it")
+    }
+
+    @Test
+    fun `GitLabServerPath exposes getUri`() {
+        val cls = runCatching { Class.forName("org.jetbrains.plugins.gitlab.api.GitLabServerPath") }.getOrNull()
+        if (cls == null) { println("WARNING: GitLabServerPath not found"); return }
+        assertNotNull(cls.methods.firstOrNull { it.name == "getUri" && it.parameterCount == 0 },
+            "GitLabServerPath.getUri() required — used to match the account to the origin host")
+    }
+
     // ── GitHub API request executor + typed request templates ───────────────────
     // GitHubPluginInvoker reflectively builds the GitHub plugin's request executor and its
     // Get/Post/Patch/Put.Json request subclasses. These are all @ApiStatus.Internal, hence the

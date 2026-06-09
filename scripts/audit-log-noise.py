@@ -134,6 +134,19 @@ TOOLS = [
     ("merge_pull_request", {"number": 1, "strategy": "merge"}),
     ("request_pull_request_reviewers", {"number": 1, "reviewers": "audit-noop"}),
     ("create_pull_request", {"title": "audit-noop", "head": "audit-noop-branch", "base": "main"}),
+    # Merge Requests (GitLab) — will return "no GitLab remote" on a GitHub/other repo, which is
+    # a clean error (no log noise). Write ops disabled by default → gate exercised.
+    ("list_merge_requests", {"state": "opened"}),
+    ("get_merge_request", {"iid": 1}),
+    ("get_merge_request_comments", {"iid": 1}),
+    ("get_merge_request_changes", {"iid": 1}),
+    ("get_merge_request_commits", {"iid": 1}),
+    ("get_merge_request_approvals", {"iid": 1}),
+    ("search_gitlab", {"search": "test", "scope": "merge_requests"}),
+    ("add_merge_request_comment", {"iid": 1, "body": "audit-noop"}),
+    ("update_merge_request", {"iid": 1, "title": "audit-noop"}),
+    ("merge_merge_request", {"iid": 1}),
+    ("create_merge_request", {"title": "audit-noop", "sourceBranch": "audit-noop", "targetBranch": "main"}),
     # General (4)
     ("get_mcp_companion_overview", {}),
     ("execute_ide_action", {"search": "ReformatCode"}),

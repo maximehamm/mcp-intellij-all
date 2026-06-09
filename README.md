@@ -134,6 +134,24 @@ Authentication: the GitHub account configured in **Settings → Version Control 
 | `request_pull_request_reviewers` 🔒 | Request reviews from users or teams. Disabled by default |
 | `create_pull_request` 🔒 | Open a new PR — completes the branch→commit→push→PR flow inside the IDE, no terminal. Disabled by default |
 
+### Merge Requests *(GitLab — auto-detected from `origin` remote)*
+
+Authentication: the GitLab account configured in **Settings → Version Control → GitLab**. Transport via the IDE HTTP stack — no terminal / `glab` CLI needed.
+
+| Tool | Description |
+|------|-------------|
+| `list_merge_requests` | List MRs — filter by `state` (`opened` / `closed` / `merged` / `all`) and `sourceBranch` |
+| `get_merge_request` | Full metadata of one MR: title, description, author, branches, state, merge status, reviewers, pipeline |
+| `get_merge_request_comments` | Notes — discussion and diff-anchored comments |
+| `get_merge_request_changes` | Files changed in the MR with old/new path, flags, and per-file diff |
+| `get_merge_request_commits` | Commits on the MR with SHA, author, title, message |
+| `get_merge_request_approvals` | Approval state: who approved, required/given counts, approved flag |
+| `search_gitlab` | Search the project (scope: merge_requests / issues / commits / blobs / milestones) |
+| `create_merge_request` 🔒 | Open a new MR (title, source/target branch, description). Disabled by default |
+| `add_merge_request_comment` 🔒 | Post a comment (note) on an MR. Disabled by default |
+| `update_merge_request` 🔒 | Update an MR's title / description / state (close/reopen) / target branch. Disabled by default |
+| `merge_merge_request` 🔒 | Merge (accept) an MR, optionally squashing. Disabled by default |
+
 ### General
 | Tool | Description |
 |------|-------------|

@@ -194,6 +194,20 @@ Authentication: the GitHub account configured in Settings → Version Control �
 - request_pull_request_reviewers(number, reviewers?, teamReviewers?) 🔒 — request reviews from users/teams, disabled by default
 - create_pull_request(title, head, base, body?, draft?) 🔒 — open a new PR — completes the create-branch→commit→push→open-PR flow entirely inside the IDE, no terminal needed; disabled by default
 
+### Merge Requests (GitLab — auto-detected from `origin` remote URL)
+Authentication: the GitLab account configured in Settings → Version Control → GitLab. Transport via the IDE HTTP stack — no terminal / `glab` CLI needed.
+- list_merge_requests(state="opened"|"closed"|"merged"|"all", sourceBranch?) — list MRs
+- get_merge_request(iid) — full metadata of one MR: title, description, author, branches, state, merge status, reviewers, pipeline
+- get_merge_request_comments(iid) — notes (discussion + diff-anchored comments)
+- get_merge_request_changes(iid) — files changed with old/new path, flags, per-file diff
+- get_merge_request_commits(iid) — commits on the MR with SHA, author, title, message
+- get_merge_request_approvals(iid) — approval state (who approved, required/given, approved?)
+- search_gitlab(search, scope="merge_requests"|"issues"|"commits"|…) — GitLab project search
+- create_merge_request(title, sourceBranch, targetBranch, description?, removeSourceBranch?) 🔒 — open a new MR, disabled by default
+- add_merge_request_comment(iid, body) 🔒 — post a note, disabled by default
+- update_merge_request(iid, title?, description?, state?, targetBranch?) 🔒 — edit (close/reopen via state), disabled by default
+- merge_merge_request(iid, squash?, mergeCommitMessage?) 🔒 — accept/merge the MR, disabled by default
+
 ### General
 - get_mcp_companion_overview → this overview
 - execute_ide_action         → execute any IntelliJ action by ID, or search for action IDs by keyword

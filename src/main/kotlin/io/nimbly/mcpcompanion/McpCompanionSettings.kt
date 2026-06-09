@@ -231,6 +231,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
             // PR write operations — mutate remote state and notify reviewers / mergers.
             "add_pull_request_comment", "update_pull_request", "merge_pull_request", "request_pull_request_reviewers",
             "create_pull_request",
+            // MR (GitLab) write operations — same rationale.
+            "add_merge_request_comment", "update_merge_request", "merge_merge_request", "create_merge_request",
         )
 
         /**
@@ -308,6 +310,13 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "search_issues_or_prs",
                 "add_pull_request_comment", "update_pull_request", "merge_pull_request",
                 "request_pull_request_reviewers", "create_pull_request",
+            ),
+            "Merge Requests (GitLab)" to listOf(
+                "list_merge_requests", "get_merge_request", "get_merge_request_comments",
+                "get_merge_request_changes", "get_merge_request_commits", "get_merge_request_approvals",
+                "search_gitlab",
+                "add_merge_request_comment", "update_merge_request", "merge_merge_request",
+                "create_merge_request",
             ),
             "General" to listOf(
                 "get_mcp_companion_overview", "execute_ide_action", "replace_text_undoable", "delete_file"

@@ -7,7 +7,7 @@
     <description><![CDATA[
 
         <p>
-        <b>89 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
+        <b>100 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
         <p>Works with any MCP-compatible AI client: <b>Claude</b> (Anthropic), <b>GitHub Copilot</b>, <b>Codex</b>, <b>Cursor</b>, <b>Windsurf</b>, and any other assistant that supports the Model Context Protocol.</p>
         </p>
 
@@ -139,6 +139,22 @@
             <li><b>request_pull_request_reviewers</b> — Requests reviews from users and/or teams. ⚠ Disabled by default.</li>
         </ul>
 
+        <h4>Merge Requests (GitLab)</h4>
+        <p>Auto-detected from the <code>origin</code> remote; uses the GitLab account configured in Settings → Version Control → GitLab. No terminal or <code>glab</code> CLI needed.</p>
+        <ul>
+            <li><b>list_merge_requests</b> — Lists merge requests; filter by state (opened/closed/merged/all) and source branch.</li>
+            <li><b>get_merge_request</b> — Full metadata of one MR: title, description, author, branches, state, merge status, reviewers, pipeline.</li>
+            <li><b>get_merge_request_comments</b> — Notes (discussion + diff-anchored comments) on the MR.</li>
+            <li><b>get_merge_request_changes</b> — Files changed in the MR with old/new path, flags, and per-file diff.</li>
+            <li><b>get_merge_request_commits</b> — Commits on the MR with SHA, author, title and message.</li>
+            <li><b>get_merge_request_approvals</b> — Approval state: who approved, how many required/given, and whether approved.</li>
+            <li><b>search_gitlab</b> — Searches the project (scope: merge_requests / issues / commits / blobs / milestones).</li>
+            <li><b>create_merge_request</b> — Opens a new MR (title, source/target branch, description). ⚠ Disabled by default.</li>
+            <li><b>add_merge_request_comment</b> — Posts a comment (note) on an MR. ⚠ Disabled by default.</li>
+            <li><b>update_merge_request</b> — Updates an MR's title, description, state (close/reopen), or target branch. ⚠ Disabled by default.</li>
+            <li><b>merge_merge_request</b> — Merges (accepts) an MR, optionally squashing. ⚠ Disabled by default.</li>
+        </ul>
+
         <h4>General</h4>
         <ul>
             <li><b>get_mcp_companion_overview</b> — Describes all available MCP Companion tools and how to use them.</li>
@@ -212,5 +228,6 @@
         <mcpToolset implementation="io.nimbly.mcpcompanion.toolsets.McpCompanionDatabaseToolset"/>
         <mcpToolset implementation="io.nimbly.mcpcompanion.toolsets.McpCompanionVcsToolset"/>
         <mcpToolset implementation="io.nimbly.mcpcompanion.toolsets.McpCompanionPullRequestsToolset"/>
+        <mcpToolset implementation="io.nimbly.mcpcompanion.toolsets.McpCompanionMergeRequestsToolset"/>
     </extensions>
 </idea-plugin>

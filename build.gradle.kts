@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.8.1"
+version = "3.9.0"
 
 repositories {
     mavenCentral()
@@ -28,11 +28,12 @@ dependencies {
         bundledPlugin("com.intellij.mcpServer")
         bundledPlugin("Git4Idea")
         bundledPlugin("com.intellij.gradle")
-        // GitHub plugin — required by the Pull Requests toolset to reach the user's configured
-        // account (token, server, executor). Reached purely via reflection so the plugin
-        // tolerates its absence at runtime (the tools just return a clear error), but declaring
-        // it here ensures the sandbox loads it so the tools are testable end-to-end via `runIde`.
+        // GitHub & GitLab plugins — required by the Pull/Merge Request toolsets to reach the
+        // user's configured account (token + server). Reached purely via reflection so the plugin
+        // tolerates their absence at runtime (the tools just return a clear error), but declaring
+        // them here ensures the sandbox loads them so the tools are testable end-to-end via `runIde`.
         bundledPlugin("org.jetbrains.plugins.github")
+        bundledPlugin("org.jetbrains.plugins.gitlab")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
@@ -53,6 +54,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.9.0</b> — New <b>Merge Requests</b> tool group for GitLab: list / inspect MRs, their notes, changes, commits and approvals, plus <code>search_gitlab</code> and write actions (<code>create_merge_request</code>, <code>merge_merge_request</code>, … — disabled by default). Uses your configured GitLab account, no terminal needed.</li>
                 <li><b>3.8.0</b> — New <b>Pull Requests</b> tool group for GitHub: list / inspect PRs, their comments, files, commits and reviews, plus <code>search_issues_or_prs</code> and write actions (<code>create_pull_request</code>, <code>merge_pull_request</code>, … — disabled by default).</li>
                 <li><b>3.7.0</b> — New <code>create_scratch_file</code> tool — creates an IntelliJ scratch file with given content and opens it in the editor. Lives outside the project tree, so no VCS noise — perfect for previewing snippets, samples or sketches.</li>
                 <li><b>3.6.0</b> — Optional <code>waitForExit</code> / <code>waitForSync</code> / <code>waitForIdle</code> params on long-running tools (run configs, refresh, terminal). Monitoring tool window gains live elapsed time and a <kbd>Stop</kbd> button. Sync-capable tools flagged with ⏱ in Settings.</li>

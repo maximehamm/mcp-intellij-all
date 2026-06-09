@@ -9,7 +9,6 @@ import io.nimbly.mcpcompanion.McpCompanionSettings
 import io.nimbly.mcpcompanion.util.resolveProject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.URI
 import java.net.URLEncoder
 import kotlin.coroutines.coroutineContext
 
@@ -384,54 +383,15 @@ private const val NO_REMOTE = "No GitHub 'origin' remote detected. The Pull Requ
     "the project's `origin` remote to point at a github.com (or GitHub Enterprise) repository."
 
 /**
- * Detects the GitHub repo from the `origin` remote URL (read via Git4Idea — no `git` CLI).
- * Returns null when there's no Git repo, no origin remote, or the host isn't GitHub.
+ * Detects the GitHub repo from the `origin` remote (parsed via the shared [parseOriginRemote],
+ * which reads Git4Idea — no `git` CLI). Returns null when the host isn't GitHub.
  */
 private fun detectGitHubRepo(project: Project): GitHubRepoContext? {
-    val url = originRemoteUrl(project)?.takeIf { it.isNotBlank() } ?: return null
-
-    // Parse SSH (`git@host:owner/repo.git`) and HTTPS (`https://host/owner/repo.git`).
-    val (host, path) = when {
-        url.startsWith("git@") -> {
-            val rest = url.removePrefix("git@")
-            val colon = rest.indexOf(':')
-            if (colon == -1) return null
-            rest.substring(0, colon) to rest.substring(colon + 1)
-        }
-        url.startsWith("https://") || url.startsWith("http://") -> {
-            val u = runCatching { URI(url) }.getOrNull() ?: return null
-            (u.host ?: return null) to u.path.removePrefix("/")
-        }
-        else -> return null
-    }
-    val repo = path.removeSuffix(".git").removeSuffix("/")
-    if (repo.isBlank() || host.isBlank()) return null
-    if (!host.endsWith("github.com")) return null  // GitHub only for this version
-
-    val apiBase = if (host == "github.com") "https://api.github.com" else "https://$host/api/v3"
-    return GitHubRepoContext(host, repo, apiBase, project)
+    val remote = parseOriginRemote(project) ?: return null
+    if (!remote.host.endsWith("github.com")) return null  // GitHub only for this toolset
+    val apiBase = if (remote.host == "github.com") "https://api.github.com" else "https://${remote.host}/api/v3"
+    return GitHubRepoContext(remote.host, remote.repo, apiBase, project)
 }
-
-/**
- * Returns the URL of the `origin` remote (or the first remote if no `origin`) via the Git4Idea
- * plugin, reached through its own ClassLoader. No `git` CLI, no shell-out — consistent with the
- * "rely on the IDE, not system resources" project principle.
- */
-private fun originRemoteUrl(project: Project): String? = runCatching {
-    val cl = io.nimbly.mcpcompanion.util.pluginClassLoader("Git4Idea") ?: return null
-    val mgrCls = cl.loadClass("git4idea.repo.GitRepositoryManager")
-    val mgr = mgrCls.getMethod("getInstance", Project::class.java).invoke(null, project)
-    @Suppress("UNCHECKED_CAST")
-    val repos = mgrCls.getMethod("getRepositories").invoke(mgr) as? List<Any> ?: return null
-    val repo = repos.firstOrNull() ?: return null
-    @Suppress("UNCHECKED_CAST")
-    val remotes = repo.javaClass.methods.firstOrNull { it.name == "getRemotes" && it.parameterCount == 0 }
-        ?.invoke(repo) as? Collection<Any> ?: return null
-    fun remoteName(r: Any) = r.javaClass.methods.firstOrNull { it.name == "getName" && it.parameterCount == 0 }?.invoke(r) as? String
-    fun remoteUrl(r: Any) = r.javaClass.methods.firstOrNull { it.name == "getFirstUrl" && it.parameterCount == 0 }?.invoke(r) as? String
-    val chosen = remotes.firstOrNull { remoteName(it) == "origin" } ?: remotes.firstOrNull()
-    chosen?.let { remoteUrl(it) }
-}.getOrNull()
 
 /**
  * Dispatches a GET to GitHub through [GitHubPluginInvoker] (the plugin's GithubApiRequestExecutor),
