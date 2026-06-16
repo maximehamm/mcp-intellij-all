@@ -29,12 +29,29 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
     override fun getState(): State = myState
     override fun loadState(state: State) { myState = state }
 
+    /**
+     * Whether the tool runs without prompting.
+     *
+     * The checkbox **is** the consent. Higher-risk tools ([CONFIRM_BY_DEFAULT]) default to
+     * *unchecked*: while unchecked they prompt the user (Allow/Deny) before each call (see
+     * [promptsBeforeRun]); checking one — or ticking "Always allow" in the dialog, which checks
+     * it automatically — lets it run silently from then on. Regular tools default to enabled,
+     * and unchecking one disables it outright.
+     */
     fun isEnabled(toolName: String): Boolean =
-        myState.enabledTools.getOrDefault(toolName, toolName !in DISABLED_BY_DEFAULT)
+        myState.enabledTools.getOrDefault(toolName, toolName !in CONFIRM_BY_DEFAULT)
 
     fun setEnabled(toolName: String, enabled: Boolean) {
         myState.enabledTools[toolName] = enabled
     }
+
+    /**
+     * True for a higher-risk tool that is currently unchecked: the gate shows the native
+     * Allow/Deny dialog before running it. (A checked ✋ tool runs without asking; a regular
+     * unchecked tool is simply disabled.)
+     */
+    fun promptsBeforeRun(toolName: String): Boolean =
+        toolName in CONFIRM_BY_DEFAULT && !isEnabled(toolName)
 
 
     fun isTelemetryEnabled(): Boolean = myState.telemetryEnabled
@@ -224,8 +241,14 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         /** Maximum number of detailed call records kept in memory for the MCP Calls tool window. */
         const val MAX_CALL_RECORDS = 50
 
-        /** Tools disabled by default — higher risk, require explicit opt-in in Settings. */
-        val DISABLED_BY_DEFAULT = setOf(
+        /**
+         * Higher-risk tools — they mutate local state, remote forge state, or run arbitrary
+         * commands. The Settings checkbox is the consent: while a ✋ tool is *unchecked* (its
+         * default) the gate shows a native Allow/Deny dialog before each call; checking it — or
+         * ticking "Always allow" in that dialog, which checks it automatically — lets it run
+         * without asking. See [promptsBeforeRun] and [isEnabled].
+         */
+        val CONFIRM_BY_DEFAULT = setOf(
             "send_to_terminal", "delete_file", "execute_database_query",
             "vcs_delete_branch", "vcs_rename_branch",
             // PR write operations — mutate remote state and notify reviewers / mergers.

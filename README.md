@@ -128,11 +128,11 @@ Authentication: the GitHub account configured in **Settings → Version Control 
 | `get_pull_request_commits` | List commits on a PR — SHA, author, message, sub-stats (auto-paginated) |
 | `get_pull_request_reviews` | List reviews on a PR — state APPROVED/CHANGES_REQUESTED/COMMENTED/DISMISSED/PENDING + review body |
 | `search_issues_or_prs` | Search GitHub issues + PRs (`is:pr is:open author:@me`, `repo:owner/name label:bug`, …) |
-| `add_pull_request_comment` 🔒 | Post a top-level comment on a PR. Disabled by default |
-| `update_pull_request` 🔒 | Update title / body / state / base of a PR (close via `state="closed"`). Disabled by default |
-| `merge_pull_request` 🔒 | Merge a PR with `merge`/`squash`/`rebase` strategy. Disabled by default |
-| `request_pull_request_reviewers` 🔒 | Request reviews from users or teams. Disabled by default |
-| `create_pull_request` 🔒 | Open a new PR — completes the branch→commit→push→PR flow inside the IDE, no terminal. Disabled by default |
+| `add_pull_request_comment` 🔒 | Post a top-level comment on a PR. Asks for confirmation |
+| `update_pull_request` 🔒 | Update title / body / state / base of a PR (close via `state="closed"`). Asks for confirmation |
+| `merge_pull_request` 🔒 | Merge a PR with `merge`/`squash`/`rebase` strategy. Asks for confirmation |
+| `request_pull_request_reviewers` 🔒 | Request reviews from users or teams. Asks for confirmation |
+| `create_pull_request` 🔒 | Open a new PR — completes the branch→commit→push→PR flow inside the IDE, no terminal. Asks for confirmation |
 
 ### Merge Requests *(GitLab — auto-detected from `origin` remote)*
 
@@ -147,10 +147,10 @@ Authentication: the GitLab account configured in **Settings → Version Control 
 | `get_merge_request_commits` | Commits on the MR with SHA, author, title, message |
 | `get_merge_request_approvals` | Approval state: who approved, required/given counts, approved flag |
 | `search_gitlab` | Search the project (scope: merge_requests / issues / commits / blobs / milestones) |
-| `create_merge_request` 🔒 | Open a new MR (title, source/target branch, description). Disabled by default |
-| `add_merge_request_comment` 🔒 | Post a comment (note) on an MR. Disabled by default |
-| `update_merge_request` 🔒 | Update an MR's title / description / state (close/reopen) / target branch. Disabled by default |
-| `merge_merge_request` 🔒 | Merge (accept) an MR, optionally squashing. Disabled by default |
+| `create_merge_request` 🔒 | Open a new MR (title, source/target branch, description). Asks for confirmation |
+| `add_merge_request_comment` 🔒 | Post a comment (note) on an MR. Asks for confirmation |
+| `update_merge_request` 🔒 | Update an MR's title / description / state (close/reopen) / target branch. Asks for confirmation |
+| `merge_merge_request` 🔒 | Merge (accept) an MR, optionally squashing. Asks for confirmation |
 
 ### General
 | Tool | Description |
@@ -160,7 +160,7 @@ Authentication: the GitLab account configured in **Settings → Version Control 
 | `replace_text_undoable` | Replace text in a file via IntelliJ's document API (supports Cmd+Z undo) |
 | `delete_file` 🔒 | Deletes a file from the project (undoable) |
 
-> 🔬 Core logic covered by headless tests. ⚠️ No automated test coverage. 🔒 Disabled by default — enable in Settings → Tools → MCP Server Companion.
+> 🔬 Core logic covered by headless tests. ⚠️ No automated test coverage. 🔒 Higher-risk tool: while unchecked in Settings → Tools → MCP Server Companion it shows a native Allow/Deny dialog before each call; tick the checkbox (or *“Always allow”* in the dialog, which checks it) to let it run without asking. To remove it entirely, disable it in the native MCP Server tool filter.
 
 ### Multi-project support
 

@@ -104,6 +104,9 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
         // Fixed checkbox width = widest tool name — ensures bars align across all groups
         val longestName = McpCompanionSettings.TOOL_GROUPS.values.flatten().maxByOrNull { it.length } ?: ""
         val maxCbWidth = JCheckBox(longestName).preferredSize.width
+        // Fixed width for the ✋ confirmation indicator slot (glyph or blank) so the usage-bar
+        // column stays aligned whether or not a tool shows the marker.
+        val handWidth = JLabel("✋").preferredSize.width
 
         return panel {
             row {
@@ -139,6 +142,23 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
                                     isEnabled = isMcpServerEnabled() && pluginAvailable
                                 }
                                 .gap(RightGap.SMALL)
+                            // Confirmation indicator — a ✋ glyph immediately after the tool id for
+                            // higher-risk tools. While the tool is unchecked it pops a native
+                            // Allow/Deny dialog before running; ticking the checkbox (or "Always
+                            // allow" in the dialog) lets it run without asking. Fixed-width slot
+                            // (glyph or blank) keeps the usage-bar column aligned across rows.
+                            val needsConfirm = name in McpCompanionSettings.CONFIRM_BY_DEFAULT
+                            label(if (needsConfirm) "✋" else "")
+                                .applyToComponent {
+                                    preferredSize = Dimension(handWidth, preferredSize.height)
+                                    minimumSize = Dimension(handWidth, minimumSize.height)
+                                    if (needsConfirm) {
+                                        toolTipText = "<html><b>Asks for confirmation</b><br/>" +
+                                            "While unchecked, this higher-risk tool shows a native Allow/Deny dialog before each call.<br/>" +
+                                            "Tick the checkbox (or <i>“Always allow”</i> in the dialog) to let it run without asking.</html>"
+                                    }
+                                }
+                                .customize(UnscaledGaps(right = 6))
                             val bar = UsageBarPanel(name) {
                                 when (statsMode) {
                                     StatsMode.SESSION -> settings.getCallCount(name)

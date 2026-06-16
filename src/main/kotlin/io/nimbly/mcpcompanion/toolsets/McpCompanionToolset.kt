@@ -24,16 +24,7 @@ class McpCompanionToolset : McpToolset {
     // NoSuchMethodError on 2025.3.x at runtime.
     override fun isEnabled(): Boolean = true
 
-    private suspend fun disabledMessage(toolName: String): String? {
-        if (!McpCompanionSettings.getInstance().isEnabled(toolName)) {
-            val extra = if (toolName in McpCompanionSettings.DISABLED_BY_DEFAULT)
-                " This tool is disabled by default for safety reasons. Ask the user to enable it first."
-            else ""
-            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
-        }
-        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name?.takeIf { it != "Unknown MCP client" } }.getOrNull())
-        return null
-    }
+    private suspend fun disabledMessage(toolName: String): String? = toolGate(toolName)
 
     // ── get_mcp_companion_overview ────────────────────────────────────────────
 
@@ -130,7 +121,7 @@ class McpCompanionToolset : McpToolset {
                             includeColumns=false (default) → tables only; includeColumns=true → full column details
                             ⚠ returns empty tree if the DB hasn't been connected/refreshed in IntelliJ yet
 - execute_database_query  → execute a SQL query on a data source, returns JSON with columns + rows
-                            ⚠ disabled by default — ask user to enable in Settings first
+                            ✋ asks for confirmation before running (native Allow/Deny dialog)
                             dataSource="" → auto-selected if only one source exists
                             maxRows=100 (default) → limit result rows
 
@@ -164,9 +155,9 @@ class McpCompanionToolset : McpToolset {
 - vcs_create_branch(name, checkout=true, from="") — create a new branch; checkout=true (default) also switches to it
 - vcs_checkout_branch(name) — switch to an existing branch (git checkout <branch>)
 - vcs_rename_branch(newName, oldName="", pushRemote=false, remote="origin") — rename a branch (git branch -m); pushRemote=true also publishes new + deletes old remote
-                                ⚠ disabled by default — pushRemote rewrites remote refs
+                                ✋ asks for confirmation — pushRemote rewrites remote refs
 - vcs_delete_branch(name, scope="local"|"remote"|"both", force=false, remote="origin") — delete a branch locally, remotely, or both
-                                ⚠ disabled by default — destructive action
+                                ✋ asks for confirmation — destructive action
 - vcs_fetch(remote="", prune=false) — fetch from one or all remotes without merging (git fetch)
 - vcs_merge_branch(branch, noFf=false, message="") — merge a branch into the current one (git merge)
 - vcs_rebase(branch="", abort=false, continueRebase=false) — rebase current branch onto another; supports abort and continue
@@ -188,11 +179,11 @@ Authentication: the GitHub account configured in Settings → Version Control �
 - get_pull_request_commits(number) — list commits on the PR with SHA, author, message (auto-paginated)
 - get_pull_request_reviews(number) — list reviews (APPROVED/CHANGES_REQUESTED/COMMENTED/DISMISSED/PENDING) on the PR
 - search_issues_or_prs(q) — GitHub search syntax (e.g. "is:pr is:open author:@me"); returns total_count + items
-- add_pull_request_comment(number, body) 🔒 — post a top-level comment (Markdown), disabled by default
-- update_pull_request(number, title?, body?, state?, base?) 🔒 — edit title/body/state/base (close via state="closed"), disabled by default
-- merge_pull_request(number, strategy="merge"|"squash"|"rebase", commitTitle?, commitMessage?) 🔒 — merge with chosen strategy, disabled by default
-- request_pull_request_reviewers(number, reviewers?, teamReviewers?) 🔒 — request reviews from users/teams, disabled by default
-- create_pull_request(title, head, base, body?, draft?) 🔒 — open a new PR — completes the create-branch→commit→push→open-PR flow entirely inside the IDE, no terminal needed; disabled by default
+- add_pull_request_comment(number, body) 🔒 — post a top-level comment (Markdown), asks for confirmation
+- update_pull_request(number, title?, body?, state?, base?) 🔒 — edit title/body/state/base (close via state="closed"), asks for confirmation
+- merge_pull_request(number, strategy="merge"|"squash"|"rebase", commitTitle?, commitMessage?) 🔒 — merge with chosen strategy, asks for confirmation
+- request_pull_request_reviewers(number, reviewers?, teamReviewers?) 🔒 — request reviews from users/teams, asks for confirmation
+- create_pull_request(title, head, base, body?, draft?) 🔒 — open a new PR — completes the create-branch→commit→push→open-PR flow entirely inside the IDE, no terminal needed; asks for confirmation
 
 ### Merge Requests (GitLab — auto-detected from `origin` remote URL)
 Authentication: the GitLab account configured in Settings → Version Control → GitLab. Transport via the IDE HTTP stack — no terminal / `glab` CLI needed.
@@ -203,10 +194,10 @@ Authentication: the GitLab account configured in Settings → Version Control �
 - get_merge_request_commits(iid) — commits on the MR with SHA, author, title, message
 - get_merge_request_approvals(iid) — approval state (who approved, required/given, approved?)
 - search_gitlab(search, scope="merge_requests"|"issues"|"commits"|…) — GitLab project search
-- create_merge_request(title, sourceBranch, targetBranch, description?, removeSourceBranch?) 🔒 — open a new MR, disabled by default
-- add_merge_request_comment(iid, body) 🔒 — post a note, disabled by default
-- update_merge_request(iid, title?, description?, state?, targetBranch?) 🔒 — edit (close/reopen via state), disabled by default
-- merge_merge_request(iid, squash?, mergeCommitMessage?) 🔒 — accept/merge the MR, disabled by default
+- create_merge_request(title, sourceBranch, targetBranch, description?, removeSourceBranch?) 🔒 — open a new MR, asks for confirmation
+- add_merge_request_comment(iid, body) 🔒 — post a note, asks for confirmation
+- update_merge_request(iid, title?, description?, state?, targetBranch?) 🔒 — edit (close/reopen via state), asks for confirmation
+- merge_merge_request(iid, squash?, mergeCommitMessage?) 🔒 — accept/merge the MR, asks for confirmation
 
 ### General
 - get_mcp_companion_overview → this overview

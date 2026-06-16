@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.9.0"
+version = "3.10.0"
 
 repositories {
     mavenCentral()
@@ -54,6 +54,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.10.0</b> — Higher-risk tools now ask before running: while unchecked in Settings they pop an Allow/Deny dialog with the call arguments; tick <i>“Always allow”</i> to skip the prompt next time. Flagged ✋ in Settings.</li>
                 <li><b>3.9.0</b> — New <b>Merge Requests</b> tool group for GitLab: list / inspect MRs, their notes, changes, commits and approvals, plus <code>search_gitlab</code> and write actions (<code>create_merge_request</code>, <code>merge_merge_request</code>, … — disabled by default). Uses your configured GitLab account, no terminal needed.</li>
                 <li><b>3.8.0</b> — New <b>Pull Requests</b> tool group for GitHub: list / inspect PRs, their comments, files, commits and reviews, plus <code>search_issues_or_prs</code> and write actions (<code>create_pull_request</code>, <code>merge_pull_request</code>, … — disabled by default).</li>
                 <li><b>3.7.0</b> — New <code>create_scratch_file</code> tool — creates an IntelliJ scratch file with given content and opens it in the editor. Lives outside the project tree, so no VCS noise — perfect for previewing snippets, samples or sketches.</li>

@@ -23,16 +23,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
 
     override fun isEnabled(): Boolean = true
 
-    private suspend fun disabledMessage(toolName: String): String? {
-        if (!McpCompanionSettings.getInstance().isEnabled(toolName)) {
-            val extra = if (toolName in McpCompanionSettings.DISABLED_BY_DEFAULT)
-                " This tool is disabled by default for safety reasons. Ask the user to enable it first."
-            else ""
-            return "Tool '$toolName' is disabled. Enable it in Settings → Tools → MCP Server Companion.$extra"
-        }
-        McpCompanionSettings.getInstance().trackCall(toolName, runCatching { coroutineContext.clientInfo?.name?.takeIf { it != "Unknown MCP client" } }.getOrNull())
-        return null
-    }
+    private suspend fun disabledMessage(toolName: String): String? = toolGate(toolName)
 
     // ── get_ide_settings ─────────────────────────────────────────────────────
 

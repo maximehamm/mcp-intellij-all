@@ -33,7 +33,7 @@
             <li><b>get_services_output</b> — All sessions from the Services tool window, grouped by node name: SQL output log, result grids with column names, and which session/tab is currently active.</li>
             <li><b>get_test_results</b> — Last test run results: passed/failed/ignored status, duration, and failure messages with stack traces.</li>
             <li><b>get_terminal_output</b> — Content of all tabs in the embedded Terminal tool window.</li>
-            <li><b>send_to_terminal</b> — Sends a command to a terminal tab and executes it. Optional <code>waitForIdle=true</code> blocks until the terminal output stops changing. ⚠ Disabled by default.</li>
+            <li><b>send_to_terminal</b> — Sends a command to a terminal tab and executes it. Optional <code>waitForIdle=true</code> blocks until the terminal output stops changing. ✋ Asks for confirmation.</li>
         </ul>
 
         <h4>Debug</h4>
@@ -77,7 +77,7 @@
         <ul>
             <li><b>list_database_sources</b> — Lists all data sources configured in the Database tool window (name, URL, driver, user, DBMS type).</li>
             <li><b>get_database_schema</b> — Returns the schema tree already introspected by IntelliJ: namespaces → tables/views with keys, foreign keys, indexes, and optionally columns.</li>
-            <li><b>execute_database_query</b> — Executes a SQL query on a configured data source and returns the results as JSON. ⚠ Disabled by default — can execute UPDATE, DELETE, DROP.</li>
+            <li><b>execute_database_query</b> — Executes a SQL query on a configured data source and returns the results as JSON. ✋ Asks for confirmation — can execute UPDATE, DELETE, DROP.</li>
         </ul>
 
         <h4>Gradle</h4>
@@ -108,7 +108,7 @@
             <li><b>vcs_stash</b> — Manage Git stashes: <code>action="push"</code> / <code>"pop"</code> / <code>"apply"</code> / <code>"drop"</code> / <code>"list"</code>.</li>
             <li><b>vcs_create_branch</b> — Creates a new Git branch; pass <code>checkout=true</code> (default) to switch to it immediately, and <code>from</code> to specify the base.</li>
             <li><b>vcs_checkout_branch</b> — Switches the Git working tree to an existing branch (<code>git checkout &lt;branch&gt;</code>).</li>
-            <li><b>vcs_delete_branch</b> — Deletes a Git branch locally, remotely, or both. ⚠ Disabled by default — destructive.</li>
+            <li><b>vcs_delete_branch</b> — Deletes a Git branch locally, remotely, or both. ✋ Asks for confirmation — destructive.</li>
             <li><b>vcs_reset</b> — Resets the current branch to a previous commit (<code>--soft</code> / <code>--mixed</code> / <code>--hard</code>). ⚠ <code>--hard</code> overwrites the working tree.</li>
             <li><b>vcs_revert</b> — Creates a new commit that reverses the changes of a previous commit (<code>git revert</code>). Safe — does not rewrite history.</li>
             <li><b>vcs_cherry_pick</b> — Applies the changes from a specific commit on top of the current branch (<code>git cherry-pick</code>).</li>
@@ -117,7 +117,7 @@
             <li><b>vcs_rebase</b> — Rebases the current branch onto another (<code>git rebase</code>); supports <code>abort=true</code> and <code>continueRebase=true</code>.</li>
             <li><b>get_vcs_conflicts</b> — Lists all conflicted files after a failed merge or rebase, with conflict type and optional file content including conflict markers.</li>
             <li><b>vcs_open_merge_tool</b> — Opens IntelliJ's built-in three-way merge tool for all conflicted files (equivalent to VCS → Git → Resolve Conflicts…).</li>
-            <li><b>vcs_rename_branch</b> — Renames a branch (<code>git branch -m</code>); with <code>pushRemote=true</code> also publishes the new name and deletes the old remote branch. ⚠ Disabled by default.</li>
+            <li><b>vcs_rename_branch</b> — Renames a branch (<code>git branch -m</code>); with <code>pushRemote=true</code> also publishes the new name and deletes the old remote branch. ✋ Asks for confirmation.</li>
             <li><b>vcs_move_file</b> — Moves or renames a tracked file/directory via <code>git mv</code>, preserving Git history so <code>git log --follow</code> and <code>git blame</code> keep working.</li>
             <li><b>vcs_check_repo_health</b> — Diagnoses orphan <code>.git/index.lock</code> files left by crashed builds; pass <code>clean=true</code> to remove stale locks.</li>
         </ul>
@@ -132,11 +132,11 @@
             <li><b>get_pull_request_commits</b> — Commits on the PR with SHA, author, and message.</li>
             <li><b>get_pull_request_reviews</b> — Reviews on the PR (APPROVED / CHANGES_REQUESTED / COMMENTED / DISMISSED / PENDING) with body.</li>
             <li><b>search_issues_or_prs</b> — Search GitHub issues and PRs using the github.com query syntax.</li>
-            <li><b>create_pull_request</b> — Opens a new PR (title, head, base, body, draft). ⚠ Disabled by default.</li>
-            <li><b>add_pull_request_comment</b> — Posts a top-level comment on a PR. ⚠ Disabled by default.</li>
-            <li><b>update_pull_request</b> — Updates a PR's title, body, state (close via state=closed), or base branch. ⚠ Disabled by default.</li>
-            <li><b>merge_pull_request</b> — Merges a PR with merge / squash / rebase strategy. ⚠ Disabled by default.</li>
-            <li><b>request_pull_request_reviewers</b> — Requests reviews from users and/or teams. ⚠ Disabled by default.</li>
+            <li><b>create_pull_request</b> — Opens a new PR (title, head, base, body, draft). ✋ Asks for confirmation.</li>
+            <li><b>add_pull_request_comment</b> — Posts a top-level comment on a PR. ✋ Asks for confirmation.</li>
+            <li><b>update_pull_request</b> — Updates a PR's title, body, state (close via state=closed), or base branch. ✋ Asks for confirmation.</li>
+            <li><b>merge_pull_request</b> — Merges a PR with merge / squash / rebase strategy. ✋ Asks for confirmation.</li>
+            <li><b>request_pull_request_reviewers</b> — Requests reviews from users and/or teams. ✋ Asks for confirmation.</li>
         </ul>
 
         <h4>Merge Requests (GitLab)</h4>
@@ -149,10 +149,10 @@
             <li><b>get_merge_request_commits</b> — Commits on the MR with SHA, author, title and message.</li>
             <li><b>get_merge_request_approvals</b> — Approval state: who approved, how many required/given, and whether approved.</li>
             <li><b>search_gitlab</b> — Searches the project (scope: merge_requests / issues / commits / blobs / milestones).</li>
-            <li><b>create_merge_request</b> — Opens a new MR (title, source/target branch, description). ⚠ Disabled by default.</li>
-            <li><b>add_merge_request_comment</b> — Posts a comment (note) on an MR. ⚠ Disabled by default.</li>
-            <li><b>update_merge_request</b> — Updates an MR's title, description, state (close/reopen), or target branch. ⚠ Disabled by default.</li>
-            <li><b>merge_merge_request</b> — Merges (accepts) an MR, optionally squashing. ⚠ Disabled by default.</li>
+            <li><b>create_merge_request</b> — Opens a new MR (title, source/target branch, description). ✋ Asks for confirmation.</li>
+            <li><b>add_merge_request_comment</b> — Posts a comment (note) on an MR. ✋ Asks for confirmation.</li>
+            <li><b>update_merge_request</b> — Updates an MR's title, description, state (close/reopen), or target branch. ✋ Asks for confirmation.</li>
+            <li><b>merge_merge_request</b> — Merges (accepts) an MR, optionally squashing. ✋ Asks for confirmation.</li>
         </ul>
 
         <h4>General</h4>

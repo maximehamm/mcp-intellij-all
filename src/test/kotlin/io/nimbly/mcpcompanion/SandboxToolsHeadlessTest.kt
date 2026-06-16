@@ -215,25 +215,36 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
             assertTrue("Should return 'not found' error when no terminal window",
                 result.contains("not found", ignoreCase = true) || result == "Command sent to terminal")
         } finally {
-            settings.setEnabled("send_to_terminal", false)
+            settings.setEnabled("send_to_terminal", false)  // restore default (unchecked → prompts)
         }
     }
 
-    // ── send_to_terminal disabled-by-default ──────────────────────────────────
+    // ── higher-risk tools: checkbox-is-consent model ─────────────────────────
 
-    fun `test send_to_terminal is disabled by default`() {
-        assertTrue("send_to_terminal should be in DISABLED_BY_DEFAULT",
-            "send_to_terminal" in McpCompanionSettings.DISABLED_BY_DEFAULT)
-        val enabled = McpCompanionSettings.getInstance().isEnabled("send_to_terminal")
-        println("  send_to_terminal enabled = $enabled")
-        assertFalse("send_to_terminal should be disabled by default", enabled)
+    fun `test confirm tools prompt by default, regular tools run`() {
+        val s = McpCompanionSettings()  // fresh, no overrides → exercises the defaults
+        // ✋ tools are unchecked by default → they prompt before running
+        for (tool in listOf("send_to_terminal", "delete_file")) {
+            assertTrue("$tool should be in CONFIRM_BY_DEFAULT", tool in McpCompanionSettings.CONFIRM_BY_DEFAULT)
+            assertFalse("$tool should be unchecked by default", s.isEnabled(tool))
+            assertTrue("$tool should prompt by default", s.promptsBeforeRun(tool))
+        }
+        // regular tools are enabled and never prompt
+        for (tool in listOf("get_open_editors", "get_build_output", "navigate_to")) {
+            assertTrue("$tool should be enabled by default", s.isEnabled(tool))
+            assertFalse("$tool should never prompt", s.promptsBeforeRun(tool))
+        }
     }
 
-    fun `test delete_file is disabled by default`() {
-        assertTrue("delete_file should be in DISABLED_BY_DEFAULT",
-            "delete_file" in McpCompanionSettings.DISABLED_BY_DEFAULT)
-        assertFalse("delete_file should be disabled by default",
-            McpCompanionSettings.getInstance().isEnabled("delete_file"))
+    fun `test checking a confirm tool stops the prompt`() {
+        val s = McpCompanionSettings()
+        assertTrue("delete_file should prompt while unchecked", s.promptsBeforeRun("delete_file"))
+        s.setEnabled("delete_file", true)   // ☑ "always allow"
+        assertFalse("checked confirm tool should not prompt", s.promptsBeforeRun("delete_file"))
+        assertTrue("checked confirm tool is enabled", s.isEnabled("delete_file"))
+        // unchecking re-arms the prompt
+        s.setEnabled("delete_file", false)
+        assertTrue("unchecked confirm tool prompts again", s.promptsBeforeRun("delete_file"))
     }
 
     fun `test regular tools are enabled by default`() {
