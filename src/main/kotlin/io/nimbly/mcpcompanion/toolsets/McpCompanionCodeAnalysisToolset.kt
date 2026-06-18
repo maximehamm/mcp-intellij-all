@@ -1020,6 +1020,9 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
                         ef.file?.path?.let { relativize(basePath, it) } ?: ef.url
                     }
                 }
+                // Absolute content roots — lets callers build unambiguous absolute paths when a
+                // project has several roots (multi-module) instead of guessing a relative path.
+                val contentRoots = rootManager.contentEntries.mapNotNull { it.file?.path }
                 val deps = rootManager.dependencies.map { it.name }
                 val moduleType = try { ModuleType.get(module).id } catch (_: Exception) { null }
                 val moduleSdk = rootManager.sdk?.takeIf { it.name != sdk?.name }?.let { s ->
@@ -1029,6 +1032,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
                     name = module.name,
                     type = moduleType,
                     sdk = moduleSdk,
+                    contentRoots = contentRoots.ifEmpty { null },
                     sourceRoots = sourceRoots,
                     excludedFolders = excluded.ifEmpty { null },
                     dependencies = deps.ifEmpty { null }
@@ -1091,5 +1095,5 @@ private fun isApplicable(
 
 @Serializable data class ProjectStructure(val name: String, val basePath: String, val sdk: SdkInfo?, val availableSdks: List<SdkInfo>, val modules: List<ModuleInfo>)
 @Serializable data class SdkInfo(val name: String, val type: String, val version: String?, val homePath: String? = null)
-@Serializable data class ModuleInfo(val name: String, val type: String? = null, val sdk: SdkInfo? = null, val sourceRoots: List<SourceRootInfo>, val excludedFolders: List<String>? = null, val dependencies: List<String>? = null)
+@Serializable data class ModuleInfo(val name: String, val type: String? = null, val sdk: SdkInfo? = null, val contentRoots: List<String>? = null, val sourceRoots: List<SourceRootInfo>, val excludedFolders: List<String>? = null, val dependencies: List<String>? = null)
 @Serializable data class SourceRootInfo(val path: String, val type: String)

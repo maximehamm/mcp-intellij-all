@@ -1,8 +1,10 @@
 package io.nimbly.mcpcompanion.util
 
 import com.intellij.mcpserver.project
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.roots.ProjectRootManager
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -10,7 +12,9 @@ import kotlin.coroutines.coroutineContext
  *
  * Resolution order:
  *  1. If [projectPath] is provided, searches [ProjectManager.openProjects] for an open project
- *     whose `basePath` matches [projectPath] (exact match, or prefix of [projectPath] followed by "/").
+ *     whose `basePath` — or any of its content roots (so a path inside module 2b of a
+ *     multi-root project still resolves to its owning project) — matches [projectPath]
+ *     (exact match, or prefix of [projectPath] followed by "/").
  *  2. If [projectPath] is blank/null **and exactly one project is open**, return that one.
  *     This sidesteps the JetBrains MCP framework's `coroutineContext.project` which throws
  *     `McpExpectedError("Unable to determine the target project for the current MCP tool call.")`
@@ -31,6 +35,16 @@ suspend fun resolveProject(projectPath: String? = null): Project {
         projects.firstOrNull { base ->
             val bp = base.basePath?.removeSuffix("/") ?: return@firstOrNull false
             normalized.startsWith("$bp/")
+        }?.let { return it }
+        // Multi-root: match against any content root (a module root that isn't under basePath).
+        projects.firstOrNull { p ->
+            runCatching {
+                runReadAction { ProjectRootManager.getInstance(p).contentRoots.toList() }
+                    .any { root ->
+                        val rp = root.path.removeSuffix("/")
+                        rp == normalized || normalized.startsWith("$rp/")
+                    }
+            }.getOrDefault(false)
         }?.let { return it }
         // Path supplied but no match — fall through to the framework so it can produce the
         // canonical error listing the open projects.

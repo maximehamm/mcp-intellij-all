@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.10.0"
+version = "3.10.1"
 
 repositories {
     mavenCentral()
@@ -54,6 +54,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.10.1</b> — Multi-module / multi-project robustness: relative file paths now resolve against every content root (not just the project base), so files in a second module are found; a path that matches several roots returns a clear error listing the absolute candidates instead of silently guessing. <code>get_project_structure</code> now reports each module's absolute content roots.</li>
                 <li><b>3.10.0</b> — Higher-risk tools now ask before running: while unchecked in Settings they pop an Allow/Deny dialog with the call arguments; tick <i>“Always allow”</i> to skip the prompt next time. Flagged ✋ in Settings.</li>
                 <li><b>3.9.0</b> — New <b>Merge Requests</b> tool group for GitLab: list / inspect MRs, their notes, changes, commits and approvals, plus <code>search_gitlab</code> and write actions (<code>create_merge_request</code>, <code>merge_merge_request</code>, … — disabled by default). Uses your configured GitLab account, no terminal needed.</li>
                 <li><b>3.8.0</b> — New <b>Pull Requests</b> tool group for GitHub: list / inspect PRs, their comments, files, commits and reviews, plus <code>search_issues_or_prs</code> and write actions (<code>create_pull_request</code>, <code>merge_pull_request</code>, … — disabled by default).</li>

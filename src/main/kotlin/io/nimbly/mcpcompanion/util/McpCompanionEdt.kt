@@ -2,7 +2,9 @@ package io.nimbly.mcpcompanion.util
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VfsUtil
@@ -27,65 +29,90 @@ import com.intellij.openapi.vfs.VfsUtil
  * Returns null only when all strategies fail (file does not exist on disk).
  */
 internal fun resolveFilePath(project: Project, filePath: String): VirtualFile? {
-    val lfs = LocalFileSystem.getInstance()
     val normalized = filePath.replace('\\', '/').trimEnd('/')
-    val basePath = project.basePath?.trimEnd('/')
+    if (normalized.startsWith("/")) return resolveAbsolute(normalized)
+    // Relative: resolve against every content root (basePath first); return the first hit.
+    // When several roots match, callers that care about ambiguity use [resolveFilePathOrError].
+    return resolveRelativeCandidates(project, normalized).firstOrNull()
+}
 
-    // 1. Absolute path
-    if (normalized.startsWith("/")) {
-        lfs.findFileByPath(normalized)?.let { return it }
-    }
-
-    // 2. Relative to project root
-    if (basePath != null) {
-        lfs.findFileByPath("$basePath/$normalized")?.let { return it }
-    }
-
-    // 3. Absolute but basePath doubled (e.g. caller passed absolute when relative expected)
-    if (basePath != null && normalized.startsWith(basePath)) {
-        val stripped = normalized.removePrefix(basePath).trimStart('/')
-        lfs.findFileByPath("$basePath/$stripped")?.let { return it }
-    }
-
-    // 4. VFS refresh fallback (handles files created after the last VFS scan)
-    if (normalized.startsWith("/")) {
-        lfs.refreshAndFindFileByPath(normalized)?.let { return it }
-    }
-    if (basePath != null) {
-        lfs.refreshAndFindFileByPath("$basePath/$normalized")?.let { return it }
-    }
-
-    // 5. VfsUtil with refresh — handles files outside the project root that IntelliJ
-    //    has never indexed (e.g. ~/.claude/*, scratch files, files in other projects)
-    if (normalized.startsWith("/")) {
-        val ioFile = java.io.File(normalized)
-        if (ioFile.exists()) {
-            VfsUtil.findFileByIoFile(ioFile, true)?.let { return it }
-        }
-    }
-
+/** Absolute path — works for any module / content root, even files outside the project. */
+private fun resolveAbsolute(absolute: String): VirtualFile? {
+    val lfs = LocalFileSystem.getInstance()
+    lfs.findFileByPath(absolute)?.let { return it }
+    lfs.refreshAndFindFileByPath(absolute)?.let { return it }
+    // Last resort: a real file IntelliJ has never indexed (~/.claude/*, /tmp/*, other projects).
+    val ioFile = java.io.File(absolute)
+    if (ioFile.exists()) VfsUtil.findFileByIoFile(ioFile, true)?.let { return it }
     return null
 }
 
 /**
- * Like [resolveFilePath] but returns a descriptive error string when the file is not found,
- * listing the paths that were tried so the AI can self-correct its input.
+ * The absolute base directories a relative path may be anchored to: the project `basePath`
+ * plus every content root (so files in a *second module / attached content root* resolve too),
+ * de-duplicated, basePath first.
+ */
+private fun rootBases(project: Project): List<String> {
+    val bases = LinkedHashSet<String>()
+    project.basePath?.trimEnd('/')?.let { bases.add(it) }
+    runCatching {
+        runReadAction { ProjectRootManager.getInstance(project).contentRoots.toList() }
+            .forEach { bases.add(it.path.trimEnd('/')) }
+    }
+    return bases.toList()
+}
+
+/** Distinct files a relative [normalized] path resolves to across all [rootBases]. */
+private fun resolveRelativeCandidates(project: Project, normalized: String): List<VirtualFile> {
+    val lfs = LocalFileSystem.getInstance()
+    val byPath = LinkedHashMap<String, VirtualFile>()
+    for (base in rootBases(project)) {
+        val full = "$base/$normalized"
+        (lfs.findFileByPath(full) ?: lfs.refreshAndFindFileByPath(full))?.let { byPath[it.path] = it }
+    }
+    return byPath.values.toList()
+}
+
+/**
+ * Like [resolveFilePath] but returns a descriptive error string when the file is not found OR is
+ * ambiguous. With several content roots (multi-module project, or several attached projects in
+ * one JVM) a single relative path can match more than one root — in that case we refuse to guess
+ * and list the absolute candidates so the AI can re-issue the call with an unambiguous absolute path.
  */
 internal fun resolveFilePathOrError(project: Project, filePath: String): Pair<VirtualFile?, String?> {
-    val file = resolveFilePath(project, filePath)
-    if (file != null) return file to null
-    val basePath = project.basePath?.trimEnd('/') ?: return null to "Project base path not found"
     val normalized = filePath.replace('\\', '/').trimEnd('/')
-    val error = buildString {
-        appendLine("File not found: $filePath")
-        appendLine("Tried:")
-        if (normalized.startsWith("/")) appendLine("  - absolute:           $normalized")
-        appendLine("  - relative to root:   $basePath/$normalized")
-        if (normalized.startsWith(basePath)) appendLine("  - stripped duplicate: $basePath/${normalized.removePrefix(basePath).trimStart('/')}")
-        appendLine("Project root: $basePath")
-        append("Hint: use an absolute path (e.g. '/Users/you/file.md') or a path relative to the project root (e.g. 'src/main/java/Foo.java'). Files outside the project are supported with absolute paths.")
+
+    if (normalized.startsWith("/")) {
+        val file = resolveAbsolute(normalized)
+        return if (file != null) file to null
+        else null to "File not found: $filePath\nTried absolute path: $normalized\n" +
+            "Hint: check the path, or pass a path relative to a project content root."
     }
-    return null to error
+
+    val candidates = resolveRelativeCandidates(project, normalized)
+    return when (candidates.size) {
+        1 -> candidates[0] to null
+        0 -> {
+            val bases = rootBases(project)
+            val error = buildString {
+                appendLine("File not found: $filePath")
+                appendLine("Tried this relative path under each content root:")
+                bases.forEach { appendLine("  - $it/$normalized") }
+                if (bases.isEmpty()) appendLine("  (project has no content root / base path)")
+                append("Hint: use an absolute path (e.g. '/Users/you/proj/module/src/Foo.java'), ")
+                append("or a path relative to one of the content roots above.")
+            }
+            null to error
+        }
+        else -> {
+            val error = buildString {
+                appendLine("Ambiguous path '$filePath' — it matches a file under several content roots:")
+                candidates.forEach { appendLine("  - ${it.path}") }
+                append("Re-issue the call with the absolute path of the one you mean.")
+            }
+            null to error
+        }
+    }
 }
 
 /**
