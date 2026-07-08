@@ -193,6 +193,20 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
                 }
             }
 
+            // ── Status bar ────────────────────────────────────────────────────
+            group("Status Bar") {
+                row {
+                    checkBox("Show a call-count badge on the status-bar widget")
+                        .bindSelected(
+                            getter = { settings.isStatusBarBadgeEnabled() },
+                            setter = { settings.setStatusBarBadgeEnabled(it) }
+                        )
+                }
+                row {
+                    comment("A small notification badge on the activity icon counts MCP calls; click the icon to reset it.")
+                }.bottomGap(BottomGap.NONE)
+            }
+
             // ── Analytics opt-in + toggle ─────────────────────────────────────
             group("Analytics") {
                 row {

@@ -8,10 +8,18 @@ import com.intellij.openapi.wm.CustomStatusBarWidget
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
+import com.intellij.ui.JBColor
+import com.intellij.util.ui.JBUI
+import java.awt.Component
 import java.awt.Cursor
 import java.awt.Dimension
+import java.awt.Font
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.RenderingHints
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import javax.swing.Icon
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.SwingConstants
@@ -29,10 +37,10 @@ import io.nimbly.mcpcompanion.ui.monitoring.McpCompanionCallsToolWindowFactory
  *
  * Tool names and durations live in the tooltip (last 5 completed + currently running).
  *
- * Implemented as a [CustomStatusBarWidget] so the underlying [JLabel] can have a fixed
- * preferred size — that way the status bar layout never reflows.
+ * A small badge counter ("1, 2, 3…") appended after the icon counts MCP calls since the last
+ * click; it is hidden at zero. The widget grows only while the badge is visible.
  *
- * Click → opens Settings → Tools → MCP Server Companion.
+ * Click → resets the badge (hides it) and opens an actions popup (MCP Monitoring / Settings).
  */
 class McpCompanionStatusBarWidgetFactory : StatusBarWidgetFactory {
     override fun getId(): String = WIDGET_ID
@@ -78,11 +86,17 @@ class McpCompanionStatusBarWidget(private val project: Project) : CustomStatusBa
     )
     private var animationFrame = 0
 
-    private val label = JLabel(iconIdle, SwingConstants.CENTER).apply {
+    private val label = JLabel(iconIdle, SwingConstants.LEADING).apply {
         cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
         toolTipText = " "
+        iconTextGap = 3
         addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent) = showActionsPopup(e)
+            override fun mouseClicked(e: MouseEvent) {
+                // Clicking clears the call-count badge (back to hidden) and opens the actions menu.
+                McpCompanionSettings.getInstance().resetBadge()
+                refresh()
+                showActionsPopup(e)
+            }
         })
     }
 
@@ -135,13 +149,15 @@ class McpCompanionStatusBarWidget(private val project: Project) : CustomStatusBa
 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
-        // Lock the preferred size — only an icon, both states are the same width.
+        // Icon-sized (no reserved digit zone): the count is painted as a small badge overlaid on
+        // the icon's top-right corner. A few extra px of right padding let the badge overhang.
         val fm = label.getFontMetrics(label.font)
-        val width = iconIdle.iconWidth + 8
+        val width = iconIdle.iconWidth + JBUI.scale(9)
         val height = maxOf(iconIdle.iconHeight, fm.height) + 4
         val fixed = Dimension(width, height)
         label.preferredSize = fixed
         label.minimumSize = fixed
+        label.maximumSize = fixed
         refresh()
         timer.start()
     }
@@ -156,11 +172,11 @@ class McpCompanionStatusBarWidget(private val project: Project) : CustomStatusBa
     private fun refresh() {
         val settings = McpCompanionSettings.getInstance()
         val active = settings.getActiveCalls()
-        label.icon = if (active.isEmpty()) {
-            iconIdle
-        } else {
-            animationFrames[animationFrame % animationFrames.size]
-        }
+        val base = if (active.isEmpty()) iconIdle else animationFrames[animationFrame % animationFrames.size]
+        // Badge: number of MCP calls since the last click, painted as a small blue circle with
+        // white digits over the icon's top-right corner. Hidden at 0 or when disabled in Settings.
+        val badge = if (settings.isStatusBarBadgeEnabled()) settings.getBadgeCount() else 0
+        label.icon = if (badge > 0) BadgeIcon(base, badge) else base
         label.text = ""
         label.toolTipText = buildTooltip(settings, active)
     }
@@ -195,7 +211,9 @@ class McpCompanionStatusBarWidget(private val project: Project) : CustomStatusBa
             }
         }
 
-        sb.append("<br><br><i>Click for actions</i></html>")
+        val badge = settings.getBadgeCount()
+        if (badge > 0) sb.append("<br><br><nobr><b>$badge</b> call(s) since last reset.</nobr>")
+        sb.append("<br><br><i>Click to reset the counter and open actions</i></html>")
         return sb.toString()
     }
 
@@ -210,5 +228,58 @@ class McpCompanionStatusBarWidget(private val project: Project) : CustomStatusBa
             ms < 60_000 -> "${ms / 1000}${nbsp}s"
             else -> "${ms / 60_000}${nbsp}m${nbsp}${(ms % 60_000) / 1000}${nbsp}s"
         }
+    }
+}
+
+/**
+ * Wraps [base] and paints a small notification badge — a blue rounded pill with white bold
+ * digits — over its top-right corner. Reports the same footprint as [base], so the widget stays
+ * icon-sized; the badge may overhang a couple of px to the right (absorbed by widget padding).
+ * Counts above 99 render as "99+".
+ */
+private class BadgeIcon(private val base: Icon, count: Int) : Icon {
+
+    private val text = if (count > 99) "99+" else count.toString()
+
+    override fun getIconWidth(): Int = base.iconWidth
+    override fun getIconHeight(): Int = base.iconHeight
+
+    override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
+        base.paintIcon(c, g, x, y)
+        val g2 = g.create() as Graphics2D
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+
+            val w = base.iconWidth
+            val fontSize = (w * 0.55f).coerceAtLeast(8f)
+            g2.font = (c?.font ?: JBUI.Fonts.label()).deriveFont(Font.BOLD, fontSize)
+            val fm = g2.fontMetrics
+            val tw = fm.stringWidth(text)
+            val bh = fm.height - JBUI.scale(1)
+            val bw = maxOf(bh, tw + JBUI.scale(4))
+
+            // Anchor to the icon's top-right corner, overhanging ~2px into the widget's right padding.
+            val bx = x + w + JBUI.scale(2) - bw
+            val by = y
+            g2.color = BADGE_BG
+            g2.fillRoundRect(bx, by, bw, bh, bh, bh)
+
+            g2.color = BADGE_FG
+            val tx = bx + (bw - tw) / 2
+            val ty = by + (bh - fm.height) / 2 + fm.ascent
+            g2.drawString(text, tx, ty)
+        } finally {
+            g2.dispose()
+        }
+    }
+
+    private companion object {
+        // Background follows the platform's New-UI blue info badge ("IconBadge.infoBackground"),
+        // so it matches native notification badges and tracks future look changes (falls back to a
+        // notification blue). Foreground is kept plain white: white-on-blue is the standard,
+        // always-readable badge look — the theme's "infoForeground" is a low-contrast gray here.
+        val BADGE_BG = JBColor.namedColor("IconBadge.infoBackground", JBColor(0x3574F0, 0x548AF7))
+        val BADGE_FG: JBColor = JBColor(0xFFFFFF, 0xFFFFFF)
     }
 }

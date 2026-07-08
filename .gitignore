@@ -10,6 +10,10 @@ build/
 # Secrets
 secrets.properties
 
+# JVM crash / heap dumps
+*.hprof
+hs_err_pid*.log
+
 # OS
 .DS_Store
 /META-INF/

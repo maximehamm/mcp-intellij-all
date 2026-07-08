@@ -13,7 +13,25 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.10.1"
+version = "3.11.0"
+
+// Auto-detect the installed IntelliJ IDEA whose bundled MCP server we compile against, instead of
+// hard-coding a version path (which broke on every IDE update). Scans ~/Applications for any
+// "IntelliJ IDEA*.app" that ships mcpserver.jar and picks the most recently updated one.
+val ideaContents: String = run {
+    val appsDir = file("${System.getProperty("user.home")}/Applications")
+    val candidates = (appsDir.listFiles()?.toList() ?: emptyList())
+        .filter { it.isDirectory && it.name.startsWith("IntelliJ IDEA") && it.name.endsWith(".app") }
+        .map { it.resolve("Contents") }
+        .filter { it.resolve("plugins/mcpserver/lib/mcpserver.jar").exists() }
+    // Prefer a version-stamped install (e.g. "IntelliJ IDEA 2026.1.4.app"), highest name first,
+    // over a generic "IntelliJ IDEA.app" (which may be an unrelated / EAP build).
+    val versioned = candidates
+        .filter { it.parentFile.name.any(Char::isDigit) }
+        .sortedByDescending { it.parentFile.name }
+    (versioned.firstOrNull() ?: candidates.firstOrNull())?.absolutePath
+        ?: error("mcpserver.jar introuvable sous ~/Applications/IntelliJ IDEA*.app — vérifie l'installation IntelliJ (le plugin MCP Server doit être bundlé).")
+}
 
 repositories {
     mavenCentral()
@@ -24,7 +42,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        local("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app")
+        local(file(ideaContents).parent)
         bundledPlugin("com.intellij.mcpServer")
         bundledPlugin("Git4Idea")
         bundledPlugin("com.intellij.gradle")
@@ -41,10 +59,10 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
     testImplementation("junit:junit:4.13.2")
-    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver.jar"))
-    compileOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/plugins/mcpserver/lib/mcpserver-frontend.jar"))
-    testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.ide.impl.jar"))
-    testRuntimeOnly(files("/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/intellij.platform.core.impl.jar"))
+    compileOnly(files("$ideaContents/plugins/mcpserver/lib/mcpserver.jar"))
+    compileOnly(files("$ideaContents/plugins/mcpserver/lib/mcpserver-frontend.jar"))
+    testRuntimeOnly(files("$ideaContents/lib/intellij.platform.ide.impl.jar"))
+    testRuntimeOnly(files("$ideaContents/lib/intellij.platform.core.impl.jar"))
 }
 
 intellijPlatform {
@@ -54,6 +72,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.11.0</b> — The status-bar widget now shows a small notification badge counting MCP calls as they happen; click the icon to reset it (and open the actions menu).</li>
                 <li><b>3.10.1</b> — Multi-module / multi-project robustness: relative file paths now resolve against every content root (not just the project base), so files in a second module are found; a path that matches several roots returns a clear error listing the absolute candidates instead of silently guessing. <code>get_project_structure</code> now reports each module's absolute content roots.</li>
                 <li><b>3.10.0</b> — Higher-risk tools now ask before running: while unchecked in Settings they pop an Allow/Deny dialog with the call arguments; tick <i>“Always allow”</i> to skip the prompt next time. Flagged ✋ in Settings.</li>
                 <li><b>3.9.0</b> — New <b>Merge Requests</b> tool group for GitLab: list / inspect MRs, their notes, changes, commits and approvals, plus <code>search_gitlab</code> and write actions (<code>create_merge_request</code>, <code>merge_merge_request</code>, … — disabled by default). Uses your configured GitLab account, no terminal needed.</li>
@@ -129,9 +148,17 @@ intellijPlatform {
         ides {
             ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3.4")
             ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2026.1")
-            // TODO: add 2026.2 EAP once the gradle plugin resolves it — Marketplace verifies
-            // against the EAP and tightened PluginManagerCore.getPlugin to @Internal there.
-            // Try: `recommended()` or a specific build id once published in the JetBrains repo.
+            // 2026.2 beta (build 262.x): verify against any locally-installed 262 IDE, if present.
+            // The Marketplace tightened PluginManagerCore.getPlugin to @Internal in 262 (handled via
+            // reflection), so we keep this in the loop.
+            (file("${System.getProperty("user.home")}/Applications").listFiles()?.toList() ?: emptyList())
+                .filter { it.isDirectory && it.name.startsWith("IntelliJ IDEA") && it.name.endsWith(".app") }
+                .firstOrNull { app ->
+                    runCatching {
+                        app.resolve("Contents/Resources/product-info.json").readText().contains("\"buildNumber\": \"262")
+                    }.getOrDefault(false)
+                }
+                ?.let { local(it) }
         }
     }
 }
@@ -139,7 +166,7 @@ intellijPlatform {
 tasks {
     test {
         useJUnitPlatform()
-        jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/nio-fs.jar")
+        jvmArgs("-Xbootclasspath/a:$ideaContents/lib/nio-fs.jar")
         testLogging {
             events("passed", "skipped", "failed")
             showStandardStreams = true
@@ -156,7 +183,7 @@ tasks {
         enabled = false
     }
     runIde {
-        jvmArgs("-Xbootclasspath/a:/Users/maxime/Applications/IntelliJ IDEA 2026.1.app/Contents/lib/nio-fs.jar")
+        jvmArgs("-Xbootclasspath/a:$ideaContents/lib/nio-fs.jar")
     }
 }
 

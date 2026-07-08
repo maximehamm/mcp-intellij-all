@@ -22,6 +22,9 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
         var telemetryNotificationShown: Boolean = false
         @JvmField
         var anonymousId: String = java.util.UUID.randomUUID().toString()
+        /** Show the call-count notification badge on the status-bar widget (on by default). */
+        @JvmField
+        var statusBarBadgeEnabled: Boolean = true
     }
 
     private var myState = State()
@@ -65,6 +68,20 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
     // Tools from ONCE_PER_SESSION_TOOLS already sent to telemetry this session
     private val telemetrySentOnce = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    // ── Status-bar badge counter ───────────────────────────────────────────────
+    // Number of MCP calls since the user last clicked the status-bar widget. Incremented on
+    // every recorded call start; the widget shows it as a small "1, 2, 3…" badge and clears it
+    // (back to hidden) when clicked. In-memory only — resets on IDE restart.
+    private val badgeCount = java.util.concurrent.atomic.AtomicInteger(0)
+    fun getBadgeCount(): Int = badgeCount.get()
+    fun resetBadge() { badgeCount.set(0); fireCallRecordsChanged() }
+
+    fun isStatusBarBadgeEnabled(): Boolean = myState.statusBarBadgeEnabled
+    fun setStatusBarBadgeEnabled(enabled: Boolean) {
+        myState.statusBarBadgeEnabled = enabled
+        fireCallRecordsChanged()  // repaint the widget immediately
+    }
 
     fun trackCall(name: String, aiClient: String? = null) {
         callCounts[name] = (callCounts[name] ?: 0) + 1
@@ -148,6 +165,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
 
     /** Called by [McpCompanionToolCallListener] BEFORE each tool invocation. */
     fun recordCallStart(callId: Int, toolName: String, parametersJson: String, client: String?, projectPath: String? = null) {
+        // Bump the status-bar badge counter (1, 2, 3…) — cleared when the user clicks the widget.
+        badgeCount.incrementAndGet()
         // Persist the (untruncated) parameters to disk; the in-memory CallRecord stays lightweight.
         io.nimbly.mcpcompanion.util.CallPayloadStorage.save(callId, parameters = parametersJson, response = null)
         val record = CallRecord(
