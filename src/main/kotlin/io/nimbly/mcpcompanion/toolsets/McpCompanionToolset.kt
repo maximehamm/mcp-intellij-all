@@ -60,8 +60,8 @@ class McpCompanionToolset : McpToolset {
 
 ### Build & Tests
 - get_build_output       → read compiler errors before answering a build question
-- get_console_output     → read console output from Run AND Debug windows — use this whenever the user ran or debugged something
-                           "activeWindow" tells you which window is currently visible; "active: true" marks the focused tab
+- get_console_output     → read console output from Run, Debug AND Services windows (incl. Spring Boot / server / Grep-Console-wrapped consoles) — use this whenever the user ran or debugged something
+                           "activeWindow" tells you which window is currently visible; "active: true" marks the focused tab; "services" holds Services-window sessions
 - get_services_output    → SQL output log and result grids from the Services tool window
 - get_test_results       → read test results (pass/fail/duration/message)
 - get_terminal_output    → content of all tabs in the embedded Terminal tool window
