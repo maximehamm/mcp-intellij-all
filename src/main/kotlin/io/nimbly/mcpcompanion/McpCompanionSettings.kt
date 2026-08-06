@@ -286,6 +286,7 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
          */
         val SYNC_CAPABLE = setOf(
             "start_run_configuration",   // waitForExit
+            "restart_run_configuration", // waitForExit
             "debug_run_configuration",   // waitForExit
             "refresh_project",           // waitForSync
             "refresh_gradle_project",    // waitForSync
@@ -318,7 +319,8 @@ class McpCompanionSettings : PersistentStateComponent<McpCompanionSettings.State
                 "get_build_output", "get_console_output", "get_services_output", "get_test_results", "get_terminal_output", "send_to_terminal"
             ),
             "Debug" to listOf(
-                "list_run_configurations", "start_run_configuration", "modify_run_configuration",
+                "list_run_configurations", "start_run_configuration", "stop_run_configuration",
+                "restart_run_configuration", "modify_run_configuration",
                 "get_run_configuration_xml", "create_run_configuration_from_xml",
                 "debug_run_configuration", "get_debug_variables",
                 "get_breakpoints", "add_conditional_breakpoint", "set_breakpoint_condition", "mute_breakpoints"

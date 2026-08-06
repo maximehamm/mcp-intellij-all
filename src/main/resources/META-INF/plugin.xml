@@ -7,7 +7,7 @@
     <description><![CDATA[
 
         <p>
-        <b>100 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
+        <b>102 tools to give your AI assistant full access to your IDE: compilation errors, test results, debug variables, run configurations, inspections, Git operations (commit, push, pull, branch, merge, rebase, cherry-pick, revert, reset, stash, blame, file history, diff between branches…), VCS changes, database schema and data, IntelliJ diff viewer, and much more.</b>
         <p>Works with any MCP-compatible AI client: <b>Claude</b> (Anthropic), <b>GitHub Copilot</b>, <b>Codex</b>, <b>Cursor</b>, <b>Windsurf</b>, and any other assistant that supports the Model Context Protocol.</p>
         </p>
 
@@ -40,6 +40,8 @@
         <ul>
             <li><b>list_run_configurations</b> — Lists all run configurations with name, type, folder, and running status.</li>
             <li><b>start_run_configuration</b> — Launches a named run configuration in run or debug mode. Optional <code>waitForExit=true</code> blocks until the process terminates and returns the exit code.</li>
+            <li><b>stop_run_configuration</b> — Stops every currently-running session of a named run/debug configuration (like the Stop button).</li>
+            <li><b>restart_run_configuration</b> — Stops any running session of a configuration and relaunches it in run or debug mode. Optional <code>waitForExit=true</code> blocks until the restarted process exits.</li>
             <li><b>modify_run_configuration</b> — Modifies VM options, program arguments, env vars, or working dir of a run configuration.</li>
             <li><b>get_run_configuration_xml</b> — Returns the full XML definition of a run configuration.</li>
             <li><b>create_run_configuration_from_xml</b> — Creates a new run configuration from an XML definition (any type).</li>

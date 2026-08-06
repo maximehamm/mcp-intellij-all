@@ -72,6 +72,9 @@ class McpCompanionToolset : McpToolset {
 - list_run_configurations    → list all run configurations (name, type, running status)
 - start_run_configuration    → launch a named run config in run or debug mode
                                 Pass waitForExit=true (+ optional timeoutMs) to block until the process terminates and read the exit code in the response.
+- stop_run_configuration     → stop every running session of a named run/debug config (like the Stop button)
+- restart_run_configuration  → stop any running session of a config, wait for it, then relaunch it in run or debug mode
+                                Pass waitForExit=true (+ optional timeoutMs) to block until the restarted process exits.
 - modify_run_configuration    → modify VM options, program args, env vars or working dir of any run config
 - get_run_configuration_xml       → get the full XML definition of a run configuration
 - create_run_configuration_from_xml → create a new run config from an XML definition (any type)
