@@ -2,9 +2,15 @@ import java.util.Properties
 
 plugins {
     id("java")
-    kotlin("jvm") version "2.2.0"
-    id("org.jetbrains.intellij.platform") version "2.5.0"
-    kotlin("plugin.serialization") version "2.2.0"
+    // 2.4.0 (was 2.2.0) so the compiler can read the Kotlin 2.4.0 stdlib metadata bundled by
+    // IntelliJ 262+. languageVersion/apiVersion are pinned to 2.2 below to keep source semantics
+    // aligned with the 253/261 targets. Both Kotlin plugins must stay in lockstep.
+    kotlin("jvm") version "2.4.0"
+    // 2.18.1 (was 2.5.0): the IntelliJ 262 platform added `namespace`/`visibility` attributes to
+    // module-descriptors.jar; IPGP only learned to parse them in 2.12.0. 2.18.1 is the latest and
+    // fully 262-compatible (also fixes translation-plugin test-classpath pollution).
+    id("org.jetbrains.intellij.platform") version "2.18.1"
+    kotlin("plugin.serialization") version "2.4.0"
 }
 
 val secrets = Properties().apply {
@@ -16,21 +22,52 @@ group = "io.nimbly"
 version = "3.11.0"
 
 // Auto-detect the installed IntelliJ IDEA whose bundled MCP server we compile against, instead of
-// hard-coding a version path (which broke on every IDE update). Scans ~/Applications for any
-// "IntelliJ IDEA*.app" that ships mcpserver.jar and picks the most recently updated one.
+// hard-coding a version path (which broke on every IDE update). We look for the IDE "home" folder
+// that ships plugins/mcpserver/lib/mcpserver.jar and pick the most recently versioned one.
+//
+// The folder we return ("ideaContents") is the directory that directly contains `lib/` and
+// `plugins/` — on macOS that's the ".app/Contents" bundle, on Windows/Linux it's the install root.
 val ideaContents: String = run {
-    val appsDir = file("${System.getProperty("user.home")}/Applications")
-    val candidates = (appsDir.listFiles()?.toList() ?: emptyList())
+    fun isIdeHome(dir: File) = dir.resolve("plugins/mcpserver/lib/mcpserver.jar").exists()
+
+    // macOS: ~/Applications/IntelliJ IDEA*.app/Contents
+    val macCandidates = (file("${System.getProperty("user.home")}/Applications").listFiles()?.toList() ?: emptyList())
         .filter { it.isDirectory && it.name.startsWith("IntelliJ IDEA") && it.name.endsWith(".app") }
         .map { it.resolve("Contents") }
-        .filter { it.resolve("plugins/mcpserver/lib/mcpserver.jar").exists() }
-    // Prefer a version-stamped install (e.g. "IntelliJ IDEA 2026.1.4.app"), highest name first,
-    // over a generic "IntelliJ IDEA.app" (which may be an unrelated / EAP build).
+        .filter(::isIdeHome)
+
+    // Windows / Linux: standard JetBrains install roots + Toolbox app folders. On these platforms
+    // the IDE home IS the install root (no ".app/Contents" wrapper).
+    val home = System.getProperty("user.home")
+    val searchRoots = listOf(
+        "C:/Program Files/JetBrains",
+        "C:/Program Files (x86)/JetBrains",
+        "$home/AppData/Local/Programs",
+        "$home/AppData/Local/JetBrains/Toolbox/apps",
+        "$home/.local/share/JetBrains/Toolbox/apps",
+        "/opt",
+        "/usr/local",
+    )
+    val otherCandidates = searchRoots
+        .map(::file)
+        .filter { it.isDirectory }
+        .flatMap { root ->
+            (root.listFiles()?.toList() ?: emptyList())
+                .filter { it.isDirectory && it.name.contains("IntelliJ", ignoreCase = true) }
+                // Toolbox nests the actual build under a "ch-0/<build>" subfolder; also allow the
+                // direct install root. Scan one extra level deep to catch Toolbox layouts.
+                .flatMap { listOf(it) + (it.listFiles()?.toList() ?: emptyList()).filter(File::isDirectory)
+                    .flatMap { sub -> listOf(sub) + (sub.listFiles()?.toList() ?: emptyList()).filter(File::isDirectory) } }
+        }
+        .filter(::isIdeHome)
+
+    val candidates = macCandidates + otherCandidates
+    // Prefer a version-stamped install, highest name first, over a generic one.
     val versioned = candidates
-        .filter { it.parentFile.name.any(Char::isDigit) }
-        .sortedByDescending { it.parentFile.name }
+        .filter { it.name.any(Char::isDigit) || it.parentFile?.name?.any(Char::isDigit) == true }
+        .sortedByDescending { if (it.name == "Contents") it.parentFile.name else it.name }
     (versioned.firstOrNull() ?: candidates.firstOrNull())?.absolutePath
-        ?: error("mcpserver.jar introuvable sous ~/Applications/IntelliJ IDEA*.app — vérifie l'installation IntelliJ (le plugin MCP Server doit être bundlé).")
+        ?: error("mcpserver.jar introuvable — installe un IntelliJ IDEA avec le plugin MCP Server bundlé (cherché sous ~/Applications, C:/Program Files/JetBrains, Toolbox…).")
 }
 
 repositories {
@@ -42,7 +79,10 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        local(file(ideaContents).parent)
+        // `local()` wants the IDE installation directory. On macOS ideaContents is
+        // ".app/Contents", whose parent (".app") is what the plugin expects; on Windows/Linux
+        // ideaContents is already the install root, so we pass it directly.
+        local(if (file(ideaContents).name == "Contents") file(ideaContents).parent else ideaContents)
         bundledPlugin("com.intellij.mcpServer")
         bundledPlugin("Git4Idea")
         bundledPlugin("com.intellij.gradle")
@@ -52,6 +92,12 @@ dependencies {
         // them here ensures the sandbox loads them so the tools are testable end-to-end via `runIde`.
         bundledPlugin("org.jetbrains.plugins.github")
         bundledPlugin("org.jetbrains.plugins.gitlab")
+        // get_test_results (McpCompanionBuildToolset) uses SMTestProxy / SMTestRunnerResultsForm
+        // (in intellij.platform.smRunner) and their supertype AbstractTestProxy (in
+        // intellij.platform.testRunner). Up to IPGP 2.5.0 these test-framework classes leaked onto
+        // the main compile classpath; IPGP 2.18.1 no longer does, so declare both modules.
+        bundledModule("intellij.platform.testRunner")
+        bundledModule("intellij.platform.smRunner")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
@@ -60,7 +106,11 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
     testImplementation("junit:junit:4.13.2")
     compileOnly(files("$ideaContents/plugins/mcpserver/lib/mcpserver.jar"))
-    compileOnly(files("$ideaContents/plugins/mcpserver/lib/mcpserver-frontend.jar"))
+    // mcpserver-frontend.jar was a separate jar up to ~2026.1; from build 262 it was merged into
+    // mcpserver.jar. Only add it as a dependency when it actually exists so the build works on both.
+    file("$ideaContents/plugins/mcpserver/lib/mcpserver-frontend.jar")
+        .takeIf { it.exists() }
+        ?.let { compileOnly(files(it)) }
     testRuntimeOnly(files("$ideaContents/lib/intellij.platform.ide.impl.jar"))
     testRuntimeOnly(files("$ideaContents/lib/intellij.platform.core.impl.jar"))
 }
@@ -146,8 +196,9 @@ intellijPlatform {
             org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES
         )
         ides {
-            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3.4")
-            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2026.1")
+            // IPGP 2.12+ renamed the ides { ide(...) } DSL to create(...).
+            create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3.4")
+            create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2026.1")
             // 2026.2 beta (build 262.x): verify against any locally-installed 262 IDE, if present.
             // The Marketplace tightened PluginManagerCore.getPlugin to @Internal in 262 (handled via
             // reflection), so we keep this in the loop.
@@ -188,7 +239,17 @@ tasks {
 }
 
 kotlin {
+    // A JVM toolchain pins BOTH compileJava and compileKotlin to the same JDK (21), which is the
+    // fix the "Inconsistent JVM-target compatibility (compileJava=21, compileKotlin=25)" error
+    // recommends. Without it, Kotlin 2.4.0 derives its target from the JDK running Gradle (25 here).
+    // Gradle auto-detects the JDK 21 already installed under ~/.jdks.
+    jvmToolchain(21)
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        // The 2.4.0 compiler is needed only to READ the 262 stdlib's 2.4.0 metadata; pin the
+        // language/API surface to 2.2 so we don't accidentally use APIs newer than the 253/261
+        // IDEs ship at runtime, keeping this fork buildable against upstream's target IDEs too.
+        languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
+        apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
     }
 }
