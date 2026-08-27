@@ -62,6 +62,63 @@ fun flushDeferredConsoleOutput(component: javax.swing.JComponent) {
 }
 
 /**
+ * Reads a terminal-emulation console (JediTerm) from an arbitrary Swing [component] tree.
+ *
+ * Node/npm and other run configurations render into a `TerminalExecutionConsole`, which contains
+ * **no editor at all** — no `ConsoleViewImpl`, no `EditorComponentImpl` — so every editor-based
+ * strategy returns null for them regardless of buffer flushing.
+ *
+ * Duck-typed on the *text buffer* rather than on a widget class: `ShellTerminalWidget` only exists
+ * in the Terminal tool window, while run-configuration consoles embed a different widget. Any
+ * component exposing `getTerminalTextBuffer()` (directly or through `getTerminalPanel()`) is read.
+ *
+ * Returns scrollback + screen: the visible screen is ~24 rows, so a startup error that scrolled off
+ * would otherwise be lost. History lines are negative indices in JediTerm's buffer.
+ */
+fun readTerminalWidgetText(component: javax.swing.JComponent): String? = runCatching {
+    val buffer = findTerminalTextBuffer(component) ?: return null
+
+    fun call(target: Any, name: String, vararg args: Any?): Any? =
+        generateSequence(target.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == name && it.parameterCount == args.size }
+            ?.also { it.isAccessible = true }
+            ?.invoke(target, *args)
+
+    val height = call(buffer, "getHeight") as? Int ?: 24
+    val historyLines = (call(buffer, "getHistoryLinesCount") as? Int ?: 0).coerceIn(0, 5_000)
+
+    val lines = (-historyLines until height).mapNotNull { row ->
+        val line = runCatching { call(buffer, "getLine", row) }.getOrNull() ?: return@mapNotNull null
+        (runCatching { call(line, "getText") }.getOrNull() as? String)?.trimEnd()
+    }
+    lines.joinToString("\n").trim().ifEmpty { null }
+}.getOrNull()
+
+private fun findTerminalTextBuffer(component: javax.swing.JComponent): Any? {
+    fun bufferOf(target: Any): Any? {
+        val direct = generateSequence(target.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == "getTerminalTextBuffer" && it.parameterCount == 0 }
+        runCatching { direct?.invoke(target) }.getOrNull()?.let { return it }
+
+        val panel = generateSequence(target.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == "getTerminalPanel" && it.parameterCount == 0 }
+            ?.let { m -> runCatching { m.invoke(target) }.getOrNull() }
+            ?: return null
+        return generateSequence(panel.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.methods.asSequence() }
+            .find { it.name == "getTerminalTextBuffer" && it.parameterCount == 0 }
+            ?.let { m -> runCatching { m.invoke(panel) }.getOrNull() }
+    }
+
+    bufferOf(component)?.let { return it }
+    return UIUtil.findComponentsOfType(component, javax.swing.JComponent::class.java)
+        .firstNotNullOfOrNull { bufferOf(it) }
+}
+
+/**
  * Reads text from a ConsoleViewImpl even when its editor has not been initialized
  * (i.e. the console tab was never focused). Falls back to reflection on myEditor.
  */

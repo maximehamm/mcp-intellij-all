@@ -22,6 +22,7 @@ import com.intellij.util.ui.UIUtil
 import com.intellij.xdebugger.XDebuggerManager
 import io.nimbly.mcpcompanion.util.flushDeferredConsoleOutput
 import io.nimbly.mcpcompanion.util.readEditorText
+import io.nimbly.mcpcompanion.util.readTerminalWidgetText
 import io.nimbly.mcpcompanion.util.readText
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -333,7 +334,7 @@ class McpCompanionBuildToolset : McpToolset {
                             outputSelected = isTabSelected
                             continue
                         }
-                        val editorText = readEditorText(component)
+                        val editorText = readEditorText(component) ?: readTerminalWidgetText(component)
                         if (editorText != null) {
                             output = editorText
                             outputSelected = isTabSelected
@@ -349,7 +350,7 @@ class McpCompanionBuildToolset : McpToolset {
                 } else {
                     val console = UIUtil.findComponentOfType(wrapper, ConsoleViewImpl::class.java)
                     if (console != null) output = console.readText()?.ifBlank { null }
-                    else output = readEditorText(wrapper)
+                    else output = readEditorText(wrapper) ?: readTerminalWidgetText(wrapper)
                 }
                 return ServiceSession(name = name, selected = name == selectedLeafName,
                     output = output, outputSelected = outputSelected, results = results)
@@ -477,11 +478,13 @@ class McpCompanionBuildToolset : McpToolset {
             // window shows one ServiceView tree rather than per-process contents, so it stays false.
             val host = hostWindow(project, d)
             val selected = host?.contentManagerIfCreated?.selectedContent
+            val consoleText = readDescriptorConsole(d)
             val tab = ConsoleTab(
                 name = d.displayName ?: "Run",
                 active = selected != null && selected === d.attachedContent,
                 tree = treeNodes,
-                console = readDescriptorConsole(d),
+                console = consoleText,
+                consoleType = if (consoleText == null) describeConsole(d) else null,
                 alive = d.processHandler?.isProcessTerminated == false,
             )
             when {
@@ -599,7 +602,23 @@ class McpCompanionBuildToolset : McpToolset {
         val fromEditor = UIUtil.findComponentsOfType(component, EditorComponentImpl::class.java)
             .mapNotNull { runCatching { it.editor.document.text.trim().ifEmpty { null } }.getOrNull() }
             .maxByOrNull { it.length }
-        return fromEditor ?: readEditorText(component)
+        return fromEditor ?: readTerminalWidgetText(component) ?: readEditorText(component)
+    }
+
+    /**
+     * One-line description of how a descriptor's console is built, reported as `consoleType` when the
+     * text could not be read. Without it a `"console": null` is indistinguishable between "console
+     * type we cannot read", "console not created yet" and "read failed" — which is exactly the dead
+     * end this tool hit on Services-hosted npm runs.
+     */
+    private fun describeConsole(descriptor: RunContentDescriptor): String {
+        val console = descriptor.executionConsole
+        val unwrapped = unwrapConsole(console)
+        return buildString {
+            append(console?.javaClass?.name ?: "<no ExecutionConsole>")
+            if (unwrapped != null && unwrapped !== console) append(" -> ").append(unwrapped.javaClass.name)
+            append(" | descriptorComponent=").append(descriptor.component?.javaClass?.name ?: "null")
+        }
     }
 
     // ── get_test_results ──────────────────────────────────────────────────────
@@ -1013,7 +1032,7 @@ class McpCompanionBuildToolset : McpToolset {
 @Serializable data class ServiceResult(val name: String, val selected: Boolean = false, val data: String? = null)
 
 @Serializable data class ConsoleOutput(val activeWindow: String? = null, val run: List<ConsoleTab> = emptyList(), val debug: List<ConsoleTab> = emptyList(), val services: List<ConsoleTab> = emptyList())
-@Serializable data class ConsoleTab(val name: String, val active: Boolean = false, val tree: List<BuildNode>? = null, val console: String? = null, val alive: Boolean = false)
+@Serializable data class ConsoleTab(val name: String, val active: Boolean = false, val tree: List<BuildNode>? = null, val console: String? = null, val consoleType: String? = null, val alive: Boolean = false)
 
 @Serializable data class TestRunOutput(val runs: List<TestRun>, val error: String? = null)
 @Serializable data class TestRun(val name: String, val tests: List<TestNode>)
