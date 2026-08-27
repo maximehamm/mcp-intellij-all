@@ -1,13 +1,18 @@
 package io.nimbly.mcpcompanion
 
+import com.intellij.execution.impl.ConsoleViewImpl
 import com.intellij.execution.testframework.sm.runner.SMTestProxy
+import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.application.invokeAndWaitIfNeeded
 import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.util.Disposer
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationsManager
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.xdebugger.XDebuggerManager
+import io.nimbly.mcpcompanion.util.readText
 import kotlinx.coroutines.runBlocking
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
@@ -223,6 +228,32 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         // No active run/debug session → both empty
         assertTrue("run tabs should be empty in headless", result.run.isEmpty())
         assertTrue("debug tabs should be empty in headless", result.debug.isEmpty())
+    }
+
+    fun `test readText drains deferred output of a console that was never displayed`() {
+        val text = invokeAndWaitIfNeeded {
+            val console = ConsoleViewImpl(project, GlobalSearchScope.allScope(project), true, false)
+            try {
+                // NEVER touch console.component here: the bug only exists while the console is not in
+                // a showing hierarchy, so ConsoleViewImpl parks the text in myDeferredBuffer and the
+                // editor document stays empty — that is the "console": null get_console_output saw.
+                console.print("Serveur démarré sur le port 3100\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                console.readText()
+            } finally {
+                Disposer.dispose(console)
+            }
+        }
+        println("  readText() = '$text'")
+        assertNotNull("Deferred console output must be drained, not reported as null", text)
+        assertTrue("Should contain the printed line, got '$text'", text!!.contains("port 3100"))
+    }
+
+    fun `test servicesSessionsFromDescriptors is UI-free and empty in headless`() {
+        val sessions = invokeAndWaitIfNeeded {
+            McpCompanionBuildToolset().servicesSessionsFromDescriptors(project)
+        }
+        println("  services sessions = ${sessions.size}")
+        assertTrue("No run descriptor is hosted in Services in headless", sessions.isEmpty())
     }
 
     // ── get_terminal_output ───────────────────────────────────────────────────
