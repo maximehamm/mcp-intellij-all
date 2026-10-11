@@ -36,6 +36,8 @@ An IntelliJ IDEA plugin that extends the built-in [JetBrains MCP Server](https:/
 |------|-------------|
 | `list_run_configurations` | Lists all run configurations with name, type, folder, and running status |
 | `start_run_configuration` | Launches a named run configuration in run or debug mode. Optional `waitForExit=true` (+ `timeoutMs`) blocks until the process terminates and returns the exit code |
+| `stop_run_configuration` | Stops every running session of a named run/debug configuration (like the Stop button): graceful stop first, then force-kill for stubborn processes. Waits for confirmed termination |
+| `restart_run_configuration` | Stops any running session of a configuration, waits for it, then relaunches it in run or debug mode (never relaunches over a process that refuses to die). Optional `waitForExit=true` |
 | `modify_run_configuration` | Modifies VM options, program arguments, env vars, or working dir of a run configuration |
 | `get_run_configuration_xml` | Returns the full XML definition of a run configuration |
 | `create_run_configuration_from_xml` | Creates a new run configuration from an XML definition (any type) |

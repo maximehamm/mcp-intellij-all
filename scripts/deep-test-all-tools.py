@@ -144,6 +144,11 @@ def run_all(port):
         check("modify_run_configuration", {"configurationName":"FibonacciTest"}, port, lambda t: (len(t) > 5, "too short")),
         check("create_run_configuration_from_xml", {"name":f"_deep_test_{int(time.time())}","xml":'<configuration name="x" type="Application" factoryName="Application"><option name="MAIN_CLASS_NAME" value="Foo"/></configuration>'}, port, has("created")),
         check("start_run_configuration", {"configurationName":"FibonacciTest"}, port, has("started")),
+        # stop/restart: deterministic checks that do not depend on a process still running
+        check("stop_run_configuration", {"configurationName":"_no_such_config_"}, port, has("No running instance")),
+        check("restart_run_configuration", {"configurationName":"FibonacciTest","mode":"nope"}, port, has("Invalid mode")),
+        check("restart_run_configuration", {"configurationName":"_no_such_config_"}, port, has("not found")),
+        check("restart_run_configuration", {"configurationName":"FibonacciTest"}, port, has("restarted")),
     ]
     time.sleep(2)
     results += [

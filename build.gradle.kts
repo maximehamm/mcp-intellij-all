@@ -13,7 +13,7 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.12.0"
+version = "3.13.0"
 
 // Bytecode level: the JVM running Gradle, capped at 21 (the oldest runtime we support is IDE 253 =
 // JBR 21, which runs any class file <= 65). The IntelliJ Platform Gradle plugin >= 2.8 would force a
@@ -80,6 +80,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.13.0</b> — New <code>stop_run_configuration</code> and <code>restart_run_configuration</code> tools (contributed by @sylvaindd): stop a running run/debug configuration by name — gracefully, then force-kill — or restart it in run or debug mode. Handy for servers and watchers.</li>
                 <li><b>3.12.0</b> — Verified compatible with IntelliJ IDEA 2026.2 (build 262). The minimum supported version is unchanged (2025.3).</li>
                 <li><b>3.11.0</b> — The status-bar widget now shows a small notification badge counting MCP calls as they happen; click the icon to reset it (and open the actions menu).</li>
                 <li><b>3.10.1</b> — Multi-module / multi-project robustness: relative file paths now resolve against every content root (not just the project base), so files in a second module are found; a path that matches several roots returns a clear error listing the absolute candidates instead of silently guessing. <code>get_project_structure</code> now reports each module's absolute content roots.</li>
