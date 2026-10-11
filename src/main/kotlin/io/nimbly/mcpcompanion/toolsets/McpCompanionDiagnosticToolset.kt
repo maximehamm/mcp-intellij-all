@@ -22,6 +22,11 @@ import io.nimbly.mcpcompanion.McpCompanionSettings
 class McpCompanionDiagnosticToolset : McpToolset {
 
     override fun isEnabled(): Boolean = true
+    // Same reason as isEnabled(): default methods that exist only in newer IDEs (isExperimental /
+    // alwaysIncluded, 2026.2+) must be overridden explicitly, otherwise Kotlin emits an invokespecial
+    // bridge to them and the plugin throws NoSuchMethodError on older IDEs. Values = platform defaults.
+    override fun isExperimental(): Boolean = true
+    override fun alwaysIncluded(): Boolean = false
 
     private suspend fun disabledMessage(toolName: String): String? = toolGate(toolName)
 

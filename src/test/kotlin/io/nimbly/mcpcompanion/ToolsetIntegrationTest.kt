@@ -482,13 +482,13 @@ class ToolsetIntegrationTest : BasePlatformTestCase() {
         val type = com.intellij.xdebugger.breakpoints.XBreakpointType.EXTENSION_POINT_NAME.extensionList
             .filterIsInstance<com.intellij.xdebugger.breakpoints.XLineBreakpointType<*>>()
             .firstOrNull() ?: return null
+        @Suppress("UNCHECKED_CAST")
+        val lineType = type as com.intellij.xdebugger.breakpoints.XLineBreakpointType<com.intellij.xdebugger.breakpoints.XBreakpointProperties<*>>
+        // Let the type build its own properties: some types (e.g. the Java line type in 2026.2+) reject
+        // null properties ("Breakpoint.getProperties must not return null").
+        val props = lineType.createBreakpointProperties(vFile, line)
         return invokeAndWaitIfNeeded {
-            manager.addLineBreakpoint(
-                type as com.intellij.xdebugger.breakpoints.XLineBreakpointType<com.intellij.xdebugger.breakpoints.XBreakpointProperties<*>>,
-                vFile.url,
-                line,
-                null
-            )
+            manager.addLineBreakpoint(lineType, vFile.url, line, props)
         }
     }
 

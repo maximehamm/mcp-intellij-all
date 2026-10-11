@@ -2,9 +2,9 @@ import java.util.Properties
 
 plugins {
     id("java")
-    kotlin("jvm") version "2.2.0"
-    id("org.jetbrains.intellij.platform") version "2.5.0"
-    kotlin("plugin.serialization") version "2.2.0"
+    kotlin("jvm") version "2.4.21"
+    id("org.jetbrains.intellij.platform") version "2.19.0"
+    kotlin("plugin.serialization") version "2.4.21"
 }
 
 val secrets = Properties().apply {
@@ -13,7 +13,12 @@ val secrets = Properties().apply {
 }
 
 group = "io.nimbly"
-version = "3.11.0"
+version = "3.12.0"
+
+// Bytecode level: the JVM running Gradle, capped at 21 (the oldest runtime we support is IDE 253 =
+// JBR 21, which runs any class file <= 65). The IntelliJ Platform Gradle plugin >= 2.8 would force a
+// JDK 25 toolchain (IDE 2026.2 runtime); we don't need one just to compile, so we pin to this level.
+val jvmLevel: Int = minOf(JavaVersion.current().majorVersion.toInt(), 21)
 
 // Auto-detect the installed IntelliJ IDEA whose bundled MCP server we compile against, instead of
 // hard-coding a version path (which broke on every IDE update). Scans ~/Applications for any
@@ -46,6 +51,9 @@ dependencies {
         bundledPlugin("com.intellij.mcpServer")
         bundledPlugin("Git4Idea")
         bundledPlugin("com.intellij.gradle")
+        // IDE 2026.2+ moved the test runner (SMTestProxy & co.) out of the core into this bundled
+        // plugin; older IDEs have it in core. Compile-classpath only — nothing to declare in plugin.xml.
+        bundledPlugin("intellij.testRunner.plugin")
         // GitHub & GitLab plugins — required by the Pull/Merge Request toolsets to reach the
         // user's configured account (token + server). Reached purely via reflection so the plugin
         // tolerates their absence at runtime (the tools just return a clear error), but declaring
@@ -72,6 +80,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
+                <li><b>3.12.0</b> — Verified compatible with IntelliJ IDEA 2026.2 (build 262). The minimum supported version is unchanged (2025.3).</li>
                 <li><b>3.11.0</b> — The status-bar widget now shows a small notification badge counting MCP calls as they happen; click the icon to reset it (and open the actions menu).</li>
                 <li><b>3.10.1</b> — Multi-module / multi-project robustness: relative file paths now resolve against every content root (not just the project base), so files in a second module are found; a path that matches several roots returns a clear error listing the absolute candidates instead of silently guessing. <code>get_project_structure</code> now reports each module's absolute content roots.</li>
                 <li><b>3.10.0</b> — Higher-risk tools now ask before running: while unchecked in Settings they pop an Allow/Deny dialog with the call arguments; tick <i>“Always allow”</i> to skip the prompt next time. Flagged ✋ in Settings.</li>
@@ -146,9 +155,9 @@ intellijPlatform {
             org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES
         )
         ides {
-            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3.4")
-            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2026.1")
-            // 2026.2 beta (build 262.x): verify against any locally-installed 262 IDE, if present.
+            create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3.4")
+            create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2026.1")
+            // 2026.2 (build 262.x): verify against any locally-installed 262 IDE, if present.
             // The Marketplace tightened PluginManagerCore.getPlugin to @Internal in 262 (handled via
             // reflection), so we keep this in the loop.
             (file("${System.getProperty("user.home")}/Applications").listFiles()?.toList() ?: emptyList())
@@ -175,9 +184,19 @@ tasks {
     named("publishPlugin") {
         dependsOn("test")
     }
+    test {
+        // IDE 2026.2+ classes are built for Java 25: run the headless platform tests on the JBR that
+        // ships inside the IDE we compile against (compilation itself stays on the Gradle JVM).
+        val jbrJava = file("$ideaContents/jbr/Contents/Home/bin/java")
+        if (jbrJava.exists()) executable = jbrJava.absolutePath
+        // IDE 2026.2 Ultimate registers an obfuscated post-startup activity that cannot be created in the
+        // headless fixture and is escalated to a test failure by TestLoggerFactory. We never need the
+        // Ultimate-only module in these tests, so suppress it.
+        jvmArgs("-Didea.suppressed.plugins.id=com.intellij.modules.ultimate")
+    }
     withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
+        sourceCompatibility = jvmLevel.toString()
+        targetCompatibility = jvmLevel.toString()
     }
     buildSearchableOptions {
         enabled = false
@@ -187,8 +206,19 @@ tasks {
     }
 }
 
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(JavaVersion.current().majorVersion.toInt()))
+    }
+}
+
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(jvmLevel.toString()))
+        // Compiler is 2.4.x (needed to READ the Kotlin-2.4 metadata of IDE 2026.2+ jars), but keep the
+        // language / stdlib API level at 2.2 so the emitted bytecode still runs on older IDEs (253)
+        // whose bundled kotlin-stdlib predates 2.4 (no NoSuchMethodError on newer stdlib APIs).
+        languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
+        apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
     }
 }
