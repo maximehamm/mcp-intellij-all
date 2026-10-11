@@ -4,6 +4,9 @@ import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.impl.ExecutionManagerImpl
+import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
@@ -520,6 +523,191 @@ class McpCompanionDebugToolset : McpToolset {
             timeoutMs = timeoutMs,
             fireAndForgetMessage = "Run configuration '$configurationName' started in $mode mode. Use get_console_output to follow output.",
         ))
+    }
+
+    // ── stop_run_configuration ────────────────────────────────────────────────
+
+    @McpTool(name = "stop_run_configuration")
+    @McpDescription(description = """
+        Stops a currently-running run or debug session by configuration name.
+        Terminates every live session of the configuration (there can be more than one if the same
+        config was launched several times, e.g. once in run and once in debug mode).
+        - configurationName: exact name from list_run_configurations.
+        - stopTimeoutMs: how long to wait for graceful termination before force-killing survivors
+          (default 15_000 = 15 s).
+        Uses the platform's standard stop path (the same as the Stop ⏹ button): a graceful stop
+        first, then — for processes that ignore it — an escalated force-kill. Waits until the
+        processes have actually terminated and reports the confirmed outcome.
+        NOTE: configurations that stop by *detaching* (remote debug / attach) report as terminated
+        while the underlying OS process keeps running; this is called out in the response.
+
+        projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
+    """)
+    suspend fun stop_run_configuration(
+        configurationName: String,
+        stopTimeoutMs: Long = 15_000L,
+        projectPath: String? = null,
+    ): String {
+        disabledMessage("stop_run_configuration")?.let { return it }
+        val project = resolveProject(projectPath)
+
+        val running = runningDescriptorsFor(project, configurationName)
+        if (running.isEmpty())
+            return captureResponse("No running instance of '$configurationName' found. Use list_run_configurations to see running status.")
+
+        val total = running.size
+        val detached = running.mapNotNull { it.processHandler }.count { it.detachIsDefault() }
+        val stillAlive = stopAndAwait(running, stopTimeoutMs)
+
+        return captureResponse(when {
+            stillAlive.isNotEmpty() ->
+                "Requested stop of $total session(s) of '$configurationName', but ${stillAlive.size} " +
+                "did not terminate within ${stopTimeoutMs}ms (even after a force-kill). Stop them " +
+                "manually via the IDE run/debug UI."
+            detached > 0 ->
+                "Stopped $total session(s) of '$configurationName' ($detached detached — the " +
+                "underlying process may still be alive and holding ports)."
+            else ->
+                "Stopped $total session(s) of '$configurationName' (confirmed terminated)."
+        })
+    }
+
+    // ── restart_run_configuration ─────────────────────────────────────────────
+
+    @McpTool(name = "restart_run_configuration")
+    @McpDescription(description = """
+        Restarts a run configuration by name: stops every currently-running session of it (if any),
+        waits for them to terminate, then launches it again.
+        - configurationName: exact name from list_run_configurations.
+        - mode: "run" (default) or "debug" — the mode to relaunch in. This does NOT have to match
+          the mode the config was previously running in; you can restart a running session in debug mode.
+        - waitForExit: if true, blocks until the freshly-launched process terminates (or `timeoutMs`
+          elapses) and returns the exit code. Default false — fire-and-forget.
+        - timeoutMs: max wait when waitForExit=true (default 600_000 = 10 min).
+        - stopTimeoutMs: how long to wait for the old session(s) to terminate before aborting the
+          restart (default 15_000 = 15 s). If they don't stop, NOTHING is relaunched.
+        Works whether or not the configuration is currently running (if nothing is running it just
+        launches it). Use get_console_output to read output after restart.
+
+        projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
+    """)
+    suspend fun restart_run_configuration(
+        configurationName: String,
+        mode: String = "run",
+        waitForExit: Boolean = false,
+        timeoutMs: Long = 600_000L,
+        stopTimeoutMs: Long = 15_000L,
+        projectPath: String? = null,
+    ): String {
+        disabledMessage("restart_run_configuration")?.let { return it }
+        if (mode != "run" && mode != "debug")
+            return captureResponse("Invalid mode '$mode'. Use \"run\" or \"debug\".")
+        val project = resolveProject(projectPath)
+
+        val settings = runOnEdt {
+            RunManager.getInstance(project).findConfigurationByName(configurationName)
+        } ?: return captureResponse("Run configuration '$configurationName' not found. Use list_run_configurations to see available configurations.")
+
+        // 1. Stop any live sessions and wait for their handlers to actually terminate, so the
+        //    relaunch starts from a clean slate (avoids "port already in use" style clashes).
+        //    If anything refuses to die, ABORT — relaunching over a live process is worse than
+        //    a clear failure message.
+        val running = runningDescriptorsFor(project, configurationName)
+        val stoppedCount = running.size
+        val detached = running.mapNotNull { it.processHandler }.count { it.detachIsDefault() }
+        val stillAlive = stopAndAwait(running, stopTimeoutMs)
+        if (stillAlive.isNotEmpty())
+            return captureResponse(
+                "Aborted: ${stillAlive.size} of $stoppedCount session(s) of '$configurationName' did " +
+                "not terminate within ${stopTimeoutMs}ms (even after a force-kill). Nothing was " +
+                "relaunched. Stop them manually and retry."
+            )
+
+        // 2. Relaunch via the shared launcher (supports run/debug + optional waitForExit).
+        val executor = if (mode == "debug") DefaultDebugExecutor.getDebugExecutorInstance()
+                       else DefaultRunExecutor.getRunExecutorInstance()
+
+        val stopNote = when {
+            stoppedCount == 0 -> "Nothing was running; launched fresh. "
+            detached > 0 ->
+                "Stopped $stoppedCount session(s) ($detached detached — the underlying process may " +
+                "still be alive and holding ports), then relaunched. "
+            else ->
+                "Stopped $stoppedCount session(s) (confirmed terminated), then relaunched. "
+        }
+
+        return captureResponse(executeRunConfigurationAndOptionallyWait(
+            project = project,
+            settings = settings,
+            executor = executor,
+            label = "Restart of '$configurationName' ($mode)",
+            waitForExit = waitForExit,
+            timeoutMs = timeoutMs,
+            fireAndForgetMessage = stopNote +
+                "Run configuration '$configurationName' restarted in $mode mode. Use get_console_output to follow output.",
+        ))
+    }
+
+    /**
+     * Live [RunContentDescriptor]s of the configuration named [configurationName].
+     *
+     * Uses [ExecutionManagerImpl.getRunningDescriptors] with a [com.intellij.openapi.util.Condition]
+     * on the [com.intellij.execution.RunnerAndConfigurationSettings] — an AUTHORITATIVE identity match
+     * on the config name, not the UI tab title (`displayName`, which wrapping profiles / plugins can
+     * decorate). There can be several descriptors for one name if it was launched multiple times
+     * (e.g. run + debug), so this returns a list.
+     *
+     * Backed by a copy-on-write list, so it is thread-safe to call off the EDT. ⚠️ It also excludes
+     * `isProcessTerminating` handlers, so it goes empty the instant [stopAndAwait] requests a stop —
+     * never use it as the wait predicate; [stopAndAwait] waits on the captured handlers instead.
+     */
+    private fun runningDescriptorsFor(
+        project: com.intellij.openapi.project.Project,
+        configurationName: String,
+    ): List<RunContentDescriptor> =
+        ExecutionManagerImpl.getInstance(project)
+            .getRunningDescriptors { it != null && it.name == configurationName }
+
+    /**
+     * Stops every process backing [descriptors] and waits, under ONE shared deadline, for them to
+     * terminate. Returns the handlers still alive at the end (empty = all confirmed terminated).
+     *
+     * Robustness details ([ExecutionManagerImpl.stopProcess] is single-shot-graceful):
+     *  - First [stopProcess] requests termination; a [com.intellij.execution.KillableProcess] with a
+     *    shutdown hook may only *begin* terminating.
+     *  - After the first deadline, a SECOND [stopProcess] on the survivors escalates a KillableProcess
+     *    to a hard kill (`isProcessTerminating` → `killProcess()`), with a short extra grace period.
+     *  - [ProcessHandler.waitFor] is a latch wait: safe off the EDT (blocking it there would freeze
+     *    the UI and can deadlock the termination bookkeeping). We run it on [Dispatchers.IO] so we
+     *    never block the limited-parallelism default dispatcher, and share one deadline across all
+     *    handlers so total wait is bounded (not N × timeout).
+     *
+     * [stopProcess] needs neither the EDT nor a read/write action — it only mutates the handler.
+     */
+    private suspend fun stopAndAwait(
+        descriptors: List<RunContentDescriptor>,
+        timeoutMs: Long,
+    ): List<ProcessHandler> {
+        val handlers = descriptors.mapNotNull { it.processHandler }.filterNot { it.isProcessTerminated }
+        if (handlers.isEmpty()) return emptyList()
+
+        handlers.forEach { ExecutionManagerImpl.stopProcess(it) }
+
+        return withContext(Dispatchers.IO) {
+            fun awaitAll(deadline: Long, hs: List<ProcessHandler>) = hs.forEach { h ->
+                val left = deadline - System.currentTimeMillis()
+                if (left > 0 && !h.isProcessTerminated) h.waitFor(left)
+            }
+            awaitAll(System.currentTimeMillis() + timeoutMs, handlers)
+
+            // Second stopProcess() escalates a stubborn KillableProcess to killProcess().
+            val stubborn = handlers.filterNot { it.isProcessTerminated }
+            if (stubborn.isNotEmpty()) {
+                stubborn.forEach { ExecutionManagerImpl.stopProcess(it) }
+                awaitAll(System.currentTimeMillis() + 5_000L, stubborn)
+            }
+            handlers.filterNot { it.isProcessTerminated }
+        }
     }
 
     // ── modify_run_configuration ──────────────────────────────────────────────

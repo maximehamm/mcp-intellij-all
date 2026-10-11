@@ -289,6 +289,44 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         assertNull("Should return null for unknown run configuration", found)
     }
 
+    // ── stop_run_configuration / restart_run_configuration ────────────────────
+
+    fun `test getRunningDescriptors is empty in fresh headless project`() {
+        // stop_run_configuration and restart_run_configuration resolve the target session(s) via
+        // ExecutionManagerImpl.getRunningDescriptors { settings -> settings.name == name } — an
+        // authoritative match on the RunnerAndConfigurationSettings name (not the UI tab title).
+        // In a fresh project nothing is running, so the lookup is empty — exactly the
+        // "no running instance found" branch of stop_run_configuration.
+        val running = invokeAndWaitIfNeeded {
+            com.intellij.execution.impl.ExecutionManagerImpl.getInstance(project)
+                .getRunningDescriptors { true }
+        }
+        println("  getRunningDescriptors{true}.size = ${running.size}")
+        assertTrue("Fresh headless project should have no running descriptors", running.isEmpty())
+    }
+
+    fun `test running-descriptor name lookup returns empty for unknown config`() {
+        // Mirrors McpCompanionDebugToolset.runningDescriptorsFor(): filter running descriptors by
+        // the settings name. Must yield nothing for a name that was never launched.
+        val running = invokeAndWaitIfNeeded {
+            com.intellij.execution.impl.ExecutionManagerImpl.getInstance(project)
+                .getRunningDescriptors { it != null && it.name == "NonExistentConfig" }
+        }
+        println("  runningDescriptorsFor('NonExistentConfig').size = ${running.size}")
+        assertTrue("No running descriptor should match an unknown config name", running.isEmpty())
+    }
+
+    fun `test ExecutionManagerImpl stopProcess is null-safe`() {
+        // stop_run_configuration/restart_run_configuration call ExecutionManagerImpl.stopProcess()
+        // per matched handler. Verify the platform entry point exists and tolerates a null
+        // descriptor (the companion overload is @JvmStatic and null-safe) — so an empty match set
+        // can never NPE.
+        invokeAndWaitIfNeeded {
+            com.intellij.execution.impl.ExecutionManagerImpl.stopProcess(null as com.intellij.execution.ui.RunContentDescriptor?)
+        }
+        println("  ExecutionManagerImpl.stopProcess(null) did not throw")
+    }
+
     // ── create_run_configuration_from_xml ─────────────────────────────────────
 
     fun `test ConfigurationType CONFIGURATION_TYPE_EP is accessible via reflection in headless`() {
