@@ -1,8 +1,14 @@
 package io.nimbly.mcpcompanion.toolsets
 
 import com.intellij.execution.impl.ConsoleViewImpl
+import com.intellij.execution.impl.ExecutionManagerImpl
 import com.intellij.execution.testframework.sm.runner.SMTestProxy
 import com.intellij.execution.testframework.sm.runner.ui.SMTestRunnerResultsForm
+import com.intellij.execution.ui.ExecutionConsole
+import com.intellij.execution.ui.RunContentDescriptor
+import com.intellij.execution.ui.RunContentManager
+import com.intellij.openapi.editor.impl.EditorComponentImpl
+import com.intellij.openapi.wm.ToolWindowId
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
@@ -37,6 +43,10 @@ class McpCompanionBuildToolset : McpToolset {
     override fun alwaysIncluded(): Boolean = false
 
     private suspend fun disabledMessage(toolName: String): String? = toolGate(toolName)
+
+    // Serializer for get_console_output that always emits default (empty) fields, so the
+    // run/debug/services keys are present even when empty — see get_console_output for why.
+    private val consoleJson = Json { encodeDefaults = true }
 
     // ── get_build_output ──────────────────────────────────────────────────────
 
@@ -391,11 +401,14 @@ class McpCompanionBuildToolset : McpToolset {
 
     @McpTool(name = "get_console_output")
     @McpDescription(description = """
-        Returns console output from both the "Run" and "Debug" tool windows.
+        Returns console output from the "Run", "Debug" AND "Services" tool windows.
         Includes all open tabs from each window with their console text.
         - activeWindow: "run" or "debug" — whichever window is currently visible/focused
         - active: true on the tab that is currently selected within its window
+        - run / debug / services: one entry per open tab in that window
         - Run tabs also include a structured error/warning tree when available
+        Spring Boot and other server run configurations are hosted in the "Services" window and
+        wrap their console (ConsoleViewWrapperBase / DuplexConsoleView) — their output is read too.
         Use this whenever the user ran or debugged something and you need to see the output.
 
         projectPath: absolute path of the target project's root — defaults to the currently-focused project if omitted. Useful when several IntelliJ windows are open in the same JVM.
@@ -403,58 +416,128 @@ class McpCompanionBuildToolset : McpToolset {
     suspend fun get_console_output(projectPath: String? = null): String {
         disabledMessage("get_console_output")?.let { return it }
         val project = resolveProject(projectPath)
-        return captureResponse(runOnEdt { Json.encodeToString(extractConsoleOutput(project)) })
+        // encodeDefaults so the run/debug/services keys are ALWAYS present, even when empty — an
+        // empty result serializes to {"run":[],"debug":[],"services":[]} instead of a bare {},
+        // which (a) tells the client the services field exists and (b) makes "no output found"
+        // unambiguously distinguishable from an old plugin build.
+        return captureResponse(runOnEdt { consoleJson.encodeToString(extractConsoleOutput(project)) })
     }
 
     internal fun extractConsoleOutput(project: com.intellij.openapi.project.Project): ConsoleOutput {
-        val runWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
-        val debugWindow = ToolWindowManager.getInstance(project).getToolWindow("Debug")
+        // Enumerate the running/finished process DESCRIPTORS directly rather than walking the
+        // "Run"/"Debug" tool-window contents. Modern IntelliJ routes many configs (Spring Boot and
+        // every Run-Dashboard type) into the "Services" tool window — so getToolWindow("Run") is
+        // empty/absent for them, and the Services window is a single ServiceView tree (no per-tab
+        // consoles either). RunContentManager.allDescriptors spans EVERY host window; we bucket each
+        // descriptor by the tool window that actually hosts it. (Oracle-reviewed.)
+        val debugDescriptors: Set<RunContentDescriptor> = runCatching {
+            XDebuggerManager.getInstance(project).debugSessions.mapNotNull { it.runContentDescriptor }.toSet()
+        }.getOrDefault(emptySet())
 
-        val runVisible = runWindow?.isVisible == true
-        val debugVisible = debugWindow?.isVisible == true
-        val activeWindow: String? = when {
-            debugVisible && !runVisible -> "debug"
-            runVisible && !debugVisible -> "run"
-            debugVisible && runVisible ->
-                if (XDebuggerManager.getInstance(project).debugSessions.isNotEmpty()) "debug" else "run"
+        // Identity-dedup: RunContentDescriptor doesn't override equals/hashCode, which is what we want.
+        val all = LinkedHashSet<RunContentDescriptor>()
+        runCatching { all.addAll(RunContentManager.getInstance(project).allDescriptors) }
+        runCatching { all.addAll(ExecutionManagerImpl.getInstance(project).getRunningDescriptors { true }) }
+        all.addAll(debugDescriptors)
+
+        val runTabs = mutableListOf<ConsoleTab>()
+        val debugTabs = mutableListOf<ConsoleTab>()
+        val serviceTabs = mutableListOf<ConsoleTab>()
+
+        for (d in all) {
+            val consoleRoot = d.executionConsole?.component ?: d.component
+            val treeNodes = consoleRoot?.let { c ->
+                UIUtil.findComponentsOfType(c, JTree::class.java).firstOrNull()
+                    ?.model?.let { m -> buildBuildNodes(m, m.root) }?.ifEmpty { null }
+            }
+            val tab = ConsoleTab(
+                name = d.displayName ?: "Run",
+                active = false,
+                tree = treeNodes,
+                console = readDescriptorConsole(d),
+                alive = d.processHandler?.isProcessTerminated == false,
+            )
+            when {
+                d in debugDescriptors -> debugTabs
+                hostWindowId(project, d) == ToolWindowId.SERVICES -> serviceTabs
+                else -> runTabs
+            }.add(tab)
+        }
+
+        val activeWindow: String? = when (ToolWindowManager.getInstance(project).activeToolWindowId) {
+            "Debug" -> "debug"
+            "Run" -> "run"
+            ToolWindowId.SERVICES -> "services"
             else -> null
         }
 
-        val selectedRunContent = runWindow?.contentManager?.selectedContent
-        val runTabs = runWindow?.contentManager?.contents?.map { content ->
-            val trees = UIUtil.findComponentsOfType(content.component, JTree::class.java)
-            val treeNodes = trees.firstOrNull()?.model?.let { buildBuildNodes(it, it.root) }
-            val consoles = UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-            val consoleText = consoles.mapNotNull { it.readText()?.ifEmpty { null } }
-                .joinToString("\n---\n").ifEmpty { null }
-            ConsoleTab(
-                name = content.displayName ?: "Run",
-                active = content === selectedRunContent,
-                tree = treeNodes?.ifEmpty { null },
-                console = consoleText
-            )
-        } ?: emptyList()
+        return ConsoleOutput(activeWindow = activeWindow, run = runTabs, debug = debugTabs, services = serviceTabs)
+    }
 
-        val activeSessions = XDebuggerManager.getInstance(project).debugSessions
-        val sessionByName = activeSessions.associateBy { it.sessionName }
-        val selectedDebugContent = debugWindow?.contentManager?.selectedContent
-        val debugTabs = debugWindow?.contentManager?.contents?.map { content ->
-            val name = content.displayName ?: "Debug"
-            val session = sessionByName[name]
-            val consoleFromSession = session?.consoleView?.let { cv ->
-                (cv as? ConsoleViewImpl)?.readText()
-                    ?: UIUtil.findComponentsOfType(cv.component, ConsoleViewImpl::class.java)
-                        .mapNotNull { it.readText()?.ifEmpty { null } }
-                        .joinToString("\n---\n").ifEmpty { null }
-            }
-            val consoleText = consoleFromSession
-                ?: UIUtil.findComponentsOfType(content.component, ConsoleViewImpl::class.java)
-                    .mapNotNull { it.readText()?.ifEmpty { null } }
-                    .joinToString("\n---\n").ifEmpty { null }
-            ConsoleTab(name = name, active = content === selectedDebugContent, console = consoleText)
-        } ?: emptyList()
+    private fun hostWindowId(project: com.intellij.openapi.project.Project, d: RunContentDescriptor): String? =
+        runCatching { RunContentManager.getInstance(project).getToolWindowByDescriptor(d)?.id }.getOrNull()
 
-        return ConsoleOutput(activeWindow = activeWindow, run = runTabs, debug = debugTabs)
+    /**
+     * Reads console text from a [RunContentDescriptor], regardless of which tool window hosts it or
+     * how the console is wrapped (plain ConsoleViewImpl, Spring Boot / server ConsoleViewWrapperBase,
+     * DuplexConsoleView, Grep Console decorators, …).
+     *
+     * Strategy (robust to wrappers, no load-bearing reflection):
+     *  1. Read every ConsoleViewImpl under the execution console's component (fast path, plain runs).
+     *  2. Fallback: find the embedded EditorComponentImpl and read its editor's document text via the
+     *     PUBLIC EditorComponentImpl.getEditor() — the console UI always ends in a real editor, so
+     *     this catches every wrapper uniformly.
+     *
+     * MUST be called on the EDT — touching .component can force lazy console UI creation.
+     */
+    private fun readDescriptorConsole(descriptor: RunContentDescriptor): String? {
+        val roots = listOfNotNull(
+            unwrapConsole(descriptor.executionConsole)?.component,
+            descriptor.executionConsole?.component,
+            descriptor.component,
+        ).distinct()
+
+        for (root in roots) {
+            readConsoleText(root)?.let { return it }
+        }
+        return null
+    }
+
+    /** Best-effort unwrap of common console wrappers via duck-typed reflection (a refinement only). */
+    private fun unwrapConsole(console: ExecutionConsole?): ExecutionConsole? {
+        var cur = console ?: return null
+        repeat(8) {
+            val next = sequenceOf("getDelegate", "getPrimaryConsoleView", "getConsoleView", "getConsole")
+                .mapNotNull { name -> runCatching { cur.javaClass.getMethod(name).invoke(cur) }.getOrNull() }
+                .filterIsInstance<ExecutionConsole>()
+                .firstOrNull()
+            if (next == null || next === cur) return cur
+            cur = next
+        }
+        return cur
+    }
+
+    /**
+     * Reads console text from an arbitrary Swing [component] tree.
+     *  1. Every [ConsoleViewImpl] found under it (plain Application/JUnit consoles).
+     *  2. The embedded [EditorComponentImpl]'s editor document (public getEditor()) — catches
+     *     wrapped consoles (Spring Boot, Duplex, Grep Console) whose top-level type isn't ConsoleViewImpl.
+     *  3. Reflective [readEditorText] as a last resort.
+     *
+     * MUST be called on the EDT.
+     */
+    private fun readConsoleText(component: javax.swing.JComponent): String? {
+        val fromConsoleViews = UIUtil.findComponentsOfType(component, ConsoleViewImpl::class.java)
+            .mapNotNull { it.readText()?.ifEmpty { null } }
+            .joinToString("\n---\n")
+            .ifEmpty { null }
+        if (fromConsoleViews != null) return fromConsoleViews
+
+        // Prefer the longest visible editor document — the console cycle buffer lives in one editor.
+        val fromEditor = UIUtil.findComponentsOfType(component, EditorComponentImpl::class.java)
+            .mapNotNull { runCatching { it.editor.document.text.trim().ifEmpty { null } }.getOrNull() }
+            .maxByOrNull { it.length }
+        return fromEditor ?: readEditorText(component)
     }
 
     // ── get_test_results ──────────────────────────────────────────────────────
@@ -867,8 +950,8 @@ class McpCompanionBuildToolset : McpToolset {
 @Serializable data class ServiceSession(val name: String, val selected: Boolean = false, val output: String? = null, val outputSelected: Boolean = false, val results: List<ServiceResult> = emptyList())
 @Serializable data class ServiceResult(val name: String, val selected: Boolean = false, val data: String? = null)
 
-@Serializable data class ConsoleOutput(val activeWindow: String? = null, val run: List<ConsoleTab> = emptyList(), val debug: List<ConsoleTab> = emptyList())
-@Serializable data class ConsoleTab(val name: String, val active: Boolean = false, val tree: List<BuildNode>? = null, val console: String? = null)
+@Serializable data class ConsoleOutput(val activeWindow: String? = null, val run: List<ConsoleTab> = emptyList(), val debug: List<ConsoleTab> = emptyList(), val services: List<ConsoleTab> = emptyList())
+@Serializable data class ConsoleTab(val name: String, val active: Boolean = false, val tree: List<BuildNode>? = null, val console: String? = null, val alive: Boolean = false)
 
 @Serializable data class TestRunOutput(val runs: List<TestRun>, val error: String? = null)
 @Serializable data class TestRun(val name: String, val tests: List<TestNode>)
