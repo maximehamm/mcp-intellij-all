@@ -46,7 +46,7 @@ class McpCompanionBuildToolset : McpToolset {
 
     // Serializer for get_console_output that always emits default (empty) fields, so the
     // run/debug/services keys are present even when empty — see get_console_output for why.
-    private val consoleJson = Json { encodeDefaults = true }
+    internal val consoleJson = Json { encodeDefaults = true }
 
     // ── get_build_output ──────────────────────────────────────────────────────
 
@@ -450,9 +450,14 @@ class McpCompanionBuildToolset : McpToolset {
                 UIUtil.findComponentsOfType(c, JTree::class.java).firstOrNull()
                     ?.model?.let { m -> buildBuildNodes(m, m.root) }?.ifEmpty { null }
             }
+            // Restore the documented `active: true` on the selected tab: compare the descriptor's content
+            // with the selected content of the tool window that hosts it (Run / Debug). The Services
+            // window shows one ServiceView tree rather than per-process contents, so it stays false.
+            val host = hostWindow(project, d)
+            val selected = host?.contentManagerIfCreated?.selectedContent
             val tab = ConsoleTab(
                 name = d.displayName ?: "Run",
-                active = false,
+                active = selected != null && selected === d.attachedContent,
                 tree = treeNodes,
                 console = readDescriptorConsole(d),
                 alive = d.processHandler?.isProcessTerminated == false,
@@ -464,18 +469,47 @@ class McpCompanionBuildToolset : McpToolset {
             }.add(tab)
         }
 
-        val activeWindow: String? = when (ToolWindowManager.getInstance(project).activeToolWindowId) {
-            "Debug" -> "debug"
-            "Run" -> "run"
-            ToolWindowId.SERVICES -> "services"
-            else -> null
-        }
+        val twm = ToolWindowManager.getInstance(project)
+        val activeWindow = pickActiveWindow(
+            focusedId = twm.activeToolWindowId,
+            runVisible = twm.getToolWindow("Run")?.isVisible == true,
+            debugVisible = twm.getToolWindow("Debug")?.isVisible == true,
+            servicesVisible = twm.getToolWindow(ToolWindowId.SERVICES)?.isVisible == true,
+            hasDebugSessions = runCatching { XDebuggerManager.getInstance(project).debugSessions.isNotEmpty() }.getOrDefault(false),
+        )
 
         return ConsoleOutput(activeWindow = activeWindow, run = runTabs, debug = debugTabs, services = serviceTabs)
     }
 
+    private fun hostWindow(project: com.intellij.openapi.project.Project, d: RunContentDescriptor): com.intellij.openapi.wm.ToolWindow? =
+        runCatching { RunContentManager.getInstance(project).getToolWindowByDescriptor(d) }.getOrNull()
+
     private fun hostWindowId(project: com.intellij.openapi.project.Project, d: RunContentDescriptor): String? =
-        runCatching { RunContentManager.getInstance(project).getToolWindowByDescriptor(d)?.id }.getOrNull()
+        hostWindow(project, d)?.id
+
+    /**
+     * Which of run / debug / services the caller is "looking at". The focused tool window wins; when
+     * focus is elsewhere (typically the editor — the usual state when an AI client calls the tool) we
+     * fall back to whichever of them is VISIBLE, as before. Pure function so the rules are unit-tested.
+     */
+    internal fun pickActiveWindow(
+        focusedId: String?,
+        runVisible: Boolean,
+        debugVisible: Boolean,
+        servicesVisible: Boolean,
+        hasDebugSessions: Boolean,
+    ): String? = when (focusedId) {
+        "Debug" -> "debug"
+        "Run" -> "run"
+        ToolWindowId.SERVICES -> "services"
+        else -> when {
+            debugVisible && !runVisible -> "debug"
+            runVisible && !debugVisible -> "run"
+            debugVisible && runVisible -> if (hasDebugSessions) "debug" else "run"
+            servicesVisible -> "services"
+            else -> null
+        }
+    }
 
     /**
      * Reads console text from a [RunContentDescriptor], regardless of which tool window hosts it or

@@ -80,7 +80,7 @@ intellijPlatform {
         }
         changeNotes = """
             <ul>
-                <li><b>3.13.0</b> — New <code>stop_run_configuration</code> and <code>restart_run_configuration</code> tools (contributed by @sylvaindd): stop a running run/debug configuration by name — gracefully, then force-kill — or restart it in run or debug mode. Handy for servers and watchers.</li>
+                <li><b>3.13.0</b> — New <code>stop_run_configuration</code> and <code>restart_run_configuration</code> tools: stop a running run/debug configuration by name — gracefully, then force-kill — or restart it in run or debug mode, handy for servers and watchers. <code>get_console_output</code> now also reads the Services window, so Spring Boot and other server run configurations are no longer empty. Both contributed by @sylvaindd.</li>
                 <li><b>3.12.0</b> — Verified compatible with IntelliJ IDEA 2026.2 (build 262). The minimum supported version is unchanged (2025.3).</li>
                 <li><b>3.11.0</b> — The status-bar widget now shows a small notification badge counting MCP calls as they happen; click the icon to reset it (and open the actions menu).</li>
                 <li><b>3.10.1</b> — Multi-module / multi-project robustness: relative file paths now resolve against every content root (not just the project base), so files in a second module are found; a path that matches several roots returns a clear error listing the absolute candidates instead of silently guessing. <code>get_project_structure</code> now reports each module's absolute content roots.</li>

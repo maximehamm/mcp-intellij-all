@@ -173,6 +173,42 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
 
     // ── get_console_output ────────────────────────────────────────────────────
 
+    fun `test get_console_output always emits run, debug and services keys`() {
+        // An empty result must serialize to {"run":[],"debug":[],"services":[]} rather than a bare {}:
+        // the client can then tell "nothing running" apart from an old plugin build without `services`.
+        val toolset = McpCompanionBuildToolset()
+        val json = invokeAndWaitIfNeeded {
+            toolset.consoleJson.encodeToString(
+                io.nimbly.mcpcompanion.toolsets.ConsoleOutput.serializer(),
+                toolset.extractConsoleOutput(project),
+            )
+        }
+        println("  json = $json")
+        for (key in listOf("\"run\"", "\"debug\"", "\"services\"")) {
+            assertTrue("$key must always be present in: $json", json.contains(key))
+        }
+    }
+
+    fun `test pickActiveWindow prefers the focused window then falls back to the visible one`() {
+        val t = McpCompanionBuildToolset()
+        fun pick(focused: String?, run: Boolean = false, debug: Boolean = false, services: Boolean = false, sessions: Boolean = false) =
+            t.pickActiveWindow(focused, run, debug, services, sessions)
+
+        // focus wins over visibility
+        assertEquals("debug", pick("Debug", run = true))
+        assertEquals("run", pick("Run", debug = true))
+        assertEquals("services", pick("Services"))
+        // focus elsewhere (editor): fall back to visibility — this was the regression in the Services PR
+        assertEquals("run", pick(null, run = true))
+        assertEquals("run", pick("Project", run = true))
+        assertEquals("debug", pick(null, debug = true))
+        assertEquals("debug", pick(null, run = true, debug = true, sessions = true))
+        assertEquals("run", pick(null, run = true, debug = true, sessions = false))
+        assertEquals("services", pick(null, services = true))
+        assertEquals("run", pick(null, run = true, services = true))
+        assertNull(pick(null))
+    }
+
     fun `test get_console_output returns valid structure when no Run or Debug window`() {
         val result = invokeAndWaitIfNeeded {
             McpCompanionBuildToolset().extractConsoleOutput(project)

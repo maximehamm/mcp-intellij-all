@@ -29,7 +29,7 @@
         <h4>Build &amp; Tests</h4>
         <ul>
             <li><b>get_build_output</b> — Build tool window: structured error/warning tree with file names and line numbers, plus raw console text.</li>
-            <li><b>get_console_output</b> — Console output from both the Run and Debug tool windows. All tabs from each window, with the active window and active tab clearly indicated.</li>
+            <li><b>get_console_output</b> — Console output from the Run, Debug and Services tool windows (Spring Boot and other server configurations included). All tabs, with the active window, active tab and whether the process is still alive clearly indicated.</li>
             <li><b>get_services_output</b> — All sessions from the Services tool window, grouped by node name: SQL output log, result grids with column names, and which session/tab is currently active.</li>
             <li><b>get_test_results</b> — Last test run results: passed/failed/ignored status, duration, and failure messages with stack traces.</li>
             <li><b>get_terminal_output</b> — Content of all tabs in the embedded Terminal tool window.</li>

@@ -1099,4 +1099,26 @@ class ReflectionApiTest {
         if (method != null) println("OK: ${concrete.simpleName}.getExitCode() found (returns ${method.returnType.simpleName})")
         else println("INFO: getExitCode() not on ${concrete.simpleName} directly — will rely on concrete subclasses (OSProcessHandler etc.)")
     }
+
+    // ── Console wrappers (get_console_output) ────────────────────────────────
+
+    @Test
+    fun `console wrappers still expose a delegate accessor used to unwrap consoles`() {
+        // McpCompanionBuildToolset.unwrapConsole() duck-types these accessor names on wrapper consoles
+        // (Duplex / Spring Boot / Grep Console). It is a best-effort refinement — the editor-text
+        // fallback still reads wrapped consoles — so this only reports, it never fails.
+        val accessors = setOf("getDelegate", "getPrimaryConsoleView", "getConsoleView", "getConsole")
+        for (name in listOf("com.intellij.execution.console.DuplexConsoleView", "com.intellij.execution.console.ConsoleViewWrapperBase")) {
+            val cls = runCatching { Class.forName(name) }.getOrNull()
+            if (cls == null) {
+                println("WARNING: $name not found — get_console_output falls back to reading the console editor directly")
+                continue
+            }
+            val found = cls.methods.filter { it.name in accessors && it.parameterCount == 0 }.map { it.name }.distinct()
+            if (found.isEmpty())
+                println("WARNING: ${cls.simpleName} exposes none of $accessors — console unwrapping degrades to the editor-text fallback")
+            else
+                println("INFO: ${cls.simpleName} exposes console unwrap accessor(s): $found")
+        }
+    }
 }
