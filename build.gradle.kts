@@ -21,21 +21,47 @@ version = "3.13.0"
 val jvmLevel: Int = minOf(JavaVersion.current().majorVersion.toInt(), 21)
 
 // Auto-detect the installed IntelliJ IDEA whose bundled MCP server we compile against, instead of
-// hard-coding a version path (which broke on every IDE update). Scans ~/Applications for any
-// "IntelliJ IDEA*.app" that ships mcpserver.jar and picks the most recently updated one.
-val ideaContents: String = run {
-    val appsDir = file("${System.getProperty("user.home")}/Applications")
-    val candidates = (appsDir.listFiles()?.toList() ?: emptyList())
+// hard-coding a version path (which broke on every IDE update).
+//
+// An IDE "home" is the folder that directly contains lib/ and plugins/ and ships the bundled
+// MCP server. macOS: ~/Applications/IntelliJ IDEA*.app/Contents. Windows / Linux / Toolbox: the install
+// root, searched under the usual JetBrains locations (there is no ".app/Contents" wrapper there).
+// Cross-platform detection contributed by @sylvaindd (PR #7).
+val installedIdeHomes: List<File> = run {
+    fun isIdeHome(dir: File) = dir.resolve("plugins/mcpserver/lib/mcpserver.jar").exists()
+    val user = System.getProperty("user.home")
+
+    val mac = (file("$user/Applications").listFiles()?.toList() ?: emptyList())
         .filter { it.isDirectory && it.name.startsWith("IntelliJ IDEA") && it.name.endsWith(".app") }
         .map { it.resolve("Contents") }
-        .filter { it.resolve("plugins/mcpserver/lib/mcpserver.jar").exists() }
-    // Prefer a version-stamped install (e.g. "IntelliJ IDEA 2026.1.4.app"), highest name first,
-    // over a generic "IntelliJ IDEA.app" (which may be an unrelated / EAP build).
-    val versioned = candidates
-        .filter { it.parentFile.name.any(Char::isDigit) }
-        .sortedByDescending { it.parentFile.name }
-    (versioned.firstOrNull() ?: candidates.firstOrNull())?.absolutePath
-        ?: error("mcpserver.jar introuvable sous ~/Applications/IntelliJ IDEA*.app — vérifie l'installation IntelliJ (le plugin MCP Server doit être bundlé).")
+
+    val roots = listOf(
+        "C:/Program Files/JetBrains", "C:/Program Files (x86)/JetBrains",
+        "$user/AppData/Local/Programs", "$user/AppData/Local/JetBrains/Toolbox/apps",
+        "$user/.local/share/JetBrains/Toolbox/apps", "/opt", "/usr/local",
+    )
+    fun subDirs(d: File): List<File> = (d.listFiles()?.toList() ?: emptyList()).filter { it.isDirectory }
+    val others = roots.map(::file).filter { it.isDirectory }
+        .flatMap { root -> subDirs(root).filter { it.name.contains("IntelliJ", ignoreCase = true) } }
+        // Toolbox nests the real build under "<channel>/<build>": scan two levels below too.
+        .flatMap { listOf(it) + subDirs(it).flatMap { sub -> listOf(sub) + subDirs(sub) } }
+
+    (mac + others).filter(::isIdeHome)
+}
+
+/** Install dir expected by IntelliJ Platform Gradle `local()`: the ".app" on macOS, the root elsewhere. */
+fun ideInstallDir(home: File): File = if (home.name == "Contents") home.parentFile else home
+
+/** Human label used to rank installs: "IntelliJ IDEA 2026.2.3.app" (macOS) or the folder name elsewhere. */
+fun ideLabel(home: File): String = if (home.name == "Contents") home.parentFile.name else home.name
+
+val ideaContents: String = run {
+    // Prefer a version-stamped install, highest label first, over a generic "IntelliJ IDEA.app"
+    // (which may be an unrelated / EAP build).
+    val versioned = installedIdeHomes.filter { ideLabel(it).any(Char::isDigit) }.sortedByDescending { ideLabel(it) }
+    (versioned.firstOrNull() ?: installedIdeHomes.firstOrNull())?.absolutePath
+        ?: error("mcpserver.jar introuvable — installe un IntelliJ IDEA avec le plugin MCP Server bundlé " +
+                 "(cherché sous ~/Applications, C:/Program Files/JetBrains, Toolbox, /opt…).")
 }
 
 repositories {
@@ -47,7 +73,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        local(file(ideaContents).parent)
+        local(ideInstallDir(file(ideaContents)))
         bundledPlugin("com.intellij.mcpServer")
         bundledPlugin("Git4Idea")
         bundledPlugin("com.intellij.gradle")
@@ -161,14 +187,13 @@ intellijPlatform {
             // 2026.2 (build 262.x): verify against any locally-installed 262 IDE, if present.
             // The Marketplace tightened PluginManagerCore.getPlugin to @Internal in 262 (handled via
             // reflection), so we keep this in the loop.
-            (file("${System.getProperty("user.home")}/Applications").listFiles()?.toList() ?: emptyList())
-                .filter { it.isDirectory && it.name.startsWith("IntelliJ IDEA") && it.name.endsWith(".app") }
-                .firstOrNull { app ->
-                    runCatching {
-                        app.resolve("Contents/Resources/product-info.json").readText().contains("\"buildNumber\": \"262")
-                    }.getOrDefault(false)
+            installedIdeHomes
+                .firstOrNull { home ->
+                    listOf("Resources/product-info.json", "product-info.json").any { rel ->
+                        runCatching { home.resolve(rel).readText().contains("\"buildNumber\": \"262") }.getOrDefault(false)
+                    }
                 }
-                ?.let { local(it) }
+                ?.let { local(ideInstallDir(it)) }
         }
     }
 }
@@ -188,8 +213,9 @@ tasks {
     test {
         // IDE 2026.2+ classes are built for Java 25: run the headless platform tests on the JBR that
         // ships inside the IDE we compile against (compilation itself stays on the Gradle JVM).
-        val jbrJava = file("$ideaContents/jbr/Contents/Home/bin/java")
-        if (jbrJava.exists()) executable = jbrJava.absolutePath
+        val jbrJava = listOf("jbr/Contents/Home/bin/java", "jbr/bin/java", "jbr/bin/java.exe")
+            .map { file("$ideaContents/$it") }.firstOrNull { it.exists() }
+        if (jbrJava != null) executable = jbrJava.absolutePath
         // IDE 2026.2 Ultimate registers an obfuscated post-startup activity that cannot be created in the
         // headless fixture and is escalated to a test failure by TestLoggerFactory. We never need the
         // Ultimate-only module in these tests, so suppress it.
