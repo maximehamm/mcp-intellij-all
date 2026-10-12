@@ -20,6 +20,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.tabs.JBTabs
 import com.intellij.util.ui.UIUtil
 import com.intellij.xdebugger.XDebuggerManager
+import io.nimbly.mcpcompanion.util.flushDeferredConsoleOutput
 import io.nimbly.mcpcompanion.util.readEditorText
 import io.nimbly.mcpcompanion.util.readText
 import kotlinx.serialization.Serializable
@@ -390,11 +391,32 @@ class McpCompanionBuildToolset : McpToolset {
                 else -> emptyList()
             }
 
-            if (sessions.isEmpty())
+            // The Services window builds its content lazily: with no ServiceViewTree / wrapper to
+            // scrape, every branch above comes back empty even while sessions run — which is how this
+            // tool ended up reporting "none" while get_console_output listed two live sessions.
+            val effectiveSessions = sessions.ifEmpty { servicesSessionsFromDescriptors(project) }
+
+            if (effectiveSessions.isEmpty())
                 Json.encodeToString(ServicesOutput(sessions = listOf(ServiceSession(name = "info", output = "No service sessions found"))))
             else
-                Json.encodeToString(ServicesOutput(sessions))
+                Json.encodeToString(ServicesOutput(effectiveSessions))
         })
+    }
+
+    /**
+     * UI-free view of the "Services" tool window: every [RunContentDescriptor] the Services window
+     * hosts, with its console text. Used when the Swing scraping in `get_services_output` finds
+     * nothing because the tool window was never materialized.
+     *
+     * MUST be called on the EDT — [readDescriptorConsole] touches Swing components.
+     */
+    internal fun servicesSessionsFromDescriptors(project: com.intellij.openapi.project.Project): List<ServiceSession> {
+        val all = LinkedHashSet<RunContentDescriptor>()
+        runCatching { all.addAll(RunContentManager.getInstance(project).allDescriptors) }
+        runCatching { all.addAll(ExecutionManagerImpl.getInstance(project).getRunningDescriptors { true }) }
+        return all
+            .filter { hostWindowId(project, it) == ToolWindowId.SERVICES }
+            .map { d -> ServiceSession(name = d.displayName ?: "session", output = readDescriptorConsole(d)) }
     }
 
     // ── get_console_output ───────────────────────────────────────────────────
@@ -553,6 +575,8 @@ class McpCompanionBuildToolset : McpToolset {
 
     /**
      * Reads console text from an arbitrary Swing [component] tree.
+     *  0. Drains every console's deferred output buffer — a tab that was never displayed keeps its
+     *     text in `ConsoleViewImpl.myDeferredBuffer`, leaving the editor document empty.
      *  1. Every [ConsoleViewImpl] found under it (plain Application/JUnit consoles).
      *  2. The embedded [EditorComponentImpl]'s editor document (public getEditor()) — catches
      *     wrapped consoles (Spring Boot, Duplex, Grep Console) whose top-level type isn't ConsoleViewImpl.
@@ -561,6 +585,10 @@ class McpCompanionBuildToolset : McpToolset {
      * MUST be called on the EDT.
      */
     private fun readConsoleText(component: javax.swing.JComponent): String? {
+        // Strategies 2 and 3 read the editor document directly, so they see nothing until the
+        // deferred buffer has been drained (see flushDeferredConsoleOutput).
+        flushDeferredConsoleOutput(component)
+
         val fromConsoleViews = UIUtil.findComponentsOfType(component, ConsoleViewImpl::class.java)
             .mapNotNull { it.readText()?.ifEmpty { null } }
             .joinToString("\n---\n")
