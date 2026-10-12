@@ -1097,7 +1097,28 @@ class ReflectionApiTest {
         }
         val method = runCatching { concrete.getMethod("getExitCode") }.getOrNull()
         if (method != null) println("OK: ${concrete.simpleName}.getExitCode() found (returns ${method.returnType.simpleName})")
-        else println("INFO: getExitCode() not on ${concrete.simpleName} directly — will rely on concrete subclasses (OSProcessHandler etc.)")
+        else println("INFO: getExitCode() not on ${concrete.simpleName} directly - will rely on concrete subclasses (OSProcessHandler etc.)")
+    }
+
+    // ── readTerminalWidgetText (terminal-emulation consoles) ──────────────────
+
+    @Test
+    fun `JediTerm TerminalTextBuffer still exposes the accessors readTerminalWidgetText duck-types on`() {
+        // The terminal plugin is optional and its jar is not guaranteed on the test classpath, so a
+        // miss degrades to INFO rather than failing the build - readTerminalWidgetText already
+        // returns null in that case and the editor strategies still work.
+        val buffer = runCatching { Class.forName("com.jediterm.terminal.model.TerminalTextBuffer") }.getOrNull()
+        if (buffer == null) {
+            println("INFO: com.jediterm.terminal.model.TerminalTextBuffer not on test classpath - terminal-emulation consoles (npm/node) cannot be verified here")
+            return
+        }
+        listOf("getHeight", "getHistoryLinesCount").forEach { name ->
+            if (runCatching { buffer.getMethod(name) }.getOrNull() != null) println("OK: TerminalTextBuffer.$name() found")
+            else println("WARNING: TerminalTextBuffer.$name() missing - readTerminalWidgetText falls back to a 24-row screen with no scrollback")
+        }
+        val getLine = buffer.methods.firstOrNull { it.name == "getLine" && it.parameterCount == 1 }
+        if (getLine != null) println("OK: TerminalTextBuffer.getLine(int) found (returns ${getLine.returnType.simpleName})")
+        else println("WARNING: TerminalTextBuffer.getLine(int) missing - readTerminalWidgetText returns null and terminal consoles read as empty")
     }
 
     // ── Console wrappers (get_console_output) ────────────────────────────────
