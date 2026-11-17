@@ -27,8 +27,26 @@ val jvmLevel: Int = minOf(JavaVersion.current().majorVersion.toInt(), 21)
 // MCP server. macOS: ~/Applications/IntelliJ IDEA*.app/Contents. Windows / Linux / Toolbox: the install
 // root, searched under the usual JetBrains locations (there is no ".app/Contents" wrapper there).
 // Cross-platform detection contributed by @sylvaindd (PR #7).
+//
+// The bundled MCP server moved in IDE 2026.3 (build 263): plugins/mcpserver/lib/{mcpserver,mcpserver-frontend}.jar
+// became plugins/mcpserver-plugin/lib/intellij.mcpserver.jar + lib/modules/intellij.mcpserver.frontend.jar.
+// Both layouts are accepted; mcpServerJars() returns whichever pair the install ships.
+fun mcpServerJars(home: File): List<File>? = listOf(
+    listOf("plugins/mcpserver/lib/mcpserver.jar", "plugins/mcpserver/lib/mcpserver-frontend.jar"),
+    listOf("plugins/mcpserver-plugin/lib/intellij.mcpserver.jar",
+           "plugins/mcpserver-plugin/lib/modules/intellij.mcpserver.frontend.jar"),
+).map { pair -> pair.map(home::resolve) }.firstOrNull { it.first().exists() }
+
+/** Build number from product-info.json ("263.7307.200"); folder names lie after an in-place upgrade. */
+fun ideBuild(home: File): String? = listOf("Resources/product-info.json", "product-info.json")
+    .map(home::resolve).firstOrNull { it.exists() }
+    ?.let { Regex("\"buildNumber\"\\s*:\\s*\"([^\"]+)\"").find(it.readText())?.groupValues?.get(1) }
+
+/** Major build (253, 262, 263…) for comparisons; 0 when unknown. */
+fun ideBranch(home: File): Int = ideBuild(home)?.substringBefore('.')?.toIntOrNull() ?: 0
+
 val installedIdeHomes: List<File> = run {
-    fun isIdeHome(dir: File) = dir.resolve("plugins/mcpserver/lib/mcpserver.jar").exists()
+    fun isIdeHome(dir: File) = mcpServerJars(dir) != null
     val user = System.getProperty("user.home")
 
     val mac = (file("$user/Applications").listFiles()?.toList() ?: emptyList())
@@ -57,8 +75,16 @@ fun ideLabel(home: File): String = if (home.name == "Contents") home.parentFile.
 
 val ideaContents: String = run {
     // Prefer a version-stamped install, highest label first, over a generic "IntelliJ IDEA.app"
-    // (which may be an unrelated / EAP build).
-    val versioned = installedIdeHomes.filter { ideLabel(it).any(Char::isDigit) }.sortedByDescending { ideLabel(it) }
+    // (which may be an unrelated / EAP build). Rank by the real build number first: an in-place upgrade
+    // keeps the old folder name (e.g. "IntelliJ IDEA 2026.2.1" holding build 263).
+    fun buildParts(h: File) = ideBuild(h)?.split('.')?.map { it.toIntOrNull() ?: 0 } ?: emptyList()
+    val byBuild = Comparator<File> { a, b ->
+        val pa = buildParts(a); val pb = buildParts(b)
+        (0 until maxOf(pa.size, pb.size)).map { (pa.getOrNull(it) ?: 0).compareTo(pb.getOrNull(it) ?: 0) }
+            .firstOrNull { it != 0 } ?: 0
+    }
+    val versioned = installedIdeHomes.filter { ideLabel(it).any(Char::isDigit) }
+        .sortedWith(byBuild.thenBy(::ideLabel)).reversed()
     (versioned.firstOrNull() ?: installedIdeHomes.firstOrNull())?.absolutePath
         ?: error("mcpserver.jar introuvable — installe un IntelliJ IDEA avec le plugin MCP Server bundlé " +
                  "(cherché sous ~/Applications, C:/Program Files/JetBrains, Toolbox, /opt…).")
@@ -86,15 +112,29 @@ dependencies {
         // them here ensures the sandbox loads them so the tools are testable end-to-end via `runIde`.
         bundledPlugin("org.jetbrains.plugins.github")
         bundledPlugin("org.jetbrains.plugins.gitlab")
+        // IDE 2026.3 (build 263) split the XDebugger API (XDebuggerManager, XValue, DefaultDebugExecutor…)
+        // and the External System API (ExternalSystemUtil, ProjectSystemId…) out of the core classpath
+        // into their own content modules. Older IDEs don't have these modules, so only ask for them on 263+.
+        if (ideBranch(file(ideaContents)) >= 263) {
+            bundledModule("intellij.platform.debugger")
+            bundledModule("intellij.platform.debugger.impl")
+            bundledModule("intellij.platform.externalSystem")
+            bundledModule("intellij.platform.externalSystem.impl")
+        }
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.0")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.0")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.0")
+    // The platform test framework brings its own JUnit Platform jars: JUnit 6.1.3 since IDE 2026.3 (263).
+    // Mixing them with an older launcher crashes discovery (NoSuchMethodError in junit-vintage), so the
+    // JUnit version follows the IDE we compile against.
+    val junitBom = if (ideBranch(file(ideaContents)) >= 263) "6.1.3" else "5.11.0"
+    testImplementation(platform("org.junit:junit-bom:$junitBom"))
+    testRuntimeOnly(platform("org.junit:junit-bom:$junitBom"))
+    testImplementation("org.junit.jupiter:junit-jupiter-api")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("junit:junit:4.13.2")
-    compileOnly(files("$ideaContents/plugins/mcpserver/lib/mcpserver.jar"))
-    compileOnly(files("$ideaContents/plugins/mcpserver/lib/mcpserver-frontend.jar"))
+    compileOnly(files(mcpServerJars(file(ideaContents))!!))
     testRuntimeOnly(files("$ideaContents/lib/intellij.platform.ide.impl.jar"))
     testRuntimeOnly(files("$ideaContents/lib/intellij.platform.core.impl.jar"))
 }
@@ -184,16 +224,13 @@ intellijPlatform {
         ides {
             create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3.4")
             create(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2026.1")
-            // 2026.2 (build 262.x): verify against any locally-installed 262 IDE, if present.
-            // The Marketplace tightened PluginManagerCore.getPlugin to @Internal in 262 (handled via
-            // reflection), so we keep this in the loop.
+            // 2026.2+ (build 262 and later): verify against every locally-installed IDE of those
+            // builds, one per branch. The Marketplace tightened PluginManagerCore.getPlugin to @Internal
+            // in 262 (handled via reflection), and 263 moved the bundled MCP server, so keep them in the loop.
             installedIdeHomes
-                .firstOrNull { home ->
-                    listOf("Resources/product-info.json", "product-info.json").any { rel ->
-                        runCatching { home.resolve(rel).readText().contains("\"buildNumber\": \"262") }.getOrDefault(false)
-                    }
-                }
-                ?.let { local(ideInstallDir(it)) }
+                .filter { ideBranch(it) >= 262 }
+                .groupBy(::ideBranch).values.map { it.first() }
+                .forEach { local(ideInstallDir(it)) }
         }
     }
 }
@@ -248,4 +285,11 @@ kotlin {
         languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
         apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
     }
+}
+
+// Against IDE 2026.3 (263) the IntelliJ Platform Gradle plugin sets each Kotlin compile task's jvmTarget
+// to the platform's Java level (25), which beats the project-level setting above and fails the
+// Java/Kotlin target check (21 vs 25). Pin it on the task itself so 253 (JBR 21) can still load our classes.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(jvmLevel.toString()))
 }

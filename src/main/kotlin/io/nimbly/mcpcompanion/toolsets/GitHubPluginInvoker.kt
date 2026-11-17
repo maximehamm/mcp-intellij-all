@@ -1,6 +1,9 @@
 package io.nimbly.mcpcompanion.toolsets
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.EmptyProgressIndicator
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
 
 /**
  * Invokes the bundled GitHub plugin's `GithubApiRequestExecutor` entirely via reflection.
@@ -70,7 +73,7 @@ internal object GitHubPluginInvoker {
      * + the `execute(GithubApiRequest)` reflective method to [block]. Any reflective failure
      * returns a structured error string directly without invoking [block].
      */
-    private inline fun withExecutor(host: String, block: (loader: ClassLoader, executor: Any, execute: java.lang.reflect.Method) -> String): String {
+    private inline fun withExecutor(host: String, block: (loader: ClassLoader, executor: Any, execute: (Any) -> Any?) -> String): String {
         val loader = ghLoader() ?: return "error: GitHub plugin not installed or not enabled"
         val accountManagerCls = runCatching {
             ghClass(loader, "org.jetbrains.plugins.github.authentication.accounts.GHAccountManager")
@@ -105,15 +108,29 @@ internal object GitHubPluginInvoker {
         val executorCls = runCatching {
             ghClass(loader, "org.jetbrains.plugins.github.api.GithubApiRequestExecutor")
         }.getOrNull() ?: return "error: GithubApiRequestExecutor class missing"
-        val executeMethod = executorCls.methods.firstOrNull {
+        // Blocking execute(request) up to 262. IDE 2026.3 (263) dropped it, leaving
+        // execute(ProgressIndicator, request) and a suspend variant: use the indicator one there.
+        val singleArg = executorCls.methods.firstOrNull {
             it.name == "execute" && it.parameterCount == 1 && it.parameterTypes[0] == requestCls
-        } ?: return "error: GithubApiRequestExecutor.execute(request) method missing"
+        }
+        val withIndicator = executorCls.methods.firstOrNull {
+            it.name == "execute" && it.parameterCount == 2 &&
+                it.parameterTypes[0] == ProgressIndicator::class.java && it.parameterTypes[1] == requestCls
+        }
+        val executeMethod: (Any) -> Any? = when {
+            singleArg != null -> { request -> singleArg.invoke(executor, request) }
+            withIndicator != null -> { request ->
+                val indicator = ProgressManager.getInstance().progressIndicator ?: EmptyProgressIndicator()
+                withIndicator.invoke(executor, indicator, request)
+            }
+            else -> return "error: GithubApiRequestExecutor.execute(request) method missing"
+        }
 
         return block(loader, executor, executeMethod)
     }
 
     /** Runs a GET request, auto-paginating when [paged] is true. */
-    private fun executeGet(loader: ClassLoader, executor: Any, executeMethod: java.lang.reflect.Method, fullUrl: String, paged: Boolean): String {
+    private fun executeGet(loader: ClassLoader, executor: Any, executeMethod: (Any) -> Any?, fullUrl: String, paged: Boolean): String {
         val request = runCatching {
             if (paged) {
                 val pageCls = ghClass(loader, "org.jetbrains.plugins.github.api.GithubApiRequest\$Get\$JsonPage")
@@ -126,7 +143,7 @@ internal object GitHubPluginInvoker {
             }
         }.getOrElse { return "error: cannot build GithubApiRequest.Get reflectively — ${it.javaClass.simpleName}: ${it.message}" }
 
-        val raw = runCatching { executeMethod.invoke(executor, request) }.getOrElse { e ->
+        val raw = runCatching { executeMethod(request) }.getOrElse { e ->
             val cause = (e as? java.lang.reflect.InvocationTargetException)?.cause ?: e
             return "error: GitHub API call failed — ${cause.javaClass.simpleName}: ${cause.message}"
         }
@@ -152,7 +169,7 @@ internal object GitHubPluginInvoker {
                 pageCls.getConstructor(String::class.java, Class::class.java, String::class.java)
                     .newInstance(nextLink, Any::class.java, MEDIA)
             }.getOrNull() ?: break
-            page = runCatching { executeMethod.invoke(executor, nextRequest) }.getOrNull()
+            page = runCatching { executeMethod(nextRequest) }.getOrNull()
         }
         return serializeJson(allItems)
     }
@@ -166,7 +183,7 @@ internal object GitHubPluginInvoker {
     private fun executeBodyRequest(
         loader: ClassLoader,
         executor: Any,
-        executeMethod: java.lang.reflect.Method,
+        executeMethod: (Any) -> Any?,
         kind: String,        // "Post" | "Patch" | "Put"
         fullUrl: String,
         body: Map<String, Any?>,
@@ -191,7 +208,7 @@ internal object GitHubPluginInvoker {
                 ?: error("no matching constructor on $kind.Json")
         }.getOrElse { return "error: cannot build GithubApiRequest.$kind reflectively — ${it.javaClass.simpleName}: ${it.message}" }
 
-        val raw = runCatching { executeMethod.invoke(executor, request) }.getOrElse { e ->
+        val raw = runCatching { executeMethod(request) }.getOrElse { e ->
             val cause = (e as? java.lang.reflect.InvocationTargetException)?.cause ?: e
             return "error: GitHub API call failed — ${cause.javaClass.simpleName}: ${cause.message}"
         }

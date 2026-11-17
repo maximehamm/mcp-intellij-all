@@ -473,7 +473,7 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
             val doc = FileDocumentManager.getInstance().getDocument(vFile) ?: return@runWriteCommandAction
             val prefix = if (doc.textLength > 0) "\n" else ""
             doc.insertString(doc.textLength, prefix + instruction)
-            FileEditorManager.getInstance(project).openFile(vFile, true)
+            project.getService(FileEditorManager::class.java).openFile(vFile, true)
         })
 
         Messages.showInfoMessage(
@@ -592,7 +592,8 @@ class McpCompanionConfigurable : BoundConfigurable("MCP Server Companion") {
         fun isMcpServerEnabled(): Boolean = try {
             val cls = Class.forName("com.intellij.mcpserver.settings.McpServerSettings")
             val instance = cls.methods.find { it.name == "getInstance" && it.parameterCount == 0 }?.invoke(null)
-            val state = cls.methods.find { it.name == "getState" }?.invoke(instance)
+            // getState() up to 262; 263's McpServerSettings interface has getEnableMcpServer itself.
+            val state = cls.methods.find { it.name == "getState" && it.parameterCount == 0 }?.invoke(instance) ?: instance
             state?.javaClass?.methods?.find { it.name == "getEnableMcpServer" }?.invoke(state) as? Boolean ?: true
         } catch (_: Exception) { true }
     }

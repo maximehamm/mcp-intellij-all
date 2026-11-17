@@ -78,7 +78,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
                     ?: return@runOnEdt emptyList()
                 listOf(filePath to vFile)
             } else {
-                FileEditorManager.getInstance(project).openFiles.map { vf ->
+                project.getService(FileEditorManager::class.java).openFiles.map { vf ->
                     vf.path.removePrefix((project.basePath ?: "") + "/") to vf
                 }
             }
@@ -111,7 +111,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
                     ?: return@flatMap emptyList()
                 val markupModel = DocumentMarkupModel.forDocument(document, project, false)
                     ?: return@flatMap emptyList()
-                val editor  = FileEditorManager.getInstance(project).openTextEditor(
+                val editor  = project.getService(FileEditorManager::class.java).openTextEditor(
                     com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile), false)
                 val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
                 markupModel.allHighlighters
@@ -157,7 +157,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
             ?: return "File not found: $filePath\nTried relative to: ${project.basePath}"
 
         val isAlreadyOpen = runOnEdt {
-            FileEditorManager.getInstance(project).openFiles.any { it.path == vFile.path }
+            project.getService(FileEditorManager::class.java).openFiles.any { it.path == vFile.path }
         }
         if (!isAlreadyOpen) return "File is not open in the editor. Open it first (e.g. via navigate_to), wait a moment for the IDE to analyse it, then call get_quick_fixes again."
 
@@ -220,7 +220,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         // "slow on EDT" even though MCP callers explicitly accept the latency.
         val groups = runOnEdt {
             com.intellij.util.SlowOperations.allowSlowOperations(com.intellij.util.SlowOperations.GENERIC).use {
-            val editor = FileEditorManager.getInstance(project)
+            val editor = project.getService(FileEditorManager::class.java)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile), false)
             val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
 
@@ -282,7 +282,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
             ?: return "File not found: $filePath\nTried relative to: ${project.basePath}"
 
         val isAlreadyOpen = runOnEdt {
-            FileEditorManager.getInstance(project).openFiles.any { it.path == vFile.path }
+            project.getService(FileEditorManager::class.java).openFiles.any { it.path == vFile.path }
         }
         if (!isAlreadyOpen) return "File is not open in the editor. Open it first via navigate_to."
 
@@ -315,7 +315,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         // Navigate to the target line so the daemon analyses that area before we read highlights
         runOnEdt {
             val targetOffset = if (line > 0) lineStart else 0
-            FileEditorManager.getInstance(project)
+            project.getService(FileEditorManager::class.java)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile, targetOffset), true)
         }
         // Wait up to 8s for the daemon to finish after navigation
@@ -335,7 +335,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         // Wrapped in SlowOperations.knownIssue so PSI/Action lookups don't trip IntelliJ 2026.1's
         // EDT-slow-ops assertion — the MCP caller accepts the latency.
         val applied = runOnEdt { com.intellij.util.SlowOperations.allowSlowOperations(com.intellij.util.SlowOperations.GENERIC).use {
-            val editor  = FileEditorManager.getInstance(project)
+            val editor  = project.getService(FileEditorManager::class.java)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile), false)
                 ?: return@use false
             val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
@@ -645,7 +645,7 @@ class McpCompanionCodeAnalysisToolset : McpToolset {
         // Only runs for already-open files — never forces files open.
         val existingKeys = problems.map { Triple(it.file, it.line, it.inspection) }.toMutableSet()
         val daemonProblems = mutableListOf<InspectionProblem>()
-        val openFilePaths = runOnEdt { com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project).openFiles.map { it.path }.toSet() }
+        val openFilePaths = runOnEdt { project.getService(com.intellij.openapi.fileEditor.FileEditorManager::class.java).openFiles.map { it.path }.toSet() }
 
         for (vFile in vFiles) {
             if (vFile.path !in openFilePaths) continue
