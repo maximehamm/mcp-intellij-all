@@ -284,6 +284,13 @@ kotlin {
         // whose bundled kotlin-stdlib predates 2.4 (no NoSuchMethodError on newer stdlib APIs).
         languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
         apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
+        // Default mode makes Kotlin emit a compatibility bridge in every class implementing an interface that
+        // has default methods. Each toolset then carries bodies doing `invokespecial McpToolset.<method>` for
+        // every McpToolset default of the IDE we compile against (isExperimental, alwaysIncluded and, on 263,
+        // displayName, displayDescription, isUserConfigurable). Those methods do not exist in the 253/261 MCP
+        // server: 44 COMPATIBILITY_PROBLEMS in the verifier when built on 263. NO_COMPATIBILITY stops generating
+        // the bridges; the interface defaults are used directly, so behaviour is unchanged on every target.
+        jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY)
     }
 }
 
