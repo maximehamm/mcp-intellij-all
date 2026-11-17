@@ -133,19 +133,23 @@ class ReflectionApiTest {
             "McpServerSettings.getInstance() must be static")
     }
 
-    @Test
-    fun `McpServerSettings getState exists`() {
+    /**
+     * Class holding the enable flag: `McpServerSettings.MyState` (reached via `getState()`) up to 262,
+     * the `McpServerSettings` interface itself since 263. The plugin code tries `getState()` first and
+     * falls back to the instance, so either layout must expose get/setEnableMcpServer.
+     */
+    private fun mcpEnableFlagHolder(): Class<*> {
         val cls = Class.forName("com.intellij.mcpserver.settings.McpServerSettings")
-        assertNotNull(cls.getMethod("getState"),
-            "McpServerSettings.getState() not found")
+        return if (cls.methods.any { it.name == "getState" && it.parameterCount == 0 })
+            Class.forName("com.intellij.mcpserver.settings.McpServerSettings\$MyState")
+        else cls
     }
 
     @Test
-    fun `McpServerSettings MyState getEnableMcpServer returns boolean`() {
-        val cls = Class.forName("com.intellij.mcpserver.settings.McpServerSettings\$MyState")
-        val method = cls.getMethod("getEnableMcpServer")
+    fun `McpServerSettings enable flag getter returns boolean`() {
+        val method = mcpEnableFlagHolder().getMethod("getEnableMcpServer")
         assertEquals(Boolean::class.javaPrimitiveType, method.returnType,
-            "McpServerSettings.MyState.getEnableMcpServer() must return boolean")
+            "getEnableMcpServer() must return boolean")
     }
 
     // ── PluginManagerCore ──────────────────────────────────────────────────────
@@ -277,10 +281,15 @@ class ReflectionApiTest {
         }.getOrNull()
         if (executorCls == null) { println("WARNING: GithubApiRequestExecutor not found"); return }
         val requestCls = Class.forName("org.jetbrains.plugins.github.api.GithubApiRequest")
+        // execute(request) up to 262; 263 only has execute(ProgressIndicator, request) (+ a suspend
+        // variant). GitHubPluginInvoker accepts either.
+        val indicatorCls = com.intellij.openapi.progress.ProgressIndicator::class.java
         val execute = executorCls.methods.firstOrNull {
-            it.name == "execute" && it.parameterCount == 1 && it.parameterTypes[0] == requestCls
+            it.name == "execute" && (
+                (it.parameterCount == 1 && it.parameterTypes[0] == requestCls) ||
+                (it.parameterCount == 2 && it.parameterTypes[0] == indicatorCls && it.parameterTypes[1] == requestCls))
         }
-        assertNotNull(execute, "GithubApiRequestExecutor.execute(GithubApiRequest) required — every PR call goes through it")
+        assertNotNull(execute, "GithubApiRequestExecutor.execute([ProgressIndicator,] GithubApiRequest) required — every PR call goes through it")
     }
 
     @Test
@@ -483,8 +492,8 @@ class ReflectionApiTest {
     // Called in McpCompanionStartupActivity to auto-enable the MCP server on first launch.
 
     @Test
-    fun `McpServerSettings MyState setEnableMcpServer exists`() {
-        val cls = Class.forName("com.intellij.mcpserver.settings.McpServerSettings\$MyState")
+    fun `McpServerSettings enable flag setter exists`() {
+        val cls = mcpEnableFlagHolder()
         val method = cls.methods.find { it.name == "setEnableMcpServer" && it.parameterCount == 1 }
         assertNotNull(method, "McpServerSettings.MyState.setEnableMcpServer(Boolean) not found — auto-enable on first launch is broken")
         assertEquals(Boolean::class.javaPrimitiveType, method!!.parameterTypes[0],

@@ -35,7 +35,7 @@ class McpCompanionStartupActivity : ProjectActivity {
                     .connect()  // tied to application disposable
                     .subscribe(
                         com.intellij.mcpserver.ToolCallListener.Companion.TOPIC,
-                        McpCompanionToolCallListener(),
+                        McpCompanionToolCallListener.create(),
                     )
             }.onFailure {
                 // MCP Server plugin not available or topic missing — non-fatal: history will be empty.
@@ -92,8 +92,10 @@ class McpCompanionStartupActivity : ProjectActivity {
             val mcpSettingsClass = Class.forName("com.intellij.mcpserver.settings.McpServerSettings")
             val mcpSettings = mcpSettingsClass.methods.find { it.name == "getInstance" && it.parameterCount == 0 }
                 ?.invoke(null) ?: return
-            val state = mcpSettingsClass.methods.find { it.name == "getState" }
-                ?.invoke(mcpSettings) ?: return
+            // Up to 262 the flag lives on getState() (McpServerSettings.MyState); 263 turned
+            // McpServerSettings into an interface exposing get/setEnableMcpServer directly.
+            val state = mcpSettingsClass.methods.find { it.name == "getState" && it.parameterCount == 0 }
+                ?.invoke(mcpSettings) ?: mcpSettings
             val isEnabled = state.javaClass.methods.find { it.name == "getEnableMcpServer" }
                 ?.invoke(state) as? Boolean
 

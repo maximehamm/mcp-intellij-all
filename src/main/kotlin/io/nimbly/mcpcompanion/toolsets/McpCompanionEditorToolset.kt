@@ -51,7 +51,7 @@ class McpCompanionEditorToolset : McpToolset {
     }
 
     internal fun buildEditorState(project: com.intellij.openapi.project.Project): EditorState {
-        val fem = FileEditorManager.getInstance(project)
+        val fem = project.getService(FileEditorManager::class.java)
         val openFiles = fem.openFiles.map { it.path }
         val focusedEditor = fem.selectedTextEditor?.let { editor ->
             val filePath = fem.selectedFiles.firstOrNull()?.path ?: return@let null
@@ -115,7 +115,7 @@ class McpCompanionEditorToolset : McpToolset {
             val (vFile, err) = resolveFilePathOrError(project, filePath)
             if (err != null) return@runOnEdt err
             // Open the file, bring it to the foreground and place the caret at the start of the range
-            val editor = FileEditorManager.getInstance(project)
+            val editor = project.getService(FileEditorManager::class.java)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile!!, startLine - 1, (startColumn - 1).coerceAtLeast(0)), true)
                 ?: return@runOnEdt "Could not open editor"
             val doc = editor.document
@@ -168,7 +168,7 @@ class McpCompanionEditorToolset : McpToolset {
             // Open the file, bring it to the foreground and place the caret at the first range
             val navLine = firstRange?.startLine ?: 0
             val navCol  = firstRange?.startCol  ?: 0
-            val editor = FileEditorManager.getInstance(project)
+            val editor = project.getService(FileEditorManager::class.java)
                 .openTextEditor(com.intellij.openapi.fileEditor.OpenFileDescriptor(project, vFile!!, navLine, navCol), true)
                 ?: return@runOnEdt "Could not open editor"
             val doc = editor.document
@@ -214,13 +214,13 @@ class McpCompanionEditorToolset : McpToolset {
         return captureResponse(runOnEdt {
             var count = 0
             val editors = if (filePath.isEmpty()) {
-                FileEditorManager.getInstance(project).allEditors
+                project.getService(FileEditorManager::class.java).allEditors
                     .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
                     .map { it.editor }
             } else {
                 val (vFile, err) = resolveFilePathOrError(project, filePath)
                 if (err != null) return@runOnEdt err
-                FileEditorManager.getInstance(project).getEditors(vFile!!)
+                project.getService(FileEditorManager::class.java).getEditors(vFile!!)
                     .filterIsInstance<com.intellij.openapi.fileEditor.TextEditor>()
                     .map { it.editor }
             }
@@ -337,7 +337,7 @@ class McpCompanionEditorToolset : McpToolset {
                     } ?: return@runOnEdt "error: scratch file creation returned null (filesystem unavailable?)"
 
                 if (open) {
-                    FileEditorManager.getInstance(project).openFile(scratchFile, true)
+                    project.getService(FileEditorManager::class.java).openFile(scratchFile, true)
                 }
                 "Scratch file created: ${scratchFile.path} (language=${lang.id})"
             } catch (e: Exception) {

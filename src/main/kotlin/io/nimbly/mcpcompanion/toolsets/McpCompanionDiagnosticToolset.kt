@@ -356,7 +356,7 @@ class McpCompanionDiagnosticToolset : McpToolset {
 
     /** Builds the per-project section of a snapshot. Must be called on the EDT. */
     private fun buildProjectSnapshot(project: com.intellij.openapi.project.Project): ProjectSnapshot {
-        val fem = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
+        val fem = project.getService(com.intellij.openapi.fileEditor.FileEditorManager::class.java)
         val openPaths = fem.openFiles.map { it.path }
         val editor = fem.selectedTextEditor
         val selectedFilePath = fem.selectedFiles.firstOrNull()?.path
