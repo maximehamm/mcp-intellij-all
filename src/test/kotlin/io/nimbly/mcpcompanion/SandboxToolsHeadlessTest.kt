@@ -189,6 +189,29 @@ class SandboxToolsHeadlessTest : BasePlatformTestCase() {
         }
     }
 
+    fun `test tailLines keeps the last lines and counts them all`() {
+        val t = McpCompanionBuildToolset()
+        val text = (1..10).joinToString("\n") { "line $it" } + "\n"
+        // A trailing newline is not an extra empty line.
+        assertEquals("line 8\nline 9\nline 10" to 10, t.tailLines(text, 3))
+        // maxLines <= 0, or larger than the text: the text comes back untouched.
+        assertEquals(text to 10, t.tailLines(text, 0))
+        assertEquals(text to 10, t.tailLines(text, 50))
+        assertEquals("only" to 1, t.tailLines("only", 3))
+    }
+
+    fun `test get_console_output name filter reports the tabs it skipped`() {
+        val t = McpCompanionBuildToolset()
+        val (unfiltered, filtered) = invokeAndWaitIfNeeded {
+            t.extractConsoleOutput(project) to t.extractConsoleOutput(project, nameFilter = "HazelcastAdmin", maxLines = 30)
+        }
+        // No filter: no filteredOut list at all, so the old response shape is unchanged.
+        assertNull(unfiltered.filteredOut)
+        // Filter given: filteredOut is present (empty here: headless has no run descriptor).
+        assertNotNull(filtered.filteredOut)
+        assertTrue(filtered.run.isEmpty() && filtered.debug.isEmpty() && filtered.services.isEmpty())
+    }
+
     fun `test pickActiveWindow prefers the focused window then falls back to the visible one`() {
         val t = McpCompanionBuildToolset()
         fun pick(focused: String?, run: Boolean = false, debug: Boolean = false, services: Boolean = false, sessions: Boolean = false) =
